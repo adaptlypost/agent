@@ -1,0 +1,12 @@
+{
+  "name": "adaptlypost",
+  "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky via AdaptlyPost API",
+  "version": "1.0.0",
+  "author": {
+    "name": "AdaptlyPost",
+    "url": "https://adaptlypost.com"
+  },
+  "repository": "https://github.com/adaptlypost/agent",
+  "license": "MIT",
+  "homepage": "https://adaptlypost.com/features/agents"
+}

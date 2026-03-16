@@ -1,0 +1,29 @@
+{
+  "name": "@adaptlypost/agent",
+  "version": "1.0.0",
+  "description": "AdaptlyPost agent — post to 9 social media platforms from any AI agent",
+  "license": "MIT",
+  "author": "AdaptlyPost",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adaptlypost/agent"
+  },
+  "homepage": "https://adaptlypost.com/features/agents",
+  "keywords": [
+    "agent",
+    "ai-agent",
+    "social-media",
+    "adaptlypost",
+    "mcp",
+    "claude",
+    "cursor",
+    "instagram",
+    "tiktok",
+    "youtube",
+    "twitter",
+    "linkedin"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "adaptlypost",
+  "owner": {
+    "name": "AdaptlyPost",
+    "email": "support@adaptlypost.com"
+  },
+  "metadata": {
+    "description": "Give your AI agent social media posting, scheduling, and management across 9 platforms",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "adaptlypost",
+      "source": "./",
+      "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky via AdaptlyPost API",
+      "version": "1.0.0",
+      "author": {
+        "name": "AdaptlyPost"
+      },
+      "homepage": "https://adaptlypost.com/features/agents",
+      "repository": "https://github.com/adaptlypost/agent",
+      "license": "MIT",
+      "keywords": [
+        "social-media",
+        "posting",
+        "scheduling",
+        "mcp",
+        "instagram",
+        "tiktok",
+        "youtube"
+      ],
+      "category": "social-media",
+      "strict": true
+    }
+  ]
+}

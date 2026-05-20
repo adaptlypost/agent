@@ -49,7 +49,7 @@ All requests use Bearer token:
 Authorization: Bearer <API_KEY>
 ```
 
-Base URL: `https://post.adaptlypost.com`
+Base URL: `https://post.adaptlypost.com/post`
 
 **Config priority** (highest to lowest):
 1. `ADAPTLYPOST_API_KEY` environment variable

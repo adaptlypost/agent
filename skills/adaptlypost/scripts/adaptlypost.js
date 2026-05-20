@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const API_BASE = "https://post.adaptlypost.com";
+const API_BASE = "https://post.adaptlypost.com/post";
 const CONFIG_DIR = path.join(os.homedir(), ".config", "adaptlypost");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const LOCAL_CONFIG = path.join(process.cwd(), ".adaptlypost", "config.json");

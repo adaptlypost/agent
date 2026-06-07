@@ -210,7 +210,9 @@ POST /api/v1/upload-urls
 Body: { "files": [{ "fileName": "photo.jpg", "mimeType": "image/jpeg" }] }
 ```
 
-Returns presigned upload URLs. PUT the file to `uploadUrl`, then use `publicUrl` in `mediaUrls` when creating a post.
+Returns presigned upload URLs. This endpoint only mints a URL — it does **not** store the file. You must then PUT the file bytes to `uploadUrl` and wait for a `2xx` response before using `publicUrl` in `mediaUrls`. Requesting the URL without completing the PUT leaves `publicUrl` pointing at nothing.
+
+> **Always finish the upload before creating the post.** When you create or bulk-schedule a post, the API verifies every `publicUrl` actually exists in storage. If the PUT never ran, failed, or the upload URL expired (1 hour) before it completed, the request is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. If you hit that error, re-run the PUT and confirm it returns `2xx`, then retry the post.
 
 Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`.
 

@@ -99,7 +99,7 @@ Use these endpoints directly if you prefer raw API calls over the CLI.
 GET /api/v1/social-accounts
 ```
 
-Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl` per account. Store these IDs — you need them for every post.
+Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl` per account. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. Store these IDs — you need them for every post.
 
 ### Create Post
 

@@ -130,10 +130,10 @@ Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt 
 ### List Posts
 
 ```
-GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED,DRAFT&platforms=LINKEDIN&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
+GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED&statuses=DRAFT&platforms=LINKEDIN&platforms=TWITTER&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
 ```
 
-Params: `limit` (1-100), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST/OLDEST), `startDate`, `endDate`.
+Params: `limit` (1-100), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST/OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`).
 
 ### Get Post
 

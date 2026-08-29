@@ -1,6 +1,8 @@
 # AdaptlyPost Agent
 
-Give your AI agent the ability to post to 9 social media platforms from a single command.
+[![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
+
+Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky from a single command.
 
 **Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky
 

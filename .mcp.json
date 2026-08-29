@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "adaptlypost": {
+      "type": "http",
+      "url": "https://mcp.adaptlypost.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ADAPTLYPOST_API_TOKEN_HERE"
+      }
+    }
+  }
+}

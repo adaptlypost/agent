@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "adaptlypost",
+  "version": "1.0.0",
+  "description": "Post and schedule to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky from your agent. Upload media, bulk-schedule, check per-platform results, and retry failures through the AdaptlyPost API.",
+  "author": {
+    "name": "AdaptlyPost",
+    "email": "support@adaptlypost.com",
+    "url": "https://adaptlypost.com"
+  },
+  "homepage": "https://adaptlypost.com/features/agents",
+  "repository": "https://github.com/adaptlypost/agent",
+  "license": "MIT",
+  "keywords": [
+    "adaptlypost",
+    "social-media",
+    "scheduling",
+    "instagram",
+    "tiktok",
+    "youtube",
+    "linkedin",
+    "bluesky"
+  ],
+  "logo": "https://adaptlypost.com/logo_small.png"
+}

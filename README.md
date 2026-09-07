@@ -68,12 +68,35 @@ For deeper integration with Claude Desktop, Cursor, or other MCP-compatible clie
 
 [MCP setup docs](https://adaptlypost.com/features/agents)
 
+### Run it locally
+
+The server source lives in [`mcp-server/`](./mcp-server). Run it over stdio with [Bun](https://bun.sh):
+
+```json
+{
+  "mcpServers": {
+    "adaptlypost": {
+      "command": "bun",
+      "args": ["run", "/path/to/agent/mcp-server/src/index.ts"],
+      "env": { "ADAPTLYPOST_API_TOKEN": "adaptly_your_key" }
+    }
+  }
+}
+```
+
+Or with Docker:
+
+```bash
+docker build -t adaptlypost-mcp .
+docker run -i -e ADAPTLYPOST_API_TOKEN=adaptly_your_key adaptlypost-mcp
+```
+
 ## Links
 
 - [AdaptlyPost](https://adaptlypost.com)
 - [AI Agents page](https://adaptlypost.com/features/agents)
 - [API Tokens](https://adaptlypost.com/api-tokens)
-- [MCP Server](https://github.com/adaptlypost/mcp-server)
+- [MCP Server](./mcp-server)
 
 ## License
 

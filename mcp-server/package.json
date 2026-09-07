@@ -1,0 +1,49 @@
+{
+  "name": "@adaptlypost/mcp-server",
+  "version": "1.0.0",
+  "description": "AdaptlyPost MCP Server — AI agent integration for social media scheduling, posting, and analytics",
+  "homepage": "https://adaptlypost.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adaptlypost/agent.git",
+    "directory": "mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/adaptlypost/agent/issues"
+  },
+  "author": "AdaptlyPost <contact@adaptlypost.com> (https://adaptlypost.com)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "adaptlypost-mcp": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "jose": "^6.2.10",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  },
+  "keywords": [
+    "mcp",
+    "adaptlypost",
+    "social-media",
+    "ai-agent",
+    "claude",
+    "cursor",
+    "windsurf"
+  ]
+}

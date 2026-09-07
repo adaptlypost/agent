@@ -4,7 +4,7 @@ description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
   Facebook, Pinterest, Threads, and Bluesky via the AdaptlyPost API. Covers post creation,
   scheduling, bulk scheduling, per-platform results, retry logic, and draft/publish workflows.
-last-updated: 2026-03-16
+last-updated: 2026-09-07
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -75,19 +75,19 @@ Get your API key at: https://adaptlypost.com/api-tokens
 
 | Command | Description |
 |---------|-------------|
-| `./scripts/adaptlypost.js setup --key <key>` | Configure API key |
-| `./scripts/adaptlypost.js accounts` | List connected social accounts |
-| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2` | Create a post |
-| `./scripts/adaptlypost.js post --caption "..." --accounts id1 --schedule "2026-03-15T09:00:00Z"` | Schedule a post |
-| `./scripts/adaptlypost.js post --caption "..." --accounts id1 --draft` | Save as draft |
-| `./scripts/adaptlypost.js posts` | List recent posts |
-| `./scripts/adaptlypost.js posts:get --id <id>` | Get post details and status |
-| `./scripts/adaptlypost.js posts:update --id <id> --caption "new text"` | Update a draft/scheduled post |
-| `./scripts/adaptlypost.js posts:delete --id <id>` | Delete a scheduled/draft post |
-| `./scripts/adaptlypost.js posts:publish --id <id>` | Publish a draft post |
-| `./scripts/adaptlypost.js results --id <id>` | Check per-platform posting results |
-| `./scripts/adaptlypost.js posts:retry --id <id> --platforms pid1,pid2` | Retry failed platforms |
-| `./scripts/adaptlypost.js posts:bulk --file posts.json` | Bulk schedule posts from JSON file |
+| `./scripts/adaptlypost.js setup --key <key>` | Store the API key (`--local` for this project only). The user runs this, not the agent |
+| `./scripts/adaptlypost.js accounts` | List connected accounts with their ids. Run first: every post command takes these ids, never usernames |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--type`, `--timezone`, `--tiktok-privacy`, `--platform-text` |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
+| `./scripts/adaptlypost.js posts [--status A,B] [--platform X,Y] [--limit n] [--offset n]` | List posts in the workspace, any status, newest first. Use it to find ids and see what is already queued |
+| `./scripts/adaptlypost.js posts:get --id <id>` | One post's full record with per-platform status and errors. Ids outside the workspace return 404 |
+| `./scripts/adaptlypost.js posts:update --id <id> --caption "new text" [--schedule ...] [--timezone ...]` | Partial update of a DRAFT or SCHEDULED post; omitted fields keep their values. Any other status fails |
+| `./scripts/adaptlypost.js posts:delete --id <id>` | Remove the record; cancels a DRAFT or SCHEDULED post. Never unpublishes content already live |
+| `./scripts/adaptlypost.js posts:publish --id <id> [--schedule ...] [--timezone ...]` | Push a DRAFT (or SCHEDULED) post live now, or reschedule it. Irreversible once queued |
+| `./scripts/adaptlypost.js results --id <id>` | Per-platform outcomes for one post and the source of `platformId` for retry. Poll while rows are PENDING or PUBLISHING |
+| `./scripts/adaptlypost.js posts:retry --id <id> --platforms pid1,pid2` | Re-queue FAILED platforms by `platformId` (not platform names), after fixing the cause |
+| `./scripts/adaptlypost.js posts:bulk --file posts.json` | Schedule up to 100 posts, each processed independently. Read every result row |
 
 ## API Reference
 
@@ -123,9 +123,11 @@ Body: {
 }
 ```
 
-**Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`.
+**Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. Pinterest requires `pinterestConfigs` with `boardId`; there is no endpoint to list boards, so ask the user. Only one account per platform is allowed per post.
 
-Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }`
+Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. `timezone` is stored for display and does not shift `scheduledAt`.
+
+Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }`. `queuedPlatforms` confirms queueing, not delivery: publishing runs asynchronously per platform, so check `results` for the outcome.
 
 ### List Posts
 
@@ -133,7 +135,9 @@ Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt 
 GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED&statuses=DRAFT&platforms=LINKEDIN&platforms=TWITTER&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
 ```
 
-Params: `limit` (1-100), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST/OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`).
+Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`). `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
+
+Returns `{ posts, total, hasMore }` for every post in the workspace; page with `offset` while `hasMore` is true. Use this to find ids; use Get Post for one record and Post Results for one post's per-platform outcome.
 
 ### Get Post
 
@@ -141,7 +145,7 @@ Params: `limit` (1-100), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FA
 GET /api/v1/social-posts/<id>
 ```
 
-Returns full post details including per-platform status.
+Returns the full post record with a `platforms` array carrying each target's status and `errorMessage`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
 
 ### Update Post
 
@@ -150,7 +154,7 @@ PATCH /api/v1/social-posts/<id>
 Body: { "text": "updated caption", "scheduledAt": "..." }
 ```
 
-Only works on DRAFT or SCHEDULED posts. Can update text, platforms, schedule, media, connection IDs.
+Only works on DRAFT or SCHEDULED posts; any other status returns 400 `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`. Returns the updated post.
 
 ### Delete Post
 
@@ -158,7 +162,7 @@ Only works on DRAFT or SCHEDULED posts. Can update text, platforms, schedule, me
 DELETE /api/v1/social-posts/<id>
 ```
 
-Only works on DRAFT or SCHEDULED posts.
+Removes the record; a deleted SCHEDULED post will not publish. It never removes content already on a network, so deleting a COMPLETED post only drops AdaptlyPost's record. Prefer Update Post over delete-and-recreate. Returns `{ deleted: true }`.
 
 ### Publish Draft
 
@@ -167,7 +171,7 @@ POST /api/v1/social-posts/<id>/publish
 Body: { "timezone": "UTC", "scheduledAt": "2026-03-15T09:00:00Z" }
 ```
 
-Publishes a draft immediately (omit `scheduledAt`) or schedules it.
+Accepts a DRAFT (or a SCHEDULED post, to reschedule or push live); any other status returns 400 `Post is not a draft`. Omit `scheduledAt` (or pass a past time) and the post moves to PENDING with a publishing job queued per platform, which cannot be recalled. A future `scheduledAt` sets SCHEDULED and queues nothing yet. Fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix with Update Post first. Returns `{ postId, queuedPlatforms, isScheduled, scheduledAt }`; check Post Results afterwards.
 
 ### Post Results
 
@@ -175,7 +179,7 @@ Publishes a draft immediately (omit `scheduledAt`) or schedules it.
 GET /api/v1/social-posts/<id>/results
 ```
 
-Returns `{ postId, status, results: [{ platformId, platform, accountName, status, platformPostId, errorMessage, publishedAt }] }`.
+Returns `{ postId, status, results: [{ platformId, platform, accountName, status, platformPostId, errorMessage, publishedAt }] }`. Each platform reports on its own (PENDING, PUBLISHING, PUBLISHED, or FAILED), so read every row and poll until none are PENDING or PUBLISHING. Take `platformId` from FAILED rows for a retry.
 
 ### Retry Failed Platforms
 
@@ -184,7 +188,7 @@ POST /api/v1/social-posts/<id>/retry
 Body: { "platformIds": ["platform_id_1", "platform_id_2"] }
 ```
 
-Get platform IDs from the results endpoint. Only retries failed platforms.
+Get `platformId` values (not platform names) from the results endpoint. Only rows with status FAILED are reset and re-queued with the same content; other ids are ignored, and if none qualify the API returns 400 `No failed platforms to retry`. The retry is asynchronous, so check results again afterwards. Retry only after the cause is fixed; a platform restriction will just fail again.
 
 ### Bulk Schedule
 
@@ -201,7 +205,7 @@ Body: {
 }
 ```
 
-Max 100 posts per bulk request.
+Max 100 posts per bulk request. Every item shares `platforms`, `timezone`, the connection-id arrays, and platform configs; each item brings its own `text`, `contentType`, `scheduledAt`, and media. Items are processed independently, so one bad item fails alone. Returns `{ totalScheduled, totalFailed, results: [{ postId, success, isScheduled, scheduledAt, errorMessage }] }` in input order; read every row. A past `scheduledAt` publishes that item immediately. There is no draft mode; use Create Post for a draft.
 
 ### Upload URLs
 
@@ -240,18 +244,18 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 
 | Tool | Description |
 |------|-------------|
-| `list_accounts` | List all connected accounts with IDs, platforms, usernames |
-| `upload_media` | Upload media files (URLs or base64) for use in posts |
-| `get_upload_urls` | Get presigned upload URLs for direct file uploads |
-| `create_post` | Create/schedule a post with caption, accounts, media, schedule, tiktok privacy |
-| `list_posts` | List posts with filters (platform, status, date range, pagination) |
-| `get_post` | Get full post details by ID |
-| `update_post` | Update caption, schedule, accounts, or media on a draft/scheduled post |
-| `delete_post` | Delete a draft or scheduled post |
-| `publish_draft` | Publish a draft immediately or schedule it |
-| `list_post_results` | Check per-platform posting results (success/failure with errors) |
-| `retry_failed_platforms` | Retry just the failed platforms on a post |
-| `bulk_schedule_posts` | Schedule up to 100 posts at once |
+| `list_accounts` | List connected accounts with ids and platforms. Call first; posts take these ids, never usernames |
+| `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
+| `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
+| `create_post` | Create one post: publish now, schedule, or draft. Async per platform; check `list_post_results` |
+| `list_posts` | List posts in the workspace with filters and pagination; find ids and see what is queued |
+| `get_post` | One post's full record with per-platform status; 404 outside the workspace |
+| `update_post` | Partial update of a DRAFT or SCHEDULED post; sending `platforms` rebuilds all targets |
+| `delete_post` | Remove a post record; cancels a DRAFT or SCHEDULED post, never unpublishes live content |
+| `publish_draft` | Push a DRAFT (or SCHEDULED) post live now or reschedule it; irreversible once queued |
+| `list_post_results` | Per-platform outcomes for one post; source of `platformId` for retry |
+| `retry_failed_platforms` | Re-queue only FAILED platforms by `platformId`, after fixing the cause |
+| `bulk_schedule_posts` | Schedule up to 100 posts, each processed independently; no draft mode |
 
 ## Platform Names
 
@@ -287,6 +291,8 @@ Use these exact names (uppercase) for platforms:
 - Stagger posts throughout the day for better reach
 - Use `scheduledAt` to pre-schedule batches
 - TikTok requires privacy level — defaults to PUBLIC_TO_EVERYONE via the CLI
-- Check `results` after posting to see per-platform success/failure
+- Check `results` after posting to see per-platform success/failure. `post`, `posts:publish`, and `posts:retry` only confirm queueing; the outcome arrives asynchronously
+- `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
+- Pinterest needs `pinterestConfigs` with `boardId`, which the CLI does not set; use the API body directly for Pinterest posts
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing

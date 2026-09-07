@@ -190,7 +190,12 @@ const connectionIdFields = {
   threadsConnectionIds: z.array(z.string()).optional().describe('Threads account connection IDs to post from'),
   blueskyConnectionIds: z.array(z.string()).optional().describe('Bluesky account connection IDs to post from'),
   pinterestConnectionIds: z.array(z.string()).optional().describe('Pinterest account connection IDs to post from'),
-  pageIds: z.array(z.string()).optional().describe('Facebook page IDs'),
+  pageIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Facebook page account ids from list_accounts (the account id; its pageId value is also accepted). Facebook has no connection-id array',
+    ),
 };
 
 const platformConfigFields = {
@@ -216,13 +221,13 @@ const platformConfigFields = {
     .array(FacebookConfigSchema)
     .optional()
     .describe(
-      'Facebook per-page config with post type and video title',
+      'Facebook per-page config with post type and video title. pageId must match an entry in pageIds',
     ),
   pinterestConfigs: z
     .array(PinterestConfigSchema)
     .optional()
     .describe(
-      'Pinterest per-connection config. boardId is required for Pinterest posts',
+      'Pinterest per-connection config. Each entry needs connectionId + boardId; there is no API to list boards, so ask the user for the board id',
     ),
 };
 
@@ -353,10 +358,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List all connected social media accounts across all platforms (LinkedIn, YouTube, Instagram, Facebook, TikTok, Pinterest, Threads, Bluesky, Twitter). Returns connection IDs needed for creating posts. Facebook page accounts also include a pageId (the Facebook Page ID) since pages have no username.',
+        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'The connected social accounts with their platform, connection ID, username, and pageId for Facebook pages as returned by the AdaptlyPost API.',
+        'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -381,10 +386,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload media files for use in posts. Supports two modes:\n' +
-        '1. URLs: pass public image/video URLs — the server downloads and re-uploads them.\n' +
-        '2. Files: pass base64-encoded file data directly (e.g. when the user attaches an image in the conversation).\n' +
-        'Returns mediaUrls ready to pass into create_post. The user does NOT need to see the returned URLs — just pass them to create_post.',
+        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public URLs the server downloads and re-hosts) and files (base64 data, for media attached in the conversation). Omitting both returns an error. Accepts image/jpeg, image/png, image/webp, video/mp4, video/quicktime. Stored files are public immediately, post or no post. Prefer this over get_upload_urls, which only mints URLs and leaves the PUT to you. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
       inputSchema: {
         urls: z
           .array(z.string())
@@ -515,7 +517,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create and schedule a post to one or more platforms. Pass connection IDs from list_accounts to target specific accounts. Omit scheduledAt to post immediately, or set saveAsDraft to save without publishing. For platform-specific options (YouTube titles, TikTok privacy, Pinterest boards, Instagram post type), use the corresponding platform configs.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
       inputSchema: {
         text: z
           .string()
@@ -523,24 +525,30 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Default post text shared across platforms'),
         platforms: z
           .array(PlatformType)
-          .describe('Target platforms (e.g. ["LINKEDIN", "TWITTER"])'),
+          .describe(
+            'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from list_accounts',
+          ),
         contentType: ContentType.describe(
-          'Content type: TEXT, IMAGE, VIDEO, or CAROUSEL',
+          'Content type: TEXT, IMAGE, VIDEO, or CAROUSEL. Must match mediaUrls (CAROUSEL needs several)',
         ),
         scheduledAt: z
           .string()
           .optional()
           .describe(
-            'ISO 8601 datetime to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately',
+            'Absolute ISO 8601 instant to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately; a past time also posts immediately',
           ),
         timezone: z
           .string()
           .default('UTC')
-          .describe('IANA timezone (e.g. "America/New_York")'),
+          .describe(
+            'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt',
+          ),
         saveAsDraft: z
           .boolean()
           .optional()
-          .describe('Save as draft instead of publishing'),
+          .describe(
+            'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
+          ),
         mediaUrls: z
           .array(z.string())
           .optional()
@@ -565,7 +573,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         ...platformConfigFields,
       },
       outputSchema: resultSchema(
-        'The created post record including its id, status, and scheduled time as returned by the AdaptlyPost API.',
+        'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt. Publishing is asynchronous: check list_post_results for outcomes.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -588,12 +596,14 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Post',
       description:
-        'Get full details of a single post by ID, including per-platform publishing status and error messages.',
+        'Get one post\'s full record by id: text, contentType, status, scheduledAt, timezone, and a platforms array with each target\'s connection, status, errorMessage, and media. Visible only within the token\'s workspace; any other id returns "Post not found or access denied". Use this to inspect content before update_post or publish_draft. Use list_post_results instead when you only need per-platform publishing outcomes and the platformIds for retry_failed_platforms, and list_posts to find ids by status, platform, or date. Post ids come from create_post, bulk_schedule_posts, or list_posts.',
       inputSchema: {
-        id: z.string().describe('Post ID'),
+        id: z
+          .string()
+          .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record including its id, status, per-platform publishing status, and error messages as returned by the AdaptlyPost API.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, mediaUrls).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -616,24 +626,38 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Posts',
       description:
-        'List posts with optional filters by status, platform, or date range. Supports pagination.',
+        'List posts in the token\'s workspace, any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
       inputSchema: {
         statuses: z
           .array(PostStatus)
           .optional()
-          .describe('Filter by status (e.g. ["SCHEDULED", "DRAFT"])'),
+          .describe('Filter by status (e.g. ["SCHEDULED", "DRAFT"]); omit for all statuses'),
         platforms: z
           .array(PlatformType)
           .optional()
-          .describe('Filter by platform'),
-        startDate: z.string().optional().describe('Start date (ISO 8601)'),
-        endDate: z.string().optional().describe('End date (ISO 8601)'),
-        sortOrder: PostSortOrder.optional().describe('NEWEST or OLDEST'),
-        limit: z.number().optional().default(20).describe('Max results'),
-        offset: z.number().optional().default(0).describe('Pagination offset'),
+          .describe('Filter to posts targeting any of these platforms'),
+        startDate: z
+          .string()
+          .optional()
+          .describe(
+            'Lower bound (ISO 8601, e.g. "2026-03-01") on scheduledAt, or createdAt for posts never scheduled',
+          ),
+        endDate: z
+          .string()
+          .optional()
+          .describe(
+            'Upper bound (ISO 8601, e.g. "2026-03-31") on scheduledAt, or createdAt for posts never scheduled',
+          ),
+        sortOrder: PostSortOrder.optional().describe('NEWEST (default) or OLDEST'),
+        limit: z.number().optional().default(20).describe('Max results, 1 to 100'),
+        offset: z
+          .number()
+          .optional()
+          .default(0)
+          .describe('Posts to skip; increase by limit while hasMore is true'),
       },
       outputSchema: resultSchema(
-        'The matching posts with their ids, statuses, platforms, and schedule times as returned by the AdaptlyPost API.',
+        'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, and platforms with per-platform status), total (count of all matches), and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -656,22 +680,32 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        "Update a scheduled or draft post's caption, schedule, accounts, media, or platform configs. Cannot update published posts.",
+        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
-        id: z.string().describe('Post ID to update'),
-        text: z.string().optional().describe('Updated text'),
-        platforms: z.array(PlatformType).optional().describe('Updated target platforms'),
-        contentType: ContentType.optional(),
+        id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
+        text: z.string().optional().describe('Updated text; omit to keep the current text'),
+        platforms: z
+          .array(PlatformType)
+          .optional()
+          .describe(
+            'New target platforms. Sending this replaces every target, so also resend the connection-id arrays and platform configs to keep; omit to leave targets unchanged',
+          ),
+        contentType: ContentType.optional().describe(
+          'New content type; must match the media on the post',
+        ),
         scheduledAt: z
           .string()
           .optional()
-          .describe('Updated schedule time (ISO 8601)'),
-        timezone: z.string().optional().describe('IANA timezone for the schedule time'),
+          .describe('New schedule time as an absolute ISO 8601 instant; omit to keep'),
+        timezone: z
+          .string()
+          .optional()
+          .describe('IANA timezone stored for display; does not shift scheduledAt'),
         mediaUrls: z
           .array(z.string())
           .optional()
           .describe(
-            'Updated media URLs. Use publicUrl values from upload_media or get_upload_urls',
+            'Replacement media URLs, applied only when platforms is also sent. Use publicUrl values from upload_media or get_upload_urls',
           ),
         thumbnailUrl: z
           .string()
@@ -685,12 +719,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           ),
         platformTexts: z
           .array(z.object({ platform: PlatformType, text: z.string() }))
-          .optional(),
+          .optional()
+          .describe('Per-platform caption overrides; applied to the targets sent in platforms'),
         ...connectionIdFields,
         ...platformConfigFields,
       },
       outputSchema: resultSchema(
-        'The updated post record including its id, status, and scheduled time as returned by the AdaptlyPost API.',
+        'The updated post record: id, status (still DRAFT or SCHEDULED), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -713,12 +748,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Delete Post',
       description:
-        "Delete a scheduled or draft post. Can't delete published posts.",
+        'Delete a post record from AdaptlyPost by id. Use it to cancel a DRAFT or SCHEDULED post before it goes out; a deleted scheduled post will not publish. Deleting never removes content already on a network: for a COMPLETED or PARTIAL_FAILURE post this only drops AdaptlyPost\'s record, and the live posts stay up until removed on each platform. Prefer update_post to change a post instead of deleting and recreating it. Only posts in the token\'s workspace can be deleted; others return "Post not found or access denied". Returns { deleted: true }. Irreversible.',
       inputSchema: {
-        id: z.string().describe('Post ID to delete'),
+        id: z.string().describe('Post ID to delete, from list_posts or create_post'),
       },
       outputSchema: resultSchema(
-        'The deletion confirmation for the post as returned by the AdaptlyPost API.',
+        'An object with deleted: true once the post record is removed from AdaptlyPost.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -743,17 +778,24 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Publish Draft',
       description:
-        'Publish a draft post immediately or schedule it for later.',
+        'Publish a DRAFT post now or schedule it; SCHEDULED posts are accepted too, to reschedule or push live. Other statuses fail with "Post is not a draft". Without scheduledAt (or with a past one) the post moves to PENDING and a publishing job is queued per platform: content reaches the networks within moments and cannot be recalled. A future scheduledAt sets SCHEDULED and queues nothing yet. Fails if an account was disconnected or a TikTok entry lacks privacyLevel; fix with update_post first. Not for new content, use create_post. Check list_post_results afterwards for per-platform outcomes.',
       inputSchema: {
-        id: z.string().describe('Draft post ID'),
+        id: z.string().describe('Post ID with status DRAFT (or SCHEDULED)'),
         scheduledAt: z
           .string()
           .optional()
-          .describe('Schedule time (ISO 8601). Omit to publish now'),
-        timezone: z.string().default('UTC').describe('IANA timezone'),
+          .describe(
+            'Absolute ISO 8601 instant (e.g. "2026-03-15T10:00:00Z"). Omit, or pass a past time, to publish now',
+          ),
+        timezone: z
+          .string()
+          .default('UTC')
+          .describe(
+            'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt',
+          ),
       },
       outputSchema: resultSchema(
-        'The published or scheduled post record with its updated status as returned by the AdaptlyPost API.',
+        'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty when scheduled for later), isScheduled, and scheduledAt.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -776,12 +818,14 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Post Results',
       description:
-        'Check per-platform posting results — success/failure status with error details for each platform a post was sent to.',
+        'Get one post\'s per-platform publishing outcomes: { postId, status, results[] } where each result has platformId, platform, accountName, status (PENDING, PUBLISHING, PUBLISHED, or FAILED), platformPostId, errorMessage, and publishedAt. Each platform reports separately, so read every row instead of treating the post as one pass or fail. Call this after create_post, publish_draft, or retry_failed_platforms, since publishing is asynchronous and their responses only confirm queueing; poll until no row is PENDING or PUBLISHING. Take platformId from FAILED rows for retry_failed_platforms. Use get_post when you also need the content and schedule.',
       inputSchema: {
-        id: z.string().describe('Post ID to check results for'),
+        id: z
+          .string()
+          .describe('Post ID from create_post, publish_draft, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The per-platform posting results with success/failure status and error details as returned by the AdaptlyPost API.',
+        'An object with postId, the overall post status, and results: one { platformId, platform, accountName, status, platformPostId, errorMessage, publishedAt } per targeted platform.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -804,15 +848,17 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Retry Failed Platforms',
       description:
-        'Retry publishing on platforms that failed. Get platform IDs from list_post_results.',
+        'Re-queue publishing for a post\'s FAILED platforms. Only rows with status FAILED whose id is in platformIds are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with "No failed platforms to retry". The post moves to PUBLISHING and the retry is asynchronous, so check list_post_results for the outcome. Get platformIds (not platform names) and each errorMessage from list_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform-side restriction, which will just fail again. Content cannot change on retry.',
       inputSchema: {
-        id: z.string().describe('Post ID'),
+        id: z.string().describe('Post ID whose platforms failed'),
         platformIds: z
           .array(z.string())
-          .describe('Failed platform IDs to retry'),
+          .describe(
+            'platformId values of FAILED rows from list_post_results (not platform names). At least one',
+          ),
       },
       outputSchema: resultSchema(
-        'The retry outcome for the requested platform IDs as returned by the AdaptlyPost API.',
+        'An object with postId, queuedPlatforms (platforms re-queued for publishing), and isScheduled: false. Outcomes arrive asynchronously in list_post_results.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -839,17 +885,29 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule multiple posts at once. Each post gets its own text, content type, schedule time, and optional media. All posts share the same target platforms and connection IDs.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode.',
       inputSchema: {
-        platforms: z.array(PlatformType).describe('Target platforms'),
-        timezone: z.string().default('UTC').describe('IANA timezone'),
+        platforms: z
+          .array(PlatformType)
+          .describe(
+            'Target platforms shared by every item. Each needs its connection-id array (pageIds for FACEBOOK)',
+          ),
+        timezone: z
+          .string()
+          .default('UTC')
+          .describe('IANA timezone stored with every post for display; does not shift scheduledAt'),
         posts: z
           .array(
             z.object({
               text: z.string().optional().describe('Post text/caption'),
-              contentType: ContentType,
-              scheduledAt: z.string().describe('ISO 8601 schedule time'),
-              mediaUrls: z.array(z.string()).optional().describe('Image or video URLs to attach'),
+              contentType: ContentType.describe('TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls'),
+              scheduledAt: z
+                .string()
+                .describe('Absolute ISO 8601 instant; a past time publishes immediately'),
+              mediaUrls: z
+                .array(z.string())
+                .optional()
+                .describe('publicUrl values from upload_media; unstored URLs fail this item'),
               thumbnailUrl: z
                 .string()
                 .optional()
@@ -860,15 +918,16 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .describe('Thumbnail timestamp in ms'),
               platformTexts: z
                 .array(z.object({ platform: PlatformType, text: z.string() }))
-                .optional(),
+                .optional()
+                .describe('Per-platform caption overrides for this item'),
             }),
           )
-          .describe('Array of posts to schedule'),
+          .describe('1 to 100 posts to schedule; each is created independently'),
         ...connectionIdFields,
         ...platformConfigFields,
       },
       outputSchema: resultSchema(
-        'The created scheduled post records with their ids, statuses, and schedule times as returned by the AdaptlyPost API.',
+        'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',
       ),
       annotations: {
         readOnlyHint: false,

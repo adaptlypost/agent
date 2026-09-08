@@ -1,7 +1,7 @@
 {
   "name": "adaptlypost",
-  "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky via AdaptlyPost API",
-  "version": "1.0.0",
+  "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky and read post analytics via AdaptlyPost API",
+  "version": "1.1.0",
   "author": {
     "name": "AdaptlyPost",
     "url": "https://adaptlypost.com"

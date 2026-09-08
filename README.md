@@ -2,7 +2,7 @@
 
 [![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
 
-Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky from a single command.
+Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky from a single command, and to read how those posts performed.
 
 **Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky
 
@@ -40,6 +40,7 @@ Once installed, your AI agent can:
 - **Check results** per-platform success/failure with error details
 - **Retry** just the failed platforms
 - **Draft & publish** workflow — save drafts, review, publish later
+- **Read analytics** — views, likes, comments, followers and engagement per window, per platform and per post
 
 ## Example
 

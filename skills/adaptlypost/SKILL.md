@@ -2,15 +2,16 @@
 name: adaptlypost
 description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
-  Facebook, Pinterest, Threads, and Bluesky via the AdaptlyPost API. Covers post creation,
-  scheduling, bulk scheduling, per-platform results, retry logic, and draft/publish workflows.
-last-updated: 2026-09-07
+  Facebook, Pinterest, Threads, and Bluesky via the AdaptlyPost API, and read how they performed.
+  Covers post creation, scheduling, bulk scheduling, per-platform results, retry logic,
+  draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
+last-updated: 2026-09-08
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
 # AdaptlyPost Social Media Skill
 
-Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 9 platforms from a single command.
+Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 9 platforms from a single command, then read the numbers back.
 
 > **Freshness check**: If more than 30 days have passed since the `last-updated` date above, inform the user that this skill may be outdated and point them to the update options below.
 
@@ -88,6 +89,10 @@ Get your API key at: https://adaptlypost.com/api-tokens
 | `./scripts/adaptlypost.js results --id <id>` | Per-platform outcomes for one post and the source of `platformId` for retry. Poll while rows are PENDING or PUBLISHING |
 | `./scripts/adaptlypost.js posts:retry --id <id> --platforms pid1,pid2` | Re-queue FAILED platforms by `platformId` (not platform names), after fixing the cause |
 | `./scripts/adaptlypost.js posts:bulk --file posts.json` | Schedule up to 100 posts, each processed independently. Read every result row |
+| `./scripts/adaptlypost.js analytics --from 2026-08-01 --to 2026-08-31 [--platforms A,B]` | Views, likes, comments, shares, followers, posts and engagement rate for the window, each with the change against the previous window of the same length |
+| `./scripts/adaptlypost.js analytics:posts --from ... --to ... [--sort VIEWS] [--limit n] [--page n] [--platforms A,B]` | Per-post metrics for posts published in the window. `--sort VIEWS --limit 5` is a top-posts list; the default sort is `PUBLISHED_AT` |
+| `./scripts/adaptlypost.js analytics:status` | When each account last synced and whether one needs reconnecting for analytics |
+| `./scripts/adaptlypost.js analytics:sync` | Refresh analytics now. Once per 10 minutes per workspace; inside the cooldown it returns `queued: false`, not an error |
 
 ## API Reference
 
@@ -220,6 +225,50 @@ Returns presigned upload URLs. This endpoint only mints a URL — it does **not*
 
 Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`.
 
+### Analytics
+
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so both return nothing. Numbers refresh every few hours on their own.
+
+Every window endpoint takes `from` and `to` (ISO 8601, `to` not earlier than `from`) and an optional repeated `platforms` filter. Metrics count posts published inside the window, and the comparison window is the same length immediately before `from`.
+
+```
+GET /api/v1/analytics/overview?from=2026-08-01&to=2026-08-31&platforms=INSTAGRAM
+```
+
+Returns `views`, `likes`, `comments`, `shares`, `followers`, `postsCount`, `avgViewsPerPost` and `engagementRate`, each as `{ value, previousValue, deltaPercent }`, plus `partialMetrics` (metrics some selected platform cannot report) and `lastSyncedAt`. A metric no selected platform reports is `null`.
+
+```
+GET /api/v1/analytics/timeseries?from=...&to=...&granularity=DAILY
+```
+
+Returns `{ points: [{ date, views, likes, comments, shares, followers, postsCount, engagementRate }] }`, one per bucket. `granularity` is `DAILY` (default), `WEEKLY` or `MONTHLY`.
+
+```
+GET /api/v1/analytics/platform-breakdown?from=...&to=...
+```
+
+Returns `{ platforms: [...] }` with the overview metrics per platform and `supportedMetrics`, the metrics that platform reports. Compare platforms only on metrics both list there.
+
+```
+GET /api/v1/analytics/posts?from=...&to=...&sortBy=VIEWS&page=1&limit=20
+GET /api/v1/analytics/top-posts?from=...&to=...&sortBy=VIEWS&limit=10
+```
+
+Per-post metrics for posts published in the window. `sortBy` is one of `VIEWS`, `LIKES`, `COMMENTS`, `SHARES`, `SAVES`, `CLICKS`, `IMPRESSIONS`, `ENGAGEMENT_RATE`, `PUBLISHED_AT`. `/posts` paginates (`{ posts, total, page, limit, hasMore }`, default sort `PUBLISHED_AT`); `/top-posts` returns the top `limit` (max 50, default sort `VIEWS`). Each post has `platform`, `publishedAt`, `title`, `thumbnailUrl`, `permalink`, `accountName` and `metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }`. Posts discovered on the account (published outside AdaptlyPost) are included with `postId: null`; posts made through AdaptlyPost carry the `postId` you can pass to Get Post.
+
+```
+GET /api/v1/analytics/discovered-posts?from=...&to=...&limit=200
+```
+
+Posts found on the connected accounts that were not published through AdaptlyPost: `{ posts: [{ id, platform, publishedAt, text, thumbnailUrl, permalink, accountName }] }`.
+
+```
+GET /api/v1/analytics/sync-status
+POST /api/v1/analytics/sync
+```
+
+`sync-status` returns `syncInProgress`, `lastSyncedAt`, `historyHorizonAt` (earliest date any account has data for) and one row per account with `status`, `lastSyncedAt`, `lastErrorMessage` and `needsAnalyticsReconnect`. When that flag is true the account predates the analytics permissions and stays empty until the user reconnects it; tell them instead of querying again. `POST /sync` refreshes now, once per 10 minutes per workspace: inside the cooldown it returns 200 with `queued: false` and `cooldownSecondsRemaining`, so do not loop on it. Poll `sync-status` until `syncInProgress` is false, then read the metrics again.
+
 ## MCP Integration
 
 AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or any MCP-compatible client, you can connect directly.
@@ -240,7 +289,7 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 }
 ```
 
-**MCP Tools available** (12 tools):
+**MCP Tools available** (18 tools):
 
 | Tool | Description |
 |------|-------------|
@@ -256,6 +305,12 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `list_post_results` | Per-platform outcomes for one post; source of `platformId` for retry |
 | `retry_failed_platforms` | Re-queue only FAILED platforms by `platformId`, after fixing the cause |
 | `bulk_schedule_posts` | Schedule up to 100 posts, each processed independently; no draft mode |
+| `get_analytics_overview` | Views, likes, comments, shares, followers, posts and engagement rate for a window, with the change against the previous window |
+| `get_analytics_timeseries` | The same metrics bucketed by day, week or month |
+| `get_platform_breakdown` | The same metrics per platform, with the metrics each platform reports |
+| `list_post_analytics` | Per-post metrics sorted by any metric; top posts and "how did this post do" |
+| `get_analytics_sync_status` | Freshness per account and whether one needs reconnecting for analytics |
+| `trigger_analytics_sync` | Refresh analytics now, once per 10 minutes per workspace |
 
 ## Platform Names
 
@@ -296,3 +351,5 @@ Use these exact names (uppercase) for platforms:
 - Pinterest needs `pinterestConfigs` with `boardId`, which the CLI does not set; use the API body directly for Pinterest posts
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing
+- For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance
+- Analytics refresh every few hours. If the user just published, run `analytics:sync` once, then poll `analytics:status` until `syncInProgress` is false

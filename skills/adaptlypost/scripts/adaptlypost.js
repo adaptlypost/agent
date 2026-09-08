@@ -338,16 +338,76 @@ const COMMANDS = {
     output(data);
   },
 
+  analytics: async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.from || !parsed.to) {
+      error(
+        "Usage: ./scripts/adaptlypost.js analytics --from 2026-08-01 --to 2026-08-31 [--platforms A,B]",
+      );
+      process.exit(1);
+    }
+    const data = await request(
+      "GET",
+      `/api/v1/analytics/overview?${analyticsQuery(parsed)}`,
+    );
+    output(data);
+  },
+
+  "analytics:posts": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.from || !parsed.to) {
+      error(
+        "Usage: ./scripts/adaptlypost.js analytics:posts --from 2026-08-01 --to 2026-08-31 [--sort VIEWS] [--limit 20] [--page 1] [--platforms A,B]",
+      );
+      process.exit(1);
+    }
+    const query = analyticsQuery(parsed, {
+      sortBy: parsed.sort,
+      limit: parsed.limit,
+      page: parsed.page,
+    });
+    const data = await request("GET", `/api/v1/analytics/posts?${query}`);
+    output(data);
+  },
+
+  "analytics:status": async () => {
+    const data = await request("GET", "/api/v1/analytics/sync-status");
+    output(data);
+  },
+
+  "analytics:sync": async () => {
+    const data = await request("POST", "/api/v1/analytics/sync");
+    if (data && data.queued === false && data.cooldownSecondsRemaining) {
+      info(
+        `Sync not queued: try again in ${data.cooldownSecondsRemaining} seconds`,
+      );
+    }
+    output(data);
+  },
+
   help: async () => {
     output({
       name: "AdaptlyPost Agent Skill",
-      version: "1.0.0",
+      version: "1.1.0",
       commands: Object.keys(COMMANDS).filter((c) => c !== "help"),
       docs: "https://adaptlypost.com/features/agents",
       api_tokens: "https://adaptlypost.com/api-tokens",
     });
   },
 };
+
+function analyticsQuery(parsed, extra = {}) {
+  const params = new URLSearchParams({ from: parsed.from, to: parsed.to });
+  if (parsed.platforms) {
+    for (const platform of parsed.platforms.split(",")) {
+      params.append("platforms", platform.trim().toUpperCase());
+    }
+  }
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined && value !== true) params.set(key, String(value));
+  }
+  return params.toString();
+}
 
 function guessPlafformsFromAccounts() {
   // Default to common platforms — the backend ignores connection IDs

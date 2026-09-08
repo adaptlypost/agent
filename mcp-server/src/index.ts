@@ -71,6 +71,20 @@ const PostStatus = z.enum([
 
 const PostSortOrder = z.enum(['NEWEST', 'OLDEST']);
 
+const AnalyticsGranularity = z.enum(['DAILY', 'WEEKLY', 'MONTHLY']);
+
+const AnalyticsSortMetric = z.enum([
+  'VIEWS',
+  'LIKES',
+  'COMMENTS',
+  'SHARES',
+  'SAVES',
+  'CLICKS',
+  'IMPRESSIONS',
+  'ENGAGEMENT_RATE',
+  'PUBLISHED_AT',
+]);
+
 // ---------------------------------------------------------------------------
 // Platform config schemas
 // ---------------------------------------------------------------------------
@@ -232,6 +246,27 @@ const platformConfigFields = {
 };
 
 // ---------------------------------------------------------------------------
+// Analytics field groups
+// ---------------------------------------------------------------------------
+
+const analyticsRangeFields = {
+  from: z
+    .string()
+    .describe(
+      'Start of the reporting window as an ISO 8601 date or instant (e.g. "2026-08-01"). Metrics cover posts published between from and to; the comparison window is the same length immediately before from',
+    ),
+  to: z
+    .string()
+    .describe('End of the reporting window (ISO 8601). Must not be earlier than from'),
+  platforms: z
+    .array(PlatformType)
+    .optional()
+    .describe(
+      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) has no analytics and is ignored; LinkedIn analytics are pending platform approval and return no data yet',
+    ),
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -348,7 +383,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
   const client = apiClient ?? api;
   const server = new McpServer({
     name: 'adaptlypost',
-    version: '1.0.0',
+    version: '1.1.0',
   });
 
   // ── Account Tools ──────────────────────────────────────────────────────
@@ -938,6 +973,184 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (input) => {
       try {
         const data = await client.post('/social-posts/bulk', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // ── Analytics ──────────────────────────────────────────────────────────
+
+  server.registerTool(
+    'get_analytics_overview',
+    {
+      title: 'Get Analytics Overview',
+      description:
+        'Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use this for "how did we do this month" questions and for follower counts. Metrics are summed over the selected platforms; partialMetrics names metrics some selected platform cannot report, and a metric no platform reports is null. Analytics cover the last 180 days and refresh every few hours (lastSyncedAt says when); if the user just published, call trigger_analytics_sync first. Use get_analytics_timeseries for a trend, get_platform_breakdown to compare platforms, and list_post_analytics for individual posts.',
+      inputSchema: analyticsRangeFields,
+      outputSchema: resultSchema(
+        'An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, and lastSyncedAt.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input) => {
+      try {
+        const data = await client.get('/analytics/overview', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_analytics_timeseries',
+    {
+      title: 'Get Analytics Timeseries',
+      description:
+        'Views, likes, comments, shares, followers, posts published and engagement rate bucketed by day (default), week or month across the window, for trend questions such as "how are views moving" or "when did followers jump". Returns { points } with one { date, ...metrics } per bucket; followers is the latest count at the end of the bucket, the other counters sum posts published inside it, and a metric no selected platform reports is null. Use get_analytics_overview for totals and list_post_analytics to see which posts drove a spike.',
+      inputSchema: {
+        ...analyticsRangeFields,
+        granularity: AnalyticsGranularity.optional().describe(
+          'DAILY (default), WEEKLY, or MONTHLY buckets',
+        ),
+      },
+      outputSchema: resultSchema(
+        'An object with points: one { date, views, likes, comments, shares, followers, postsCount, engagementRate } per bucket, in date order.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input) => {
+      try {
+        const data = await client.get('/analytics/timeseries', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_platform_breakdown',
+    {
+      title: 'Get Platform Breakdown',
+      description:
+        'The overview metrics split per platform for a date window, for "which platform performs best" comparisons. Returns { platforms }: one row per platform with analytics data, carrying followers, views, likes, comments, shares, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }) plus supportedMetrics, the metrics that platform actually reports; compare only metrics both platforms list there. Takes no platform filter. Use get_analytics_overview for the combined total.',
+      inputSchema: {
+        from: analyticsRangeFields.from,
+        to: analyticsRangeFields.to,
+      },
+      outputSchema: resultSchema(
+        'An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics } per platform.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input) => {
+      try {
+        const data = await client.get('/analytics/platform-breakdown', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_post_analytics',
+    {
+      title: 'List Post Analytics',
+      description:
+        'Per-post metrics for posts published inside the window, sorted by a metric or by publish date, paginated. Use it for "top posts", "which post got the most comments" and "how did post X do". Covers posts published through AdaptlyPost and posts discovered on the connected accounts; discovered posts have postId and postPlatformId set to null, while AdaptlyPost posts carry the postId used by get_post. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, thumbnailUrl, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review. Not for publishing status: use list_post_results for that.',
+      inputSchema: {
+        ...analyticsRangeFields,
+        sortBy: AnalyticsSortMetric.optional().describe(
+          'Metric to sort by, descending. PUBLISHED_AT (default) lists newest first',
+        ),
+        page: z.number().optional().default(1).describe('Page number, from 1'),
+        limit: z
+          .number()
+          .optional()
+          .default(20)
+          .describe('Posts per page, 1 to 100'),
+      },
+      outputSchema: resultSchema(
+        'An object with posts (each { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, accountName, metrics }), total, page, limit, and hasMore.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input) => {
+      try {
+        const data = await client.get('/analytics/posts', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_analytics_sync_status',
+    {
+      title: 'Get Analytics Sync Status',
+      description:
+        'How fresh the analytics are, per connected account. Returns syncInProgress, lastSyncedAt, historyHorizonAt (the earliest date any account has data for; earlier dates have no data rather than zero activity) and platforms: one row per account with status (IDLE, QUEUED, SYNCING, FAILED), lastSyncedAt, lastErrorMessage, historyHorizonAt and needsAnalyticsReconnect. When needsAnalyticsReconnect is true the account was connected before analytics permissions existed and returns nothing until the user reconnects it (a connect link works); tell them, do not keep querying. Call this when numbers look stale or empty, and after trigger_analytics_sync to see the run finish. Takes no arguments.',
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with accountGroupId, syncInProgress, lastSyncedAt, historyHorizonAt, and platforms: one { platform, connectionId, accountName, status, lastSyncedAt, lastErrorMessage, historyHorizonAt, lastDiscoveryAt, needsAnalyticsReconnect } per connected account.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async () => {
+      try {
+        const data = await client.get('/analytics/sync-status');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'trigger_analytics_sync',
+    {
+      title: 'Trigger Analytics Sync',
+      description:
+        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 10 minutes; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes no arguments and changes no content.',
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with queued (true when a sync was started), message, and cooldownSecondsRemaining (seconds until the next allowed sync, null when queued).',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async () => {
+      try {
+        const data = await client.post('/analytics/sync');
         return toolResult(data);
       } catch (error) {
         return toolError(error);

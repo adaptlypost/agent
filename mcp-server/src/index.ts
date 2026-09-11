@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { createServer, type IncomingMessage } from 'node:http';
 
+import { describeUrl, downloadPublicMedia, EXT_BY_MIME, fileNameFor, requireMediaContent } from './media.js';
 import { RestClient } from './rest-client.js';
 import {
   oauthConfigFromEnv,
@@ -289,22 +290,6 @@ const resultSchema = (description: string) => ({
   result: z.unknown().describe(description),
 });
 
-function guessMimeType(url: string): string {
-  const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    webp: 'image/webp',
-    gif: 'image/gif',
-    mp4: 'video/mp4',
-    mov: 'video/quicktime',
-    avi: 'video/x-msvideo',
-    webm: 'video/webm',
-  };
-  return (ext && map[ext]) || 'application/octet-stream';
-}
-
 /**
  * Uploads a buffer to R2 via the back-end presigned URL flow.
  * Returns the permanent public URL and storage key.
@@ -329,6 +314,7 @@ async function uploadBuffer(
     method: 'PUT',
     headers: { 'Content-Type': mimeType },
     body: buffer,
+    redirect: 'error',
   });
 
   if (!uploadRes.ok) {
@@ -341,38 +327,29 @@ async function uploadBuffer(
 }
 
 /**
- * Downloads a file from a public URL, then uploads it to R2.
+ * Downloads a file from a public https URL, checks it is real media, then uploads it to R2.
  */
 async function uploadFromUrl(
   apiClient: RestClient,
   sourceUrl: string,
 ): Promise<{ publicUrl: string; key: string }> {
-  const res = await fetch(sourceUrl);
-  if (!res.ok) {
-    throw new Error(
-      `Failed to download ${sourceUrl}: ${res.status} ${res.statusText}`,
-    );
-  }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  const fileName =
-    sourceUrl.split(/[?#]/)[0].split('/').pop() || 'upload';
-  const mimeType =
-    res.headers.get('content-type') || guessMimeType(sourceUrl);
-
-  return uploadBuffer(apiClient, buffer, fileName, mimeType);
+  const { body, url } = await downloadPublicMedia(sourceUrl);
+  const mimeType = requireMediaContent(body, describeUrl(url));
+  return uploadBuffer(apiClient, body, fileNameFor(url, mimeType), mimeType);
 }
 
 /**
- * Uploads a base64-encoded file directly to R2.
+ * Uploads a base64-encoded file directly to R2 after checking it is real media.
  */
 async function uploadFromBase64(
   apiClient: RestClient,
   data: string,
   fileName: string,
-  mimeType: string,
 ): Promise<{ publicUrl: string; key: string }> {
   const buffer = Buffer.from(data, 'base64');
-  return uploadBuffer(apiClient, buffer, fileName, mimeType);
+  const mimeType = requireMediaContent(buffer, fileName);
+  const stem = fileName.replace(/\.[^.]*$/, '') || 'upload';
+  return uploadBuffer(apiClient, buffer, `${stem}${EXT_BY_MIME[mimeType]}`, mimeType);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,13 +398,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public URLs the server downloads and re-hosts) and files (base64 data, for media attached in the conversation). Omitting both returns an error. Accepts image/jpeg, image/png, image/webp, video/mp4, video/quicktime. Stored files are public immediately, post or no post. Prefer this over get_upload_urls, which only mints URLs and leaves the PUT to you. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
+        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server downloads and re-hosts; private, internal and non-https addresses are refused) and files (base64 data, for media attached in the conversation). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. Prefer this over get_upload_urls, which only mints URLs and leaves the PUT to you. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
       inputSchema: {
         urls: z
           .array(z.string())
           .optional()
           .describe(
-            'Public URLs of images or videos to upload (e.g. ["https://example.com/photo.jpg"])',
+            'Public https URLs of images or videos to upload (e.g. ["https://example.com/photo.jpg"])',
           ),
         files: z
           .array(
@@ -459,7 +436,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       ),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
         destructiveHint: false,
       },
     },
@@ -482,7 +459,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         // Upload from base64 file data
         if (files?.length) {
           const fileResults = await Promise.all(
-            files.map((f) => uploadFromBase64(client, f.data, f.fileName, f.mimeType)),
+            files.map((f) => uploadFromBase64(client, f.data, f.fileName)),
           );
           results.push(...fileResults);
         }

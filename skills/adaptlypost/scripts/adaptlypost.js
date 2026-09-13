@@ -127,6 +127,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "accounts:check": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js accounts:check --id <account_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "POST",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/check`,
+    );
+    output(data);
+  },
+
   post: async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.caption && !parsed.text) {

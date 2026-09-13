@@ -77,7 +77,8 @@ Get your API key at: https://adaptlypost.com/api-tokens
 | Command | Description |
 |---------|-------------|
 | `./scripts/adaptlypost.js setup --key <key>` | Store the API key (`--local` for this project only). The user runs this, not the agent |
-| `./scripts/adaptlypost.js accounts` | List connected accounts with their ids. Run first: every post command takes these ids, never usernames |
+| `./scripts/adaptlypost.js accounts` | List connected accounts with their ids and `status`. Run first: every post command takes these ids, never usernames. Skip accounts whose `status` is `unauthorized` and tell the user to reconnect them |
+| `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--type`, `--timezone`, `--tiktok-privacy`, `--platform-text` |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
@@ -104,7 +105,9 @@ Use these endpoints directly if you prefer raw API calls over the CLI.
 GET /api/v1/social-accounts
 ```
 
-Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl` per account. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. Store these IDs — you need them for every post.
+Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl`, `status` per account. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. Store these IDs — you need them for every post.
+
+`status` is `active` or `unauthorized`. An `unauthorized` account is still listed but its platform rejected the stored token; `unauthorizedReason` carries the platform's message. Do not post to it: Create Post refuses it with 400 until the user reconnects it in the dashboard. `POST /api/v1/social-accounts/:id/check` re-probes the platform now and returns the fresh `status` (Facebook pages only; they are also re-checked automatically twice a day).
 
 ### Create Post
 

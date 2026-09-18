@@ -292,12 +292,11 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 }
 ```
 
-**MCP Tools available** (19 tools):
+**MCP Tools available** (18 tools):
 
 | Tool | Description |
 |------|-------------|
 | `list_accounts` | List connected accounts with ids, platforms and `status` (`active` or `unauthorized`). Call first; posts take these ids, never usernames |
-| `check_account` | Ask Facebook right now whether a page's token still works and return its fresh status; use after the user reconnects a page |
 | `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
 | `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
 | `create_post` | Create one post: publish now, schedule, or draft. Async per platform; check `list_post_results` |

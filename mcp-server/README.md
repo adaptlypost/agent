@@ -79,8 +79,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 
 | Tool | Description |
 |---|---|
-| `list_accounts` | List all connected social media accounts with IDs, platforms and `status` |
-| `check_account` | Ask the platform now whether a Facebook page's token still works |
+| `list_accounts` | List all connected social media accounts with IDs and platforms |
 | `create_post` | Create a post — publish immediately, schedule, or save as draft |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |

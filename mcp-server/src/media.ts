@@ -2,12 +2,16 @@ import { lookup, type LookupAddress, type LookupOptions } from 'node:dns';
 import type { IncomingMessage } from 'node:http';
 import { request } from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { Readable } from 'node:stream';
 
 const MB = 1024 * 1024;
-const MAX_IMAGE_BYTES = 50 * MB;
-const MAX_DOWNLOAD_BYTES = 250 * MB;
+export const MAX_IMAGE_BYTES = 50 * MB;
+export const MAX_DOWNLOAD_BYTES = 250 * MB;
+export const MAX_INLINE_UPLOAD_BYTES = 30 * MB;
+const SNIFF_BYTES = 12;
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+const USER_AGENT = 'AdaptlyPost-MCP/1.1 (+https://adaptlypost.com)';
 
 export const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -34,20 +38,29 @@ function sniffMimeType(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   return `${(bytes / MB).toFixed(1)} MB`;
 }
 
-export function requireMediaContent(bytes: Uint8Array, source: string): string {
-  const mimeType = sniffMimeType(bytes);
+function requireMediaType(head: Uint8Array, source: string): string {
+  const mimeType = sniffMimeType(head);
   if (!mimeType) {
     throw new Error(
       `${source} is not a JPEG, PNG, WebP, MP4 or QuickTime file. Its content was checked, not just its name.`,
     );
   }
-  if (mimeType.startsWith('image/') && bytes.length > MAX_IMAGE_BYTES) {
+  return mimeType;
+}
+
+function requireImageSize(mimeType: string, size: number, source: string): void {
+  if (mimeType.startsWith('image/') && size > MAX_IMAGE_BYTES) {
     throw new Error(`${source} is over the ${formatBytes(MAX_IMAGE_BYTES)} image limit.`);
   }
+}
+
+export function requireMediaContent(bytes: Uint8Array, source: string): string {
+  const mimeType = requireMediaType(bytes, source);
+  requireImageSize(mimeType, bytes.length, source);
   return mimeType;
 }
 
@@ -147,7 +160,12 @@ function httpsGet(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const req = request(
       url,
-      { method: 'GET', lookup: publicOnlyLookup, signal, headers: { Accept: 'image/*,video/*' } },
+      {
+        method: 'GET',
+        lookup: publicOnlyLookup,
+        signal,
+        headers: { Accept: 'image/*,video/*', 'User-Agent': USER_AGENT },
+      },
       resolve,
     );
     req.on('error', reject);
@@ -155,26 +173,54 @@ function httpsGet(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   });
 }
 
-async function readBounded(res: IncomingMessage, source: string): Promise<Buffer> {
-  const declared = Number(res.headers['content-length']);
-  if (declared > MAX_DOWNLOAD_BYTES) {
-    res.destroy();
-    throw new Error(`${source} is ${formatBytes(declared)}, over the ${formatBytes(MAX_DOWNLOAD_BYTES)} download limit.`);
-  }
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of res as AsyncIterable<Buffer>) {
-    total += chunk.length;
-    if (total > MAX_DOWNLOAD_BYTES) {
-      res.destroy();
-      throw new Error(`${source} is over the ${formatBytes(MAX_DOWNLOAD_BYTES)} download limit.`);
-    }
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
+function readHead(res: IncomingMessage, size: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const settle = (fn: () => void) => {
+      res.off('readable', onReadable);
+      res.off('end', onEnd);
+      res.off('error', onError);
+      fn();
+    };
+    const onReadable = () => {
+      const head = res.read(size) as Buffer | null;
+      if (head !== null) settle(() => resolve(head));
+    };
+    const onEnd = () => settle(() => resolve(Buffer.alloc(0)));
+    const onError = (error: Error) => settle(() => reject(error));
+    res.on('readable', onReadable);
+    res.on('end', onEnd);
+    res.on('error', onError);
+  });
 }
 
-export async function downloadPublicMedia(sourceUrl: string): Promise<{ body: Buffer; url: URL }> {
+export type MediaStream = {
+  url: URL;
+  mimeType: string;
+  contentLength: number;
+  body: Readable;
+};
+
+async function* exactLength(
+  head: Buffer,
+  rest: IncomingMessage,
+  declared: number,
+  source: string,
+): AsyncGenerator<Buffer> {
+  let total = head.length;
+  yield head;
+  for await (const chunk of rest as AsyncIterable<Buffer>) {
+    total += chunk.length;
+    if (total > declared) {
+      throw new Error(`${source} sent more than its declared ${formatBytes(declared)}.`);
+    }
+    yield chunk;
+  }
+  if (total !== declared) {
+    throw new Error(`${source} closed after ${formatBytes(total)} of ${formatBytes(declared)}.`);
+  }
+}
+
+export async function openPublicMedia(sourceUrl: string): Promise<MediaStream> {
   const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
   let url = parsePublicUrl(sourceUrl);
 
@@ -182,18 +228,67 @@ export async function downloadPublicMedia(sourceUrl: string): Promise<{ body: Bu
     const res = await httpsGet(url, signal);
     const status = res.statusCode ?? 0;
     const location = res.headers.location;
+    const source = describeUrl(url);
 
     if (status >= 300 && status < 400 && location) {
       res.resume();
-      if (redirects >= MAX_REDIRECTS) throw new Error(`${describeUrl(url)} redirected too many times.`);
+      if (redirects >= MAX_REDIRECTS) throw new Error(`${source} redirected too many times.`);
       url = parsePublicUrl(new URL(location, url).toString());
       continue;
     }
     if (status < 200 || status >= 300) {
       res.resume();
-      throw new Error(`Failed to download ${describeUrl(url)}: HTTP ${status}`);
+      throw new Error(`Failed to download ${source}: HTTP ${status}`);
     }
-    return { body: await readBounded(res, describeUrl(url)), url };
+
+    const declared = Number(res.headers['content-length']);
+    if (!Number.isInteger(declared) || declared <= 0) {
+      res.destroy();
+      throw new Error(
+        `${source} did not declare its size, so it cannot be streamed. Download it yourself and use get_upload_urls.`,
+      );
+    }
+    if (declared > MAX_DOWNLOAD_BYTES) {
+      res.destroy();
+      throw new Error(`${source} is ${formatBytes(declared)}, over the ${formatBytes(MAX_DOWNLOAD_BYTES)} download limit.`);
+    }
+
+    const head = await readHead(res, SNIFF_BYTES);
+    let mimeType: string;
+    try {
+      mimeType = requireMediaType(head, source);
+      requireImageSize(mimeType, declared, source);
+    } catch (error) {
+      res.destroy();
+      throw error;
+    }
+
+    return {
+      url,
+      mimeType,
+      contentLength: declared,
+      body: Readable.from(exactLength(head, res, declared, source)),
+    };
+  }
+}
+
+export async function putStream(
+  uploadUrl: string,
+  media: Pick<MediaStream, 'mimeType' | 'contentLength' | 'body'>,
+): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': media.mimeType,
+      'Content-Length': String(media.contentLength),
+    },
+    body: Readable.toWeb(media.body) as ReadableStream,
+    redirect: 'error',
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
+  await res.arrayBuffer();
+  if (!res.ok) {
+    throw new Error(`Upload to storage failed: ${res.status} ${res.statusText}`.trim());
   }
 }
 

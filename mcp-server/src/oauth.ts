@@ -16,7 +16,7 @@ export function oauthConfigFromEnv(defaults: {
     authkitDomain: (process.env.WORKOS_AUTHKIT_DOMAIN ?? '').replace(/\/$/, ''),
     resourceUrl: process.env.MCP_RESOURCE_URL ?? defaults.resourceUrl,
     resourceName: defaults.resourceName,
-    oauthRequired: process.env.MCP_OAUTH_REQUIRED === 'true',
+    oauthRequired: process.env.MCP_OAUTH_REQUIRED !== 'false',
   };
 }
 

@@ -4,9 +4,18 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
 
-import { describeUrl, downloadPublicMedia, EXT_BY_MIME, fileNameFor, requireMediaContent } from './media.js';
+import {
+  EXT_BY_MIME,
+  fileNameFor,
+  formatBytes,
+  MAX_INLINE_UPLOAD_BYTES,
+  openPublicMedia,
+  putStream,
+  requireMediaContent,
+} from './media.js';
 import { RestClient } from './rest-client.js';
 import {
   oauthConfigFromEnv,
@@ -290,66 +299,59 @@ const resultSchema = (description: string) => ({
   result: z.unknown().describe(description),
 });
 
-/**
- * Uploads a buffer to R2 via the back-end presigned URL flow.
- * Returns the permanent public URL and storage key.
- */
-async function uploadBuffer(
+type Uploaded = { publicUrl: string; key: string };
+
+async function mintUploadUrl(
   apiClient: RestClient,
-  buffer: Buffer,
   fileName: string,
   mimeType: string,
-): Promise<{ publicUrl: string; key: string }> {
-  // 1. Get presigned upload URL from back-end
+): Promise<{ uploadUrl: string } & Uploaded> {
   const { urls } = (await apiClient.post('/upload-urls', {
     files: [{ fileName, mimeType }],
-  })) as {
-    urls: { uploadUrl: string; publicUrl: string; key: string }[];
-  };
+  })) as { urls: ({ uploadUrl: string } & Uploaded)[] };
+  return urls[0];
+}
 
-  const { uploadUrl, publicUrl, key } = urls[0];
-
-  // 2. PUT the file to R2 via the presigned URL
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': mimeType },
-    body: buffer,
-    redirect: 'error',
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(
-      `Upload to storage failed: ${uploadRes.status} ${uploadRes.statusText}`,
-    );
-  }
-
+async function uploadFromUrl(apiClient: RestClient, sourceUrl: string): Promise<Uploaded> {
+  const media = await openPublicMedia(sourceUrl);
+  const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+    apiClient,
+    fileNameFor(media.url, media.mimeType),
+    media.mimeType,
+  );
+  await putStream(uploadUrl, media);
   return { publicUrl, key };
 }
 
-/**
- * Downloads a file from a public https URL, checks it is real media, then uploads it to R2.
- */
-async function uploadFromUrl(
-  apiClient: RestClient,
-  sourceUrl: string,
-): Promise<{ publicUrl: string; key: string }> {
-  const { body, url } = await downloadPublicMedia(sourceUrl);
-  const mimeType = requireMediaContent(body, describeUrl(url));
-  return uploadBuffer(apiClient, body, fileNameFor(url, mimeType), mimeType);
-}
-
-/**
- * Uploads a base64-encoded file directly to R2 after checking it is real media.
- */
 async function uploadFromBase64(
   apiClient: RestClient,
   data: string,
   fileName: string,
-): Promise<{ publicUrl: string; key: string }> {
+): Promise<Uploaded> {
   const buffer = Buffer.from(data, 'base64');
   const mimeType = requireMediaContent(buffer, fileName);
   const stem = fileName.replace(/\.[^.]*$/, '') || 'upload';
-  return uploadBuffer(apiClient, buffer, `${stem}${EXT_BY_MIME[mimeType]}`, mimeType);
+  const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+    apiClient,
+    `${stem}${EXT_BY_MIME[mimeType]}`,
+    mimeType,
+  );
+  await putStream(uploadUrl, { mimeType, contentLength: buffer.length, body: Readable.from([buffer]) });
+  return { publicUrl, key };
+}
+
+function decodedBase64Length(data: string): number {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return Math.floor((data.length * 3) / 4) - padding;
+}
+
+function requireInlineBudget(files: { data: string; fileName: string }[]): void {
+  const total = files.reduce((sum, f) => sum + decodedBase64Length(f.data), 0);
+  if (total > MAX_INLINE_UPLOAD_BYTES) {
+    throw new Error(
+      `Inline files total ${formatBytes(total)}, over the ${formatBytes(MAX_INLINE_UPLOAD_BYTES)} limit per call. Use get_upload_urls and PUT the file directly, or pass a public URL in urls.`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,10 +372,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then check_account to confirm. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
+        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus pageId for Facebook pages and unauthorizedReason while status is unauthorized. Use id as the connection id (or in pageIds for Facebook).',
+        'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -391,34 +393,6 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
-    'check_account',
-    {
-      title: 'Re-check an Account',
-      description:
-        'Ask the platform right now whether a connected account\'s stored token still works, and return its fresh status. Facebook pages only; other platforms return 400. Use it after the user says they reconnected a page that list_accounts showed as unauthorized, or when a post failed with a token error and you want to confirm the page is back before scheduling to it again. A rejected token marks the page unauthorized, a working token clears an earlier mark. Pages are also re-checked automatically twice a day, so do not poll this.',
-      inputSchema: {
-        id: z.string().describe('The account id from list_accounts, or the Facebook pageId'),
-      },
-      outputSchema: resultSchema(
-        'An object with id, platform, displayName, pageId, status (active or unauthorized), unauthorizedReason when unauthorized, and checkedAt.',
-      ),
-      annotations: {
-        readOnlyHint: false,
-        openWorldHint: true,
-        destructiveHint: false,
-      },
-    },
-    async ({ id }) => {
-      try {
-        const data = await client.post(`/social-accounts/${encodeURIComponent(id)}/check`, {});
-        return toolResult(data);
-      } catch (error) {
-        return toolError(error);
-      }
-    },
-  );
-
   // ── Media Upload ────────────────────────────────────────────────────────
 
   server.registerTool(
@@ -426,7 +400,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server downloads and re-hosts; private, internal and non-https addresses are refused) and files (base64 data, for media attached in the conversation). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. Prefer this over get_upload_urls, which only mints URLs and leaves the PUT to you. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
+        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
       inputSchema: {
         urls: z
           .array(z.string())
@@ -456,7 +430,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           )
           .optional()
           .describe(
-            'Direct file uploads as base64. Use this when the user attaches/pastes an image or video in the conversation',
+            'Direct file uploads as base64, 30 MB decoded per call in total. Use this when the user attaches/pastes an image or video in the conversation',
           ),
       },
       outputSchema: resultSchema(
@@ -476,21 +450,11 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           );
         }
 
-        const results: { publicUrl: string; key: string }[] = [];
+        if (files?.length) requireInlineBudget(files);
 
-        // Upload from URLs
-        if (urls?.length) {
-          const urlResults = await Promise.all(urls.map((u) => uploadFromUrl(client, u)));
-          results.push(...urlResults);
-        }
-
-        // Upload from base64 file data
-        if (files?.length) {
-          const fileResults = await Promise.all(
-            files.map((f) => uploadFromBase64(client, f.data, f.fileName)),
-          );
-          results.push(...fileResults);
-        }
+        const results: Uploaded[] = [];
+        for (const u of urls ?? []) results.push(await uploadFromUrl(client, u));
+        for (const f of files ?? []) results.push(await uploadFromBase64(client, f.data, f.fileName));
 
         return toolResult({
           uploaded: results.map((r) => ({
@@ -510,7 +474,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer the upload_media tool, which performs the upload for you. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime.',
       inputSchema: {
         files: z
           .array(
@@ -1171,6 +1135,47 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 // ---------------------------------------------------------------------------
 
 const SSE_ACCEPT = 'application/json, text/event-stream';
+const MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+class BodyTooLarge extends Error {}
+
+function readBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    if (Number(req.headers['content-length']) > MAX_BODY_BYTES) return reject(new BodyTooLarge());
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        chunks.length = 0;
+        reject(new BodyTooLarge());
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const body = await readBody(req);
+  return body.length ? JSON.parse(body.toString('utf8')) : undefined;
+}
+
+function sendBodyTooLarge(res: ServerResponse): void {
+  res.writeHead(413, { 'Content-Type': 'application/json' });
+  res.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32600,
+        message: `Request body is over ${MAX_BODY_BYTES / (1024 * 1024)} MB. For large media use get_upload_urls or pass a public URL to upload_media.`,
+      },
+      id: null,
+    }),
+  );
+}
 
 // The MCP SDK 406s unless Accept lists both types. `@hono/node-server` v1 rebuilds the
 // request from rawHeaders, so headers.accept alone is not enough.
@@ -1292,12 +1297,15 @@ async function main() {
         try {
           let parsedBody: unknown;
           if (req.method === 'POST') {
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) chunks.push(chunk as Buffer);
-            const rawBody = Buffer.concat(chunks).toString('utf8');
             try {
-              parsedBody = rawBody ? JSON.parse(rawBody) : undefined;
-            } catch {
+              parsedBody = await readJsonBody(req);
+            } catch (error) {
+              if (error instanceof BodyTooLarge) {
+                rpcLabel = 'too-large';
+                sendBodyTooLarge(res);
+                req.destroy();
+                return;
+              }
               rpcLabel = 'unparseable';
             }
             rpcLabel = describeRpc(parsedBody) ?? rpcLabel;

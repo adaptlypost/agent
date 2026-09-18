@@ -1,15 +1,14 @@
 {
   "name": "@adaptlypost/mcp-server",
-  "version": "1.2.0",
+  "version": "1.1.0",
   "description": "AdaptlyPost MCP Server — AI agent integration for social media scheduling, posting, and analytics",
   "homepage": "https://adaptlypost.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adaptlypost/agent.git",
-    "directory": "mcp-server"
+    "url": "git+https://github.com/TarasShyn/adaptlypost-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/adaptlypost/agent/issues"
+    "url": "https://github.com/TarasShyn/adaptlypost-mcp/issues"
   },
   "author": "AdaptlyPost <contact@adaptlypost.com> (https://adaptlypost.com)",
   "license": "MIT",

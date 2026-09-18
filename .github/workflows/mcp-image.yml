@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/tarasshynorg/adaptlypost-mcp
+  IMAGE: ghcr.io/adaptlypost/adaptlypost-mcp
 
 jobs:
   build:

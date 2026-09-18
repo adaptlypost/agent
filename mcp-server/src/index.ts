@@ -39,7 +39,7 @@ const API_TOKEN = process.env.ADAPTLYPOST_API_TOKEN ?? '';
 if (!API_TOKEN && !isHttpMode) {
   console.error(
     'Error: ADAPTLYPOST_API_TOKEN environment variable is required.\n' +
-      'Create one at https://app.adaptlypost.com/api-tokens',
+      'Create one at https://adaptlypost.com/api-tokens',
   );
   process.exit(1);
 }
@@ -372,10 +372,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
+        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then check_account to confirm. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
+        'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus pageId for Facebook pages and unauthorizedReason while status is unauthorized. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -386,6 +386,34 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async () => {
       try {
         const data = await client.get('/social-accounts');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'check_account',
+    {
+      title: 'Re-check an Account',
+      description:
+        'Ask the platform right now whether a connected account\'s stored token still works, and return its fresh status. Facebook pages only; other platforms return 400. Use it after the user says they reconnected a page that list_accounts showed as unauthorized, or when a post failed with a token error and you want to confirm the page is back before scheduling to it again. A rejected token marks the page unauthorized, a working token clears an earlier mark. Pages are also re-checked automatically twice a day, so do not poll this.',
+      inputSchema: {
+        id: z.string().describe('The account id from list_accounts, or the Facebook pageId'),
+      },
+      outputSchema: resultSchema(
+        'An object with id, platform, displayName, pageId, status (active or unauthorized), unauthorizedReason when unauthorized, and checkedAt.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.post(`/social-accounts/${encodeURIComponent(id)}/check`, {});
         return toolResult(data);
       } catch (error) {
         return toolError(error);

@@ -5,7 +5,7 @@ description: >
   Facebook, Pinterest, Threads, and Bluesky via the AdaptlyPost API, and read how they performed.
   Covers post creation, scheduling, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-09-08
+last-updated: 2026-09-13
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 

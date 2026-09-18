@@ -44,7 +44,7 @@ Claude Desktop without the connectors UI goes through `mcp-remote`, which handle
 }
 ```
 
-API key alternative, for headless agents and clients without OAuth. Create a token at [app.adaptlypost.com/api-tokens](https://app.adaptlypost.com/api-tokens). Keys start with `adaptly_`.
+API key alternative, for headless agents and clients without OAuth. Create a token at [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens). Keys start with `adaptly_`.
 
 ```json
 {
@@ -70,7 +70,7 @@ npx skills add adaptlypost/agent
 
 | Variable | Required | Description |
 |---|---|---|
-| `ADAPTLYPOST_API_TOKEN` | Yes (stdio mode) | API token from [app.adaptlypost.com/api-tokens](https://app.adaptlypost.com/api-tokens) |
+| `ADAPTLYPOST_API_TOKEN` | Yes (stdio mode) | API token from [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens) |
 | `ADAPTLYPOST_API_URL` | No | Custom API base URL (defaults to production) |
 
 ## Available Tools
@@ -79,7 +79,8 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 
 | Tool | Description |
 |---|---|
-| `list_accounts` | List all connected social media accounts with IDs and platforms |
+| `list_accounts` | List all connected social media accounts with IDs, platforms and `status` |
+| `check_account` | Ask the platform now whether a Facebook page's token still works |
 | `create_post` | Create a post — publish immediately, schedule, or save as draft |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |
@@ -101,7 +102,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 - [AdaptlyPost](https://www.adaptlypost.com)
 - [AI Agents page](https://www.adaptlypost.com/features/agents)
 - [Agent Skill repo](https://github.com/adaptlypost/agent)
-- [API Tokens](https://app.adaptlypost.com/api-tokens)
+- [API Tokens](https://adaptlypost.com/api-tokens)
 
 ## License
 

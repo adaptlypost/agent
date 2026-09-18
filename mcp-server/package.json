@@ -5,10 +5,10 @@
   "homepage": "https://adaptlypost.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TarasShyn/adaptlypost-mcp.git"
+    "url": "git+https://github.com/adaptlypost/agent.git"
   },
   "bugs": {
-    "url": "https://github.com/TarasShyn/adaptlypost-mcp/issues"
+    "url": "https://github.com/adaptlypost/agent/issues"
   },
   "author": "AdaptlyPost <contact@adaptlypost.com> (https://adaptlypost.com)",
   "license": "MIT",

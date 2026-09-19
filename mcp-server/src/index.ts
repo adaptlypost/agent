@@ -559,6 +559,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe(
             'Media URLs to attach. Use publicUrl values from upload_media or get_upload_urls',
           ),
+        mediaAltTexts: z
+          .array(z.string().max(1000))
+          .optional()
+          .describe(
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+          ),
         thumbnailUrl: z
           .string()
           .optional()
@@ -710,6 +716,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .optional()
           .describe(
             'Replacement media URLs, applied only when platforms is also sent. Use publicUrl values from upload_media or get_upload_urls',
+          ),
+        mediaAltTexts: z
+          .array(z.string().max(1000))
+          .optional()
+          .describe(
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
           ),
         thumbnailUrl: z
           .string()
@@ -912,6 +924,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .array(z.string())
                 .optional()
                 .describe('publicUrl values from upload_media; unstored URLs fail this item'),
+              mediaAltTexts: z
+                .array(z.string().max(1000))
+                .optional()
+                .describe(
+                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+                ),
               thumbnailUrl: z
                 .string()
                 .optional()

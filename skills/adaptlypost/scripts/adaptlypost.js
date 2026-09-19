@@ -191,6 +191,9 @@ const COMMANDS = {
     if (parsed["media-urls"]) {
       body.mediaUrls = parsed["media-urls"].split(",");
       if (!parsed.type) body.contentType = "IMAGE";
+      if (parsed["alt-texts"]) {
+        body.mediaAltTexts = parsed["alt-texts"].split("|").map((alt) => alt.trim());
+      }
     }
 
     if (parsed.schedule) {

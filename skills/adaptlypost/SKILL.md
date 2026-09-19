@@ -79,7 +79,7 @@ Get your API key at: https://adaptlypost.com/api-tokens
 | `./scripts/adaptlypost.js setup --key <key>` | Store the API key (`--local` for this project only). The user runs this, not the agent |
 | `./scripts/adaptlypost.js accounts` | List connected accounts with their ids and `status`. Run first: every post command takes these ids, never usernames. Skip accounts whose `status` is `unauthorized` and tell the user to reconnect them |
 | `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
-| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--type`, `--timezone`, `--tiktok-privacy`, `--platform-text` |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--alt-texts` (one per image, separated by `|`), `--type`, `--timezone`, `--tiktok-privacy`, `--platform-text` |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
 | `./scripts/adaptlypost.js posts [--status A,B] [--platform X,Y] [--limit n] [--offset n]` | List posts in the workspace, any status, newest first. Use it to find ids and see what is already queued |
@@ -121,6 +121,7 @@ Body: {
   "linkedinConnectionIds": ["conn_id"],
   "twitterConnectionIds": ["conn_id"],
   "mediaUrls": ["https://..."],
+  "mediaAltTexts": ["alt text for the first image"],
   "scheduledAt": "2026-03-15T09:00:00Z",
   "saveAsDraft": false,
   "platformTexts": [

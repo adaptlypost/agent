@@ -170,6 +170,7 @@ const COMMANDS = {
       body.tiktokConnectionIds = [];
       body.threadsConnectionIds = [];
       body.blueskyConnectionIds = [];
+      body.mastodonConnectionIds = [];
       body.pinterestConnectionIds = [];
       body.pageIds = [];
 
@@ -183,6 +184,7 @@ const COMMANDS = {
         body.tiktokConnectionIds.push(id);
         body.threadsConnectionIds.push(id);
         body.blueskyConnectionIds.push(id);
+        body.mastodonConnectionIds.push(id);
         body.pinterestConnectionIds.push(id);
         body.pageIds.push(id);
       }

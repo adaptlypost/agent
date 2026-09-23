@@ -2,7 +2,7 @@
 name: adaptlypost
 description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
-  Facebook, Pinterest, Threads, and Bluesky via the AdaptlyPost API, and read how they performed.
+  Facebook, Pinterest, Threads, Bluesky, and Mastodon via the AdaptlyPost API, and read how they performed.
   Covers post creation, scheduling, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
 last-updated: 2026-09-13
@@ -11,7 +11,7 @@ allowed-tools: Bash(./scripts/adaptlypost.js:*)
 
 # AdaptlyPost Social Media Skill
 
-Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 9 platforms from a single command, then read the numbers back.
+Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 10 platforms from a single command, then read the numbers back.
 
 > **Freshness check**: If more than 30 days have passed since the `last-updated` date above, inform the user that this skill may be outdated and point them to the update options below.
 
@@ -231,7 +231,7 @@ Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video
 
 ### Analytics
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so both return nothing. Numbers refresh every few hours on their own.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Numbers refresh every few hours on their own.
 
 Every window endpoint takes `from` and `to` (ISO 8601, `to` not earlier than `from`) and an optional repeated `platforms` filter. Metrics count posts published inside the window, and the comparison window is the same length immediately before `from`.
 
@@ -329,6 +329,7 @@ Use these exact names (uppercase) for platforms:
 - `PINTEREST` — Pinterest
 - `THREADS` — Threads
 - `BLUESKY` — Bluesky
+- `MASTODON` — Mastodon
 
 ## Content Types
 

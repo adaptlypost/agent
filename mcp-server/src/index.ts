@@ -65,6 +65,7 @@ const PlatformType = z.enum([
   'THREADS',
   'BLUESKY',
   'TWITTER',
+  'MASTODON',
 ]);
 
 const ContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL']);
@@ -213,6 +214,7 @@ const connectionIdFields = {
   tiktokConnectionIds: z.array(z.string()).optional().describe('TikTok account connection IDs to post from'),
   threadsConnectionIds: z.array(z.string()).optional().describe('Threads account connection IDs to post from'),
   blueskyConnectionIds: z.array(z.string()).optional().describe('Bluesky account connection IDs to post from'),
+  mastodonConnectionIds: z.array(z.string()).optional().describe('Mastodon account connection IDs to post from'),
   pinterestConnectionIds: z.array(z.string()).optional().describe('Pinterest account connection IDs to post from'),
   pageIds: z
     .array(z.string())
@@ -272,7 +274,7 @@ const analyticsRangeFields = {
     .array(PlatformType)
     .optional()
     .describe(
-      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) has no analytics and is ignored; LinkedIn analytics are pending platform approval and return no data yet',
+      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) and MASTODON have no analytics and are ignored; LinkedIn analytics are pending platform approval and return no data yet',
     ),
 };
 
@@ -372,7 +374,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the token\'s workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
+        'List the social accounts connected to the token\'s workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
@@ -563,7 +565,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
           ),
         thumbnailUrl: z
           .string()
@@ -721,7 +723,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
           ),
         thumbnailUrl: z
           .string()
@@ -928,7 +930,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .array(z.string().max(1000))
                 .optional()
                 .describe(
-                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
                 ),
               thumbnailUrl: z
                 .string()

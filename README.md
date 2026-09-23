@@ -2,9 +2,9 @@
 
 [![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
 
-Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, and Bluesky from a single command, and to read how those posts performed.
+Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, and Mastodon from a single command, and to read how those posts performed.
 
-**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky
+**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon
 
 ## Install
 
@@ -34,7 +34,7 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports ski
 
 Once installed, your AI agent can:
 
-- **Post** to 9 platforms simultaneously with per-platform caption overrides
+- **Post** to 10 platforms simultaneously with per-platform caption overrides
 - **Schedule** posts for any future time
 - **Bulk schedule** up to 100 posts at once
 - **Check results** per-platform success/failure with error details

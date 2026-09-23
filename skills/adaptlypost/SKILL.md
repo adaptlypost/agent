@@ -155,7 +155,7 @@ Returns `{ posts, total, hasMore }` for every post in the workspace; page with `
 GET /api/v1/social-posts/<id>
 ```
 
-Returns the full post record with a `platforms` array carrying each target's status and `errorMessage`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
+Returns the full post record with a `platforms` array carrying each target's status and `errorMessage`. Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
 
 ### Update Post
 

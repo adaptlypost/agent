@@ -615,7 +615,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, mediaUrls).',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,

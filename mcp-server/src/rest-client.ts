@@ -1,6 +1,7 @@
 export const PERMISSION_DENIED = 'permission_denied';
 export const SUBSCRIPTION_REQUIRED = 'subscription_required';
 export const TOKEN_ISSUER_LOST_ACCESS = 'token_issuer_lost_access';
+export const OAUTH_ACCOUNT_NOT_FOUND = 'oauth_account_not_found';
 
 export interface ApiErrorBody {
   statusCode?: number;
@@ -38,6 +39,10 @@ function describe(status: number, body: ApiErrorBody, fallback: string): string 
 
   if (body.code === TOKEN_ISSUER_LOST_ACCESS) {
     return `This key no longer works (401, ${TOKEN_ISSUER_LOST_ACCESS}): the member who created it lost access to the workspace. Stop and ask the user for a key created by a current member. ${FINAL}`;
+  }
+
+  if (body.code === OAUTH_ACCOUNT_NOT_FOUND) {
+    return `Wrong sign-in (401, ${OAUTH_ACCOUNT_NOT_FOUND}): ${sentence(apiMessage)} Tell the user exactly this. No tool will work until they reconnect. ${FINAL}`;
   }
 
   if (body.code === SUBSCRIPTION_REQUIRED) {

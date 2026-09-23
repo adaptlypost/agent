@@ -365,6 +365,7 @@ const SERVER_INSTRUCTIONS = [
   'A Contributor key can create and edit its own drafts, upload media and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts or touch other members\' posts. A Viewer key only reads.',
   'A 403 with code permission_denied is final for this key. Do not retry it and do not look for another key. For schedule or publish, call create_post with saveAsDraft: true and tell the user a workspace member has to publish the draft.',
   'A 401 with code token_issuer_lost_access means the member who created the key left the workspace; the key is dead. Ask the user for a new one.',
+  'A 401 with code oauth_account_not_found means the user signed in with an email that has no AdaptlyPost account. Relay the message, which names that email, and ask them to disconnect and reconnect with the email they use on AdaptlyPost.',
 ].join('\n');
 
 function createMcpServer(apiClient?: RestClient): McpServer {

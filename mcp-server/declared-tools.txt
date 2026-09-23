@@ -1,3 +1,4 @@
+whoami
 list_accounts
 upload_media
 get_upload_urls

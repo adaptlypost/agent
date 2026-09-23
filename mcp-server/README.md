@@ -44,7 +44,7 @@ Claude Desktop without the connectors UI goes through `mcp-remote`, which handle
 }
 ```
 
-API key alternative, for headless agents and clients without OAuth. Create a token at [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens). Keys start with `adaptly_`.
+API key alternative, for headless agents and clients without OAuth. Create a token at [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens) and pick its role. Keys start with `adaptly_`.
 
 ```json
 {
@@ -73,12 +73,19 @@ npx skills add adaptlypost/agent
 | `ADAPTLYPOST_API_TOKEN` | Yes (stdio mode) | API token from [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens) |
 | `ADAPTLYPOST_API_URL` | No | Custom API base URL (defaults to production) |
 
+## Roles and permissions
+
+Every call runs under a workspace role: Admin, Editor, Contributor or Viewer. An API key carries the role it was created with and never does more than the member who created it; a sign-in over OAuth acts with the member's own role in their default workspace. Contributor keys create and edit their own drafts, upload media and read posts and analytics, but cannot schedule, publish, retry, bulk schedule or delete non-drafts.
+
+The server tells the model, through its instructions and the `whoami` tool, to check the role before scheduling or publishing when unsure. An operation the role does not cover comes back from the API as 403 with `code: permission_denied`, `requiredPermission` and `role`; the tool returns that as an error that says to save a draft and ask a workspace member to publish, not to retry or look for another key. A key whose creator left the workspace answers 401 with `code: token_issuer_lost_access`.
+
 ## Available Tools
 
 Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics API worth the price, Mastodon has none, and LinkedIn analytics are waiting on LinkedIn's approval.
 
 | Tool | Description |
 |---|---|
+| `whoami` | The calling key's workspace, role, permission list and `can { draft, schedule, publish }` |
 | `list_accounts` | List all connected social media accounts with IDs and platforms |
 | `create_post` | Create a post — publish immediately, schedule, or save as draft |
 | `get_post` | Get full details of a single post by ID |

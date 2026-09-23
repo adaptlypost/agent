@@ -66,10 +66,46 @@ async function request(method, endpoint, body = null) {
     data = { raw: text };
   }
   if (!res.ok) {
+    explainDenial(res.status, data);
     error(`API error (${res.status}): ${JSON.stringify(data)}`);
     process.exit(1);
   }
   return data;
+}
+
+function explainDenial(status, data) {
+  if (!data || typeof data !== "object") return;
+  if (data.code === "permission_denied") {
+    const role = data.role || "unknown";
+    error(
+      `Permission denied: the key's role "${role}" lacks ${data.requiredPermission || "the required permission"}.`,
+    );
+    if (
+      data.requiredPermission === "posts.schedule" ||
+      data.requiredPermission === "posts.publish"
+    ) {
+      error(
+        "Save the post with --draft and ask a workspace member to publish it.",
+      );
+    } else if (data.message) {
+      error(String(data.message));
+    }
+    error(
+      "This is final for this key: do not retry, do not look for another key. Run `whoami` to see what it may do.",
+    );
+    return;
+  }
+  if (data.code === "token_issuer_lost_access") {
+    error(
+      "This key no longer works: the member who created it lost access to the workspace. Ask the user for a key created by a current member.",
+    );
+    return;
+  }
+  if (data.code === "subscription_required") {
+    error(
+      "The workspace's plan is not active. Ask the user to renew it; retrying will not help.",
+    );
+  }
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -120,6 +156,11 @@ const COMMANDS = {
     saveApiKey(key, global);
     info(`API key saved ${global ? "globally" : "locally"}.`);
     output({ status: "configured", location: global ? "global" : "local" });
+  },
+
+  whoami: async () => {
+    const data = await request("GET", "/api/v1/me");
+    output(data);
   },
 
   accounts: async () => {

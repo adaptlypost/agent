@@ -1,3 +1,72 @@
+export const PERMISSION_DENIED = 'permission_denied';
+export const SUBSCRIPTION_REQUIRED = 'subscription_required';
+export const TOKEN_ISSUER_LOST_ACCESS = 'token_issuer_lost_access';
+
+export interface ApiErrorBody {
+  statusCode?: number;
+  error?: string;
+  code?: string;
+  requiredPermission?: string;
+  role?: string;
+  tokenType?: string;
+  message?: string | string[];
+}
+
+const FINAL = 'Do not retry, do not look for another key.';
+
+const roleName = (role?: string) =>
+  role ? role.charAt(0).toUpperCase() + role.slice(1) : 'this role';
+
+const messageOf = (body: ApiErrorBody, fallback: string) =>
+  Array.isArray(body.message) ? body.message.join('; ') : (body.message ?? fallback);
+
+const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+function describe(status: number, body: ApiErrorBody, fallback: string): string {
+  const apiMessage = messageOf(body, fallback);
+
+  if (body.code === PERMISSION_DENIED) {
+    const denied = `Permission denied (403): the key's role "${body.role ?? 'unknown'}" lacks ${body.requiredPermission ?? 'the required permission'}.`;
+    if (
+      body.requiredPermission === 'posts.schedule' ||
+      body.requiredPermission === 'posts.publish'
+    ) {
+      return `${denied} This key is ${roleName(body.role)}; save with saveAsDraft: true and ask a workspace member to publish. ${FINAL}`;
+    }
+    return `${denied} ${sentence(apiMessage)} ${FINAL}`;
+  }
+
+  if (body.code === TOKEN_ISSUER_LOST_ACCESS) {
+    return `This key no longer works (401, ${TOKEN_ISSUER_LOST_ACCESS}): the member who created it lost access to the workspace. Stop and ask the user for a key created by a current member. ${FINAL}`;
+  }
+
+  if (body.code === SUBSCRIPTION_REQUIRED) {
+    return `Subscription required (403, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)} Ask the user to renew the workspace's plan. ${FINAL}`;
+  }
+
+  return `API error (${status}): ${apiMessage}`;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly requiredPermission?: string;
+  readonly role?: string;
+  readonly tokenType?: string;
+  readonly apiMessage: string;
+
+  constructor(status: number, body: ApiErrorBody, fallback: string) {
+    super(describe(status, body, fallback));
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = body.code;
+    this.requiredPermission = body.requiredPermission;
+    this.role = body.role;
+    this.tokenType = body.tokenType;
+    this.apiMessage = messageOf(body, fallback);
+  }
+}
+
 export class RestClient {
   constructor(
     private baseUrl: string,
@@ -21,16 +90,19 @@ export class RestClient {
     });
 
     if (!response.ok) {
-      let errorMessage: string;
+      const fallback = `${response.status} ${response.statusText}`;
+      let errorBody: ApiErrorBody = {};
       try {
-        const errorBody = await response.json();
-        errorMessage =
-          (errorBody as { message?: string }).message ??
-          JSON.stringify(errorBody);
+        const parsed: unknown = await response.json();
+        if (parsed && typeof parsed === 'object') {
+          errorBody = parsed as ApiErrorBody;
+        } else {
+          errorBody = { message: JSON.stringify(parsed) };
+        }
       } catch {
-        errorMessage = `${response.status} ${response.statusText}`;
+        errorBody = {};
       }
-      throw new Error(`API error: ${errorMessage}`);
+      throw new ApiError(response.status, errorBody, fallback);
     }
 
     return (await response.json()) as T;

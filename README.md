@@ -24,11 +24,17 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports ski
 
 1. Create an account at [adaptlypost.com](https://adaptlypost.com)
 2. Connect your social media accounts
-3. Create an API token at [Settings > API Tokens](https://adaptlypost.com/api-tokens)
+3. Create an API token at [Settings > API Tokens](https://adaptlypost.com/api-tokens) and pick its role
 4. Run:
    ```bash
    ./scripts/adaptlypost.js setup --key adaptly_xxxxx
    ```
+
+### Roles
+
+A token is issued under a workspace role and never does more than the member who created it. Admin does everything, Editor creates, schedules and publishes, Contributor creates and edits its own drafts and uploads media but cannot schedule or publish, Viewer reads. Contributor is the safe choice for an agent that should not post on its own.
+
+`./scripts/adaptlypost.js whoami` (or the `whoami` MCP tool) shows the role, the permission list and `can { draft, schedule, publish }`. An operation outside the role answers 403 with `code: permission_denied`; the skill tells the agent to stop, save a draft where that applies, and ask a workspace member to publish, instead of retrying or hunting for another key.
 
 ## What it does
 

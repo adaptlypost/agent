@@ -363,7 +363,6 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 const SERVER_INSTRUCTIONS = [
   'Every tool acts as the key or sign-in it was given, under that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
   'A Contributor key can create and edit its own drafts, upload media and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts or touch other members\' posts. A Viewer key only reads.',
-  'When you are unsure whether the key may schedule or publish, call whoami first: it returns the role, the permission list and can { draft, schedule, publish }.',
   'A 403 with code permission_denied is final for this key. Do not retry it and do not look for another key. For schedule or publish, call create_post with saveAsDraft: true and tell the user a workspace member has to publish the draft.',
   'A 401 with code token_issuer_lost_access means the member who created the key left the workspace; the key is dead. Ask the user for a new one.',
 ].join('\n');
@@ -379,32 +378,6 @@ function createMcpServer(apiClient?: RestClient): McpServer {
   );
 
   // ── Account Tools ──────────────────────────────────────────────────────
-
-  server.registerTool(
-    'whoami',
-    {
-      title: 'Describe The Calling Key',
-      description:
-        'Describe the key or sign-in this server is using: its workspace role, the exact permission list and can { draft, schedule, publish }. Call it before scheduling or publishing when you are not sure the key is allowed to, and after any 403 to explain the denial to the user. Returns { tokenType, tokenId, tokenName, workspace { id, name }, organizationId, role { key, name }, issuerRole, permissions, can, summary, expiresAt }. A key never does more than the member who created it; a Contributor key drafts and uploads but cannot schedule or publish. Takes no arguments.',
-      inputSchema: {},
-      outputSchema: resultSchema(
-        'The calling key: tokenType, tokenId, tokenName, workspace { id, name }, organizationId, role { key, name }, issuerRole, permissions (string[]), can { draft, schedule, publish }, summary and expiresAt.',
-      ),
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: false,
-        destructiveHint: false,
-      },
-    },
-    async () => {
-      try {
-        const data = await client.get('/me');
-        return toolResult(data);
-      } catch (error) {
-        return toolError(error);
-      }
-    },
-  );
 
   server.registerTool(
     'list_accounts',

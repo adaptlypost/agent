@@ -91,7 +91,7 @@ function explainDenial(status, data) {
       error(String(data.message));
     }
     error(
-      "This is final for this key: do not retry, do not look for another key. Run `whoami` to see what it may do.",
+      "This is final for this key: do not retry, do not look for another key.",
     );
     return;
   }
@@ -158,10 +158,6 @@ const COMMANDS = {
     output({ status: "configured", location: global ? "global" : "local" });
   },
 
-  whoami: async () => {
-    const data = await request("GET", "/api/v1/me");
-    output(data);
-  },
 
   accounts: async () => {
     const data = await request("GET", "/api/v1/social-accounts");

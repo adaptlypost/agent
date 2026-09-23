@@ -34,7 +34,7 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports ski
 
 A token is issued under a workspace role and never does more than the member who created it. Admin does everything, Editor creates, schedules and publishes, Contributor creates and edits its own drafts and uploads media but cannot schedule or publish, Viewer reads. Contributor is the safe choice for an agent that should not post on its own.
 
-`./scripts/adaptlypost.js whoami` (or the `whoami` MCP tool) shows the role, the permission list and `can { draft, schedule, publish }`. An operation outside the role answers 403 with `code: permission_denied`; the skill tells the agent to stop, save a draft where that applies, and ask a workspace member to publish, instead of retrying or hunting for another key.
+An operation outside the role answers 403 with `code: permission_denied`; the skill tells the agent to stop, save a draft where that applies, and ask a workspace member to publish, instead of retrying or hunting for another key.
 
 ## What it does
 

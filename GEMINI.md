@@ -21,8 +21,6 @@ configured by hand, and no API token is stored in this extension.
 - Every tool acts on the workspace the signed-in account belongs to, with that account's
   own workspace role: Admin, Editor, Contributor or Viewer. A Contributor can draft and
   upload media but cannot schedule or publish; a Viewer only reads.
-- Call `whoami` when unsure whether the sign-in may schedule or publish. It returns the
-  role, the permission list and `can { draft, schedule, publish }`.
 - A 403 with `code: permission_denied` is final. Do not retry it and do not look for
   another key. For scheduling or publishing, save the post as a draft
   (`saveAsDraft: true`) and tell the user a workspace member has to publish it.

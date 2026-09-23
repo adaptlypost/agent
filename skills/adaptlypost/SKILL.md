@@ -261,6 +261,8 @@ Returns presigned upload URLs. This endpoint only mints a URL — it does **not*
 
 > **Always finish the upload before creating the post.** When you create or bulk-schedule a post, the API verifies every `publicUrl` actually exists in storage. If the PUT never ran, failed, or the upload URL expired (1 hour) before it completed, the request is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. If you hit that error, re-run the PUT and confirm it returns `2xx`, then retry the post.
 
+> **Reuse uploads, do not re-upload.** One `publicUrl` can go into as many posts as you like (bulk items included); the file is kept until the last post referencing it has published. Reuse the `publicUrl` you uploaded, not a `mediaUrls` value read back from a published post, since those may be the platform's own expiring links.
+
 Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`.
 
 ### Analytics

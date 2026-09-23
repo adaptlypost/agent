@@ -412,7 +412,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.',
+        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse rather than re-uploading per post.',
       inputSchema: {
         urls: z
           .array(z.string())
@@ -486,7 +486,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
@@ -569,7 +569,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string())
           .optional()
           .describe(
-            'Media URLs to attach. Use publicUrl values from upload_media or get_upload_urls',
+            'Media URLs to attach. Use publicUrl values from upload_media or get_upload_urls; the same publicUrl may be reused across posts. Do not reuse mediaUrls read back from a published post, which may be expiring platform links',
           ),
         mediaAltTexts: z
           .array(z.string().max(1000))

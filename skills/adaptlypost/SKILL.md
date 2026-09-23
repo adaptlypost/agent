@@ -104,7 +104,7 @@ Every API key carries a workspace role, chosen when it is created, and never doe
 | `./scripts/adaptlypost.js posts:unschedule --id <id>` | Take a DRAFT or SCHEDULED post off the calendar: it becomes an undated DRAFT and nothing publishes. Reschedule later with `posts:update` or `posts:publish` |
 | `./scripts/adaptlypost.js posts:publish --id <id> [--schedule ...] [--timezone ...]` | Push a DRAFT (or SCHEDULED) post live now, or reschedule it. Irreversible once queued |
 | `./scripts/adaptlypost.js results --id <id>` | Per-platform outcomes for one post and the source of `platformId` for retry. Poll while rows are PENDING or PUBLISHING |
-| `./scripts/adaptlypost.js posts:retry --id <id> --platforms pid1,pid2` | Re-queue FAILED platforms by `platformId` (not platform names), after fixing the cause |
+| `./scripts/adaptlypost.js posts:retry --id <id> [--platforms pid1,BLUESKY]` | Re-queue FAILED platforms by `platformId` or platform name; omit `--platforms` to retry every failed one, after fixing the cause |
 | `./scripts/adaptlypost.js posts:bulk --file posts.json` | Schedule up to 100 posts, each processed independently. Read every result row |
 | `./scripts/adaptlypost.js analytics --from 2026-08-01 --to 2026-08-31 [--platforms A,B]` | Views, likes, comments, shares, followers, posts and engagement rate for the window, each with the change against the previous window of the same length |
 | `./scripts/adaptlypost.js analytics:posts --from ... --to ... [--sort VIEWS] [--limit n] [--page n] [--platforms A,B]` | Per-post metrics for posts published in the window. `--sort VIEWS --limit 5` is a top-posts list; the default sort is `PUBLISHED_AT` |
@@ -170,7 +170,7 @@ Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt 
 GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED&statuses=DRAFT&platforms=LINKEDIN&platforms=TWITTER&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
 ```
 
-Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`). `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
+Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`); `status` and `platform` work as aliases. Any other query parameter returns 400 naming it. `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
 
 Returns `{ posts, total, hasMore }` for every post in the workspace; page with `offset` while `hasMore` is true. Use this to find ids; use Get Post for one record and Post Results for one post's per-platform outcome.
 
@@ -180,7 +180,7 @@ Returns `{ posts, total, hasMore }` for every post in the workspace; page with `
 GET /api/v1/social-posts/<id>
 ```
 
-Returns the full post record with a `platforms` array carrying each target's status and `errorMessage`. Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
+Returns the full post record with top-level `mediaUrls` and a `platforms` array carrying each target's status, `errorMessage` and, once published, `platformPostId` and a clickable `postUrl` (every platform except Mastodon). Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
 
 ### Update Post
 
@@ -228,10 +228,10 @@ Returns `{ postId, status, results: [{ platformId, platform, accountName, status
 
 ```
 POST /api/v1/social-posts/<id>/retry
-Body: { "platformIds": ["platform_id_1", "platform_id_2"] }
+Body: { "platformIds": ["platform_id_1", "BLUESKY"] }
 ```
 
-Get `platformId` values (not platform names) from the results endpoint. Only rows with status FAILED are reset and re-queued with the same content; other ids are ignored, and if none qualify the API returns 400 `No failed platforms to retry`. The retry is asynchronous, so check results again afterwards. Retry only after the cause is fixed; a platform restriction will just fail again.
+`platformIds` takes `platformId` values from the results endpoint, platform names such as `BLUESKY` (every failed entry of that platform), or can be omitted to retry every failed entry. Only rows with status FAILED are reset and re-queued with the same content. A value that matches neither an entry id nor a platform of the post returns 400 `Unknown retry target: ...`; if nothing matched has failed the API returns 400 `No failed platforms to retry`. The retry is asynchronous, so check results again afterwards. Retry only after the cause is fixed; a platform restriction will just fail again.
 
 ### Bulk Schedule
 

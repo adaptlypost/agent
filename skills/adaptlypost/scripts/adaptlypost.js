@@ -371,18 +371,16 @@ const COMMANDS = {
 
   "posts:retry": async (args) => {
     const parsed = parseArgs(args);
-    if (!parsed.id || !parsed.platforms) {
+    if (!parsed.id) {
       error(
-        "Usage: ./scripts/adaptlypost.js posts:retry --id <post_id> --platforms pid1,pid2",
+        "Usage: ./scripts/adaptlypost.js posts:retry --id <post_id> [--platforms pid1,BLUESKY]",
       );
       process.exit(1);
     }
     const data = await request(
       "POST",
       `/api/v1/social-posts/${parsed.id}/retry`,
-      {
-        platformIds: parsed.platforms.split(","),
-      },
+      parsed.platforms ? { platformIds: parsed.platforms.split(",") } : {},
     );
     output(data);
   },

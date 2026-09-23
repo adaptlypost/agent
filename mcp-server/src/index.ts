@@ -625,7 +625,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -907,13 +907,14 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Retry Failed Platforms',
       description:
-        'Re-queue publishing for a post\'s FAILED platforms. Only rows with status FAILED whose id is in platformIds are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with "No failed platforms to retry". The post moves to PUBLISHING and the retry is asynchronous, so check list_post_results for the outcome. Get platformIds (not platform names) and each errorMessage from list_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform-side restriction, which will just fail again. Content cannot change on retry.',
+        'Re-queue publishing for a post\'s FAILED platforms. platformIds takes platformId values from list_post_results, platform names such as "BLUESKY" (every failed row of that platform), or can be omitted to retry every failed row. Only rows with status FAILED are reset to PENDING and retried with the same content. A value matching neither a row id nor a platform of the post fails with "Unknown retry target"; with nothing failed among the matches the call fails with "No failed platforms to retry". The post moves to PUBLISHING and the retry is asynchronous, so check list_post_results for the outcome. Read each errorMessage first and retry once the cause is fixed (reconnected account, replaced media), not for a platform-side restriction, which will just fail again. Content cannot change on retry.',
       inputSchema: {
         id: z.string().describe('Post ID whose platforms failed'),
         platformIds: z
           .array(z.string())
+          .optional()
           .describe(
-            'platformId values of FAILED rows from list_post_results (not platform names). At least one',
+            'platformId values from list_post_results or platform names such as "BLUESKY". Omit to retry every FAILED row',
           ),
       },
       outputSchema: resultSchema(

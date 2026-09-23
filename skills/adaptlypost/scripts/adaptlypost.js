@@ -289,6 +289,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "posts:unschedule": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js posts:unschedule --id <post_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "POST",
+      `/api/v1/social-posts/${parsed.id}/unschedule`,
+    );
+    output(data);
+  },
+
   "posts:publish": async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.id) {

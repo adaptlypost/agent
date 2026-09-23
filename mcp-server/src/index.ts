@@ -692,7 +692,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
         text: z.string().optional().describe('Updated text; omit to keep the current text'),
@@ -708,7 +708,9 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         scheduledAt: z
           .string()
           .optional()
-          .describe('New schedule time as an absolute ISO 8601 instant; omit to keep'),
+          .describe(
+            'New schedule time as an absolute ISO 8601 instant; omit to keep. Moving a SCHEDULED post more than a minute into the past fails with 400; use publish_draft to publish now',
+          ),
         timezone: z
           .string()
           .optional()
@@ -782,6 +784,35 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async ({ id }) => {
       try {
         const data = await client.delete(`/social-posts/${id}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'unschedule_post',
+    {
+      title: 'Unschedule Post',
+      description:
+        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the token\'s workspace return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
+      inputSchema: {
+        id: z.string().describe('Post ID with status DRAFT or SCHEDULED, from list_posts or create_post'),
+      },
+      outputSchema: resultSchema(
+        'The post record as an undated draft: id, status DRAFT, scheduledAt null, text, contentType, timezone, and platforms with per-target details.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.post(`/social-posts/${id}/unschedule`);
         return toolResult(data);
       } catch (error) {
         return toolError(error);

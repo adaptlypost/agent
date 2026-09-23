@@ -86,6 +86,7 @@ Get your API key at: https://adaptlypost.com/api-tokens
 | `./scripts/adaptlypost.js posts:get --id <id>` | One post's full record with per-platform status and errors. Ids outside the workspace return 404 |
 | `./scripts/adaptlypost.js posts:update --id <id> --caption "new text" [--schedule ...] [--timezone ...]` | Partial update of a DRAFT or SCHEDULED post; omitted fields keep their values. Any other status fails |
 | `./scripts/adaptlypost.js posts:delete --id <id>` | Remove the record; cancels a DRAFT or SCHEDULED post. Never unpublishes content already live |
+| `./scripts/adaptlypost.js posts:unschedule --id <id>` | Take a DRAFT or SCHEDULED post off the calendar: it becomes an undated DRAFT and nothing publishes. Reschedule later with `posts:update` or `posts:publish` |
 | `./scripts/adaptlypost.js posts:publish --id <id> [--schedule ...] [--timezone ...]` | Push a DRAFT (or SCHEDULED) post live now, or reschedule it. Irreversible once queued |
 | `./scripts/adaptlypost.js results --id <id>` | Per-platform outcomes for one post and the source of `platformId` for retry. Poll while rows are PENDING or PUBLISHING |
 | `./scripts/adaptlypost.js posts:retry --id <id> --platforms pid1,pid2` | Re-queue FAILED platforms by `platformId` (not platform names), after fixing the cause |
@@ -163,7 +164,7 @@ PATCH /api/v1/social-posts/<id>
 Body: { "text": "updated caption", "scheduledAt": "..." }
 ```
 
-Only works on DRAFT or SCHEDULED posts; any other status returns 400 `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`. Returns the updated post.
+Only works on DRAFT or SCHEDULED posts; any other status returns 400 `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`. Moving a SCHEDULED post more than a minute into the past fails with 400 "The new scheduled time is in the past"; to publish now, use Publish Draft without scheduledAt. Returns the updated post.
 
 ### Delete Post
 
@@ -172,6 +173,14 @@ DELETE /api/v1/social-posts/<id>
 ```
 
 Removes the record; a deleted SCHEDULED post will not publish. It never removes content already on a network, so deleting a COMPLETED post only drops AdaptlyPost's record. Prefer Update Post over delete-and-recreate. Returns `{ deleted: true }`.
+
+### Unschedule Post
+
+```
+POST /api/v1/social-posts/<id>/unschedule
+```
+
+No body. Turns a DRAFT or SCHEDULED post into an undated DRAFT (`status: DRAFT`, `scheduledAt: null`), so nothing publishes and the post keeps its text, media and targets. Use it to hold a scheduled post back instead of deleting it; reschedule later with Update Post or Publish Draft. Any other status returns 400, and ids outside the workspace return 404. Repeating it on an undated draft is harmless. Returns the post.
 
 ### Publish Draft
 
@@ -293,7 +302,7 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 }
 ```
 
-**MCP Tools available** (18 tools):
+**MCP Tools available** (19 tools):
 
 | Tool | Description |
 |------|-------------|
@@ -305,6 +314,7 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `get_post` | One post's full record with per-platform status; 404 outside the workspace |
 | `update_post` | Partial update of a DRAFT or SCHEDULED post; sending `platforms` rebuilds all targets |
 | `delete_post` | Remove a post record; cancels a DRAFT or SCHEDULED post, never unpublishes live content |
+| `unschedule_post` | Turn a DRAFT or SCHEDULED post into an undated draft; nothing publishes, reschedule later |
 | `publish_draft` | Push a DRAFT (or SCHEDULED) post live now or reschedule it; irreversible once queued |
 | `list_post_results` | Per-platform outcomes for one post; source of `platformId` for retry |
 | `retry_failed_platforms` | Re-queue only FAILED platforms by `platformId`, after fixing the cause |

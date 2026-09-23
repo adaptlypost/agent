@@ -85,6 +85,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 | `list_posts` | List posts with filters by status, platform, date range |
 | `update_post` | Update a scheduled or draft post |
 | `delete_post` | Delete a scheduled or draft post |
+| `unschedule_post` | Turn a scheduled post back into an undated draft without deleting it |
 | `publish_draft` | Publish a draft post immediately or schedule it |
 | `list_post_results` | Check per-platform posting results — success/failure with error details |
 | `retry_failed_platforms` | Retry publishing on platforms that failed |

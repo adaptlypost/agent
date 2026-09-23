@@ -6,6 +6,7 @@ get_post
 list_posts
 update_post
 delete_post
+unschedule_post
 publish_draft
 list_post_results
 retry_failed_platforms

@@ -452,7 +452,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async ({ urls, files }) => {
@@ -601,7 +601,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async (input) => {
@@ -761,7 +761,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async ({ id, ...rest }) => {
@@ -860,7 +860,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async ({ id, ...body }) => {
@@ -924,7 +924,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async ({ id, platformIds }) => {
@@ -999,7 +999,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
       },
     },
     async (input) => {

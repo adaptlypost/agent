@@ -1175,7 +1175,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       ),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
         destructiveHint: false,
         idempotentHint: true,
       },

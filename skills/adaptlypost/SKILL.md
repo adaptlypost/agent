@@ -187,7 +187,7 @@ Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt 
 GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED&statuses=DRAFT&platforms=LINKEDIN&platforms=TWITTER&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
 ```
 
-Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`); `status` and `platform` work as aliases. Any other query parameter returns 400 naming it. `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
+Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`). Any other query parameter returns 400 naming it. `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
 
 Returns `{ posts, total, hasMore }` for every post in the workspace; page with `offset` while `hasMore` is true. Use this to find ids; use Get Post for one record and Post Results for one post's per-platform outcome.
 

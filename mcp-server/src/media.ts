@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 
 const MB = 1024 * 1024;
 export const MAX_IMAGE_BYTES = 50 * MB;
+export const MAX_DOCUMENT_BYTES = 100 * MB;
 export const MAX_DOWNLOAD_BYTES = 250 * MB;
 export const MAX_INLINE_UPLOAD_BYTES = 30 * MB;
 const SNIFF_BYTES = 12;
@@ -19,7 +20,34 @@ export const EXT_BY_MIME: Record<string, string> = {
   'image/webp': '.webp',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
+  'application/pdf': '.pdf',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
 };
+
+export const DOCUMENT_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+
+const OLE2_BY_EXT: Record<string, string> = {
+  doc: 'application/msword',
+  ppt: 'application/vnd.ms-powerpoint',
+};
+const ZIP_BY_EXT: Record<string, string> = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+function extensionOf(name: string): string {
+  const match = /\.([a-z0-9]+)$/i.exec(name);
+  return match ? match[1].toLowerCase() : '';
+}
 
 const QUICKTIME_ATOMS = new Set(['moov', 'mdat', 'wide', 'free', 'skip']);
 
@@ -27,8 +55,11 @@ function ascii(bytes: Uint8Array, start: number, end: number): string {
   return String.fromCharCode(...bytes.subarray(start, end));
 }
 
-function sniffMimeType(bytes: Uint8Array): string | undefined {
+function sniffMimeType(bytes: Uint8Array, name: string): string | undefined {
   if (bytes.length < 12) return undefined;
+  if (ascii(bytes, 0, 5) === '%PDF-') return 'application/pdf';
+  if (ascii(bytes, 0, 8) === '\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') return OLE2_BY_EXT[extensionOf(name)];
+  if (ascii(bytes, 0, 4) === 'PK\x03\x04') return ZIP_BY_EXT[extensionOf(name)];
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   if (ascii(bytes, 0, 8) === '\x89PNG\r\n\x1a\n') return 'image/png';
   if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 12) === 'WEBP') return 'image/webp';
@@ -42,25 +73,28 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / MB).toFixed(1)} MB`;
 }
 
-function requireMediaType(head: Uint8Array, source: string): string {
-  const mimeType = sniffMimeType(head);
+function requireMediaType(head: Uint8Array, source: string, name: string): string {
+  const mimeType = sniffMimeType(head, name);
   if (!mimeType) {
     throw new Error(
-      `${source} is not a JPEG, PNG, WebP, MP4 or QuickTime file. Its content was checked, not just its name.`,
+      `${source} is not a JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
     );
   }
   return mimeType;
 }
 
-function requireImageSize(mimeType: string, size: number, source: string): void {
+function requireSizeLimit(mimeType: string, size: number, source: string): void {
   if (mimeType.startsWith('image/') && size > MAX_IMAGE_BYTES) {
     throw new Error(`${source} is over the ${formatBytes(MAX_IMAGE_BYTES)} image limit.`);
   }
+  if (mimeType.startsWith('application/') && size > MAX_DOCUMENT_BYTES) {
+    throw new Error(`${source} is over the ${formatBytes(MAX_DOCUMENT_BYTES)} document limit.`);
+  }
 }
 
-export function requireMediaContent(bytes: Uint8Array, source: string): string {
-  const mimeType = requireMediaType(bytes, source);
-  requireImageSize(mimeType, bytes.length, source);
+export function requireMediaContent(bytes: Uint8Array, fileName: string): string {
+  const mimeType = requireMediaType(bytes, fileName, fileName);
+  requireSizeLimit(mimeType, bytes.length, fileName);
   return mimeType;
 }
 
@@ -164,7 +198,10 @@ function httpsGet(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
         method: 'GET',
         lookup: publicOnlyLookup,
         signal,
-        headers: { Accept: 'image/*,video/*', 'User-Agent': USER_AGENT },
+        headers: {
+          Accept: `image/*,video/*,${DOCUMENT_MIME_TYPES.join(',')}`,
+          'User-Agent': USER_AGENT,
+        },
       },
       resolve,
     );
@@ -256,8 +293,8 @@ export async function openPublicMedia(sourceUrl: string): Promise<MediaStream> {
     const head = await readHead(res, SNIFF_BYTES);
     let mimeType: string;
     try {
-      mimeType = requireMediaType(head, source);
-      requireImageSize(mimeType, declared, source);
+      mimeType = requireMediaType(head, source, url.pathname);
+      requireSizeLimit(mimeType, declared, source);
     } catch (error) {
       res.destroy();
       throw error;

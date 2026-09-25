@@ -229,7 +229,9 @@ const COMMANDS = {
 
     if (parsed["media-urls"]) {
       body.mediaUrls = parsed["media-urls"].split(",");
-      if (!parsed.type) body.contentType = "IMAGE";
+      if (!parsed.type) {
+        body.contentType = body.mediaUrls.some(isDocumentUrl) ? "DOCUMENT" : "IMAGE";
+      }
       if (parsed["alt-texts"]) {
         body.mediaAltTexts = parsed["alt-texts"].split("|").map((alt) => alt.trim());
       }
@@ -241,6 +243,14 @@ const COMMANDS = {
 
     if (parsed.draft) {
       body.saveAsDraft = true;
+    }
+
+    // LinkedIn document title
+    if (parsed["document-title"] && platforms.includes("LINKEDIN")) {
+      body.linkedinConfigs = (body.linkedinConnectionIds || []).map((connectionId) => ({
+        connectionId,
+        documentTitle: parsed["document-title"],
+      }));
     }
 
     // TikTok privacy
@@ -473,6 +483,13 @@ function analyticsQuery(parsed, extra = {}) {
     if (value !== undefined && value !== true) params.set(key, String(value));
   }
   return params.toString();
+}
+
+const DOCUMENT_EXTENSIONS = [".pdf", ".ppt", ".pptx", ".doc", ".docx"];
+
+function isDocumentUrl(url) {
+  const pathname = url.split(/[?#]/)[0].toLowerCase();
+  return DOCUMENT_EXTENSIONS.some((ext) => pathname.endsWith(ext));
 }
 
 function guessPlafformsFromAccounts() {

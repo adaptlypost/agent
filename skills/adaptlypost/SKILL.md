@@ -5,7 +5,7 @@ description: >
   Facebook, Pinterest, Threads, Bluesky, and Mastodon via the AdaptlyPost API, and read how they performed.
   Covers post creation, scheduling, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-09-23
+last-updated: 2026-09-25
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -94,7 +94,7 @@ Every API key carries a workspace role, chosen when it is created, and never doe
 | `./scripts/adaptlypost.js setup --key <key>` | Store the API key (`--local` for this project only). The user runs this, not the agent |
 | `./scripts/adaptlypost.js accounts` | List connected accounts with their ids and `status`. Run first: every post command takes these ids, never usernames. Skip accounts whose `status` is `unauthorized` and tell the user to reconnect them |
 | `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
-| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--alt-texts` (one per image, separated by `|`), `--type`, `--timezone`, `--tiktok-privacy`, `--platform-text` |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. Always pass `--platforms`; without it the CLI assumes LINKEDIN, TWITTER, INSTAGRAM. Optional: `--media-urls`, `--alt-texts` (one per image, separated by `|`), `--type`, `--document-title` (LinkedIn document posts), `--timezone`, `--tiktok-privacy`, `--platform-text` |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms X --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
 | `./scripts/adaptlypost.js posts [--status A,B] [--platform X,Y] [--limit n] [--offset n]` | List posts in the workspace, any status, newest first. Use it to find ids and see what is already queued |
@@ -159,6 +159,23 @@ Body: {
 ```
 
 **Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. Pinterest requires `pinterestConfigs` with `boardId`; there is no endpoint to list boards, so ask the user. Only one account per platform is allowed per post.
+
+**LinkedIn document posts** (a PDF, slide deck or Word file LinkedIn shows as a swipeable document): set `"contentType": "DOCUMENT"`, put exactly one uploaded PDF, PPT, PPTX, DOC or DOCX `publicUrl` in `mediaUrls` (max 100 MB, 300 pages), target only `LINKEDIN`, and optionally name it with `linkedinConfigs`. The title defaults to the file name. `DOCUMENT` on any other platform, a second file, or a document file on a non-`DOCUMENT` post is refused with 400.
+
+```
+POST /api/v1/social-posts
+Body: {
+  "platforms": ["LINKEDIN"],
+  "contentType": "DOCUMENT",
+  "text": "Our Q3 results in 12 slides",
+  "timezone": "UTC",
+  "linkedinConnectionIds": ["conn_id"],
+  "mediaUrls": ["https://cdn.adaptlypost.com/.../q3-results.pdf"],
+  "linkedinConfigs": [{ "connectionId": "conn_id", "documentTitle": "Q3 results" }]
+}
+```
+
+`linkedinConfigs` is accepted on create and update. Bulk scheduling does not take `DOCUMENT` posts; create them one at a time.
 
 Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. `timezone` is stored for display and does not shift `scheduledAt`.
 
@@ -263,7 +280,7 @@ Returns presigned upload URLs. This endpoint only mints a URL — it does **not*
 
 > **Reuse uploads, do not re-upload.** One `publicUrl` can go into as many posts as you like (bulk items included); the file is kept until the last post referencing it has published. Reuse the `publicUrl` you uploaded, not a `mediaUrls` value read back from a published post, since those may be the platform's own expiring links.
 
-Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`.
+Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`, and for LinkedIn document posts `application/pdf`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`. Keep the file extension in `fileName`: the post reads the file type from it.
 
 ### Analytics
 
@@ -374,6 +391,7 @@ Use these exact names (uppercase) for platforms:
 - `IMAGE` — Post with image(s)
 - `VIDEO` — Post with video
 - `CAROUSEL` — Multi-image carousel
+- `DOCUMENT` — LinkedIn only: one PDF, PPT, PPTX, DOC or DOCX shown as a swipeable document
 
 ## Automation Guidelines
 
@@ -383,7 +401,7 @@ Use these exact names (uppercase) for platforms:
 - **Publishing confirmation**: Unless the user explicitly asks to "post now" or "publish immediately", always confirm before posting. Creating a draft is safe; posting is irreversible.
 - **Show the whole post before confirming.** Name every account, the timing, each platform's visibility, and every caption including per-platform text. A "yes" covers that one post, not the next.
 - **Unattended runs save drafts.** From cron or any run with nobody to confirm, use `--draft` unless the user set up that exact recurring workflow in advance.
-- **Uploaded media is public at once**, even if no post uses it. Only upload files the user named, never hidden files, keys, `.env` or documents, and only download from public `https://` URLs, never `localhost`, private IPs or cloud metadata hosts.
+- **Uploaded media is public at once**, even if no post uses it. Only upload files the user named, never hidden files, keys or `.env`, and a document only when the user asked to post that document; only download from public `https://` URLs, never `localhost`, private IPs or cloud metadata hosts.
 - **Confirm deletes and retries** for each post id. A retry republishes immediately.
 - **A 403 `permission_denied` is final.** The key's role cannot do that, whoever asks. Do not retry, do not look for another key. For scheduling or publishing, save with `--draft` and tell the user a workspace member has to publish it.
 - **Connect links are secrets.** Create one only when asked, give it to that user in this conversation, and revoke it once used.

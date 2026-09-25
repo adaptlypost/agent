@@ -8,6 +8,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { Readable } from 'node:stream';
 
 import {
+  DOCUMENT_MIME_TYPES,
   EXT_BY_MIME,
   fileNameFor,
   formatBytes,
@@ -68,7 +69,21 @@ const PlatformType = z.enum([
   'MASTODON',
 ]);
 
-const ContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL']);
+const ContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL', 'DOCUMENT']);
+
+const BulkContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL']);
+
+const UploadMimeType = z.enum([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  ...DOCUMENT_MIME_TYPES,
+]);
+
+const DOCUMENT_POST_RULE =
+  'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
 const PostStatus = z.enum([
   'COMPLETED',
@@ -193,6 +208,17 @@ const FacebookConfigSchema = z.object({
     .describe('Video title for Facebook (max 255 chars)'),
 });
 
+const LinkedInConfigSchema = z.object({
+  connectionId: z.string().describe('LinkedIn connection ID from list_accounts'),
+  documentTitle: z
+    .string()
+    .max(100)
+    .optional()
+    .describe(
+      'Title LinkedIn shows on a DOCUMENT post (max 100 chars). Defaults to the file name; ignored for other content types',
+    ),
+});
+
 const PinterestConfigSchema = z.object({
   connectionId: z
     .string()
@@ -254,6 +280,15 @@ const platformConfigFields = {
     .optional()
     .describe(
       'Pinterest per-connection config. Each entry needs connectionId + boardId; there is no API to list boards, so ask the user for the board id',
+    ),
+};
+
+const linkedinConfigsField = {
+  linkedinConfigs: z
+    .array(LinkedInConfigSchema)
+    .optional()
+    .describe(
+      'LinkedIn per-connection config: documentTitle names a DOCUMENT post. connectionId must match an entry in linkedinConnectionIds',
     ),
 };
 
@@ -413,13 +448,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload images or videos to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content; 50 MB per image, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse rather than re-uploading per post.',
+        'Upload images, videos or documents to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension, so keep it in the name or URL); 50 MB per image, 100 MB per document, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse rather than re-uploading per post.',
       inputSchema: {
         urls: z
           .array(z.string())
           .optional()
           .describe(
-            'Public https URLs of images or videos to upload (e.g. ["https://example.com/photo.jpg"])',
+            'Public https URLs of images, videos or documents to upload (e.g. ["https://example.com/photo.jpg", "https://example.com/deck.pdf"])',
           ),
         files: z
           .array(
@@ -429,21 +464,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .describe('Base64-encoded file content'),
               fileName: z
                 .string()
-                .describe('File name with extension (e.g. "photo.jpg")'),
-              mimeType: z
-                .enum([
-                  'image/jpeg',
-                  'image/png',
-                  'image/webp',
-                  'video/mp4',
-                  'video/quicktime',
-                ])
-                .describe('MIME type of the file'),
+                .describe('File name with extension (e.g. "photo.jpg" or "deck.pptx")'),
+              mimeType: UploadMimeType.describe('MIME type of the file'),
             }),
           )
           .optional()
           .describe(
-            'Direct file uploads as base64, 30 MB decoded per call in total. Use this when the user attaches/pastes an image or video in the conversation',
+            'Direct file uploads as base64, 30 MB decoded per call in total. Use this when the user attaches/pastes an image, video or document in the conversation',
           ),
       },
       outputSchema: resultSchema(
@@ -487,21 +514,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
             z.object({
               fileName: z.string().describe('File name with extension'),
-              mimeType: z
-                .enum([
-                  'image/jpeg',
-                  'image/png',
-                  'image/webp',
-                  'video/mp4',
-                  'video/quicktime',
-                ])
-                .describe('MIME type of the file'),
+              mimeType: UploadMimeType.describe('MIME type of the file'),
             }),
           )
           .min(1)
@@ -534,7 +553,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
       inputSchema: {
         text: z
           .string()
@@ -546,7 +565,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from list_accounts',
           ),
         contentType: ContentType.describe(
-          'Content type: TEXT, IMAGE, VIDEO, or CAROUSEL. Must match mediaUrls (CAROUSEL needs several)',
+          `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls (CAROUSEL needs several). ${DOCUMENT_POST_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -594,6 +613,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Per-platform caption overrides'),
         ...connectionIdFields,
         ...platformConfigFields,
+        ...linkedinConfigsField,
       },
       outputSchema: resultSchema(
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt. Publishing is asynchronous: check list_post_results for outcomes.',
@@ -714,7 +734,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'New target platforms. Sending this replaces every target, so also resend the connection-id arrays and platform configs to keep; omit to leave targets unchanged',
           ),
         contentType: ContentType.optional().describe(
-          'New content type; must match the media on the post',
+          `New content type; must match the media on the post. ${DOCUMENT_POST_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -754,6 +774,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Per-platform caption overrides; applied to the targets sent in platforms'),
         ...connectionIdFields,
         ...platformConfigFields,
+        ...linkedinConfigsField,
       },
       outputSchema: resultSchema(
         'The updated post record: id, status (still DRAFT or SCHEDULED), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
@@ -961,7 +982,9 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(
             z.object({
               text: z.string().optional().describe('Post text/caption'),
-              contentType: ContentType.describe('TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls'),
+              contentType: BulkContentType.describe(
+                'TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post',
+              ),
               scheduledAt: z
                 .string()
                 .describe('Absolute ISO 8601 instant; a past time publishes immediately'),

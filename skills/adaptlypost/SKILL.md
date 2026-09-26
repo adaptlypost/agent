@@ -2,7 +2,7 @@
 name: adaptlypost
 description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
-  Facebook, Pinterest, Threads, Bluesky, and Mastodon via the AdaptlyPost API, and read how they performed.
+  Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile via the AdaptlyPost API, and read how they performed.
   Covers post creation, scheduling, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
 last-updated: 2026-09-25
@@ -11,7 +11,7 @@ allowed-tools: Bash(./scripts/adaptlypost.js:*)
 
 # AdaptlyPost Social Media Skill
 
-Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 10 platforms from a single command, then read the numbers back.
+Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 11 platforms from a single command, then read the numbers back.
 
 > **Freshness check**: If more than 30 days have passed since the `last-updated` date above, inform the user that this skill may be outdated and point them to the update options below.
 
@@ -177,6 +177,28 @@ Body: {
 
 `linkedinConfigs` is accepted on create and update. Bulk scheduling does not take `DOCUMENT` posts; create them one at a time.
 
+**Google Business Profile**: put the connection ids in `googleBusinessConnectionIds` (each id is one business location) and add one `googleBusinessConfigs` entry per connection:
+
+```
+"googleBusinessConnectionIds": ["conn_id"],
+"googleBusinessConfigs": [{
+  "connectionId": "conn_id",
+  "topicType": "EVENT",
+  "eventTitle": "Autumn tasting night",
+  "eventStart": "2026-10-01T18:00",
+  "eventEnd": "2026-10-01T21:00",
+  "callToActionType": "BOOK",
+  "callToActionUrl": "https://example.com/book"
+}]
+```
+
+- `topicType` (required): `STANDARD` (an update), `EVENT` or `OFFER`. A location without a config entry gets a `STANDARD` update with no button.
+- `callToActionType` (optional): `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP` or `CALL`. Every type except `CALL` needs `callToActionUrl`; `CALL` dials the phone number on the business profile and ignores `callToActionUrl`.
+- `eventTitle`, `eventStart`, `eventEnd` are required for `EVENT` and `OFFER`. Start and end are the business's local time as `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, with no timezone.
+- `offerCouponCode`, `offerRedeemUrl` (a URL) and `offerTerms` are optional and apply to `OFFER` only.
+- Text or a single JPEG/PNG image (max 5 MB) only: no video, no carousels, no alt text. Text max 1500 characters.
+- Google removes posts that put a phone number or email in the text; use the `CALL` button instead. Google reviews every post, so one can come back rejected after publishing.
+
 Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. `timezone` is stored for display and does not shift `scheduledAt`.
 
 Returns: `{ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }`. `queuedPlatforms` confirms queueing, not delivery: publishing runs asynchronously per platform, so check `results` for the outcome.
@@ -197,7 +219,7 @@ Returns `{ posts, total, hasMore }` for every post in the workspace; page with `
 GET /api/v1/social-posts/<id>
 ```
 
-Returns the full post record with top-level `mediaUrls` and a `platforms` array carrying each target's status, `errorMessage` and, once published, `platformPostId` and a clickable `postUrl` (every platform except Mastodon). Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
+Returns the full post record with top-level `mediaUrls` and a `platforms` array carrying each target's status, `errorMessage` and, once published, `platformPostId` and a clickable `postUrl` (every platform except Mastodon and Google Business Profile). Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
 
 ### Update Post
 
@@ -284,7 +306,7 @@ Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video
 
 ### Analytics
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Numbers refresh every few hours on their own.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Google Business Profile reports location-level impressions only; there are no per-post metrics. Numbers refresh every few hours on their own.
 
 Every window endpoint takes `from` and `to` (ISO 8601, `to` not earlier than `from`) and an optional repeated `platforms` filter. Metrics count posts published inside the window, and the comparison window is the same length immediately before `from`.
 
@@ -384,6 +406,7 @@ Use these exact names (uppercase) for platforms:
 - `THREADS` — Threads
 - `BLUESKY` — Bluesky
 - `MASTODON` — Mastodon
+- `GOOGLE_BUSINESS` — Google Business Profile
 
 ## Content Types
 
@@ -416,6 +439,7 @@ Use these exact names (uppercase) for platforms:
 - Check `results` after posting to see per-platform success/failure. `post`, `posts:publish`, and `posts:retry` only confirm queueing; the outcome arrives asynchronously
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
 - Pinterest needs `pinterestConfigs` with `boardId`, which the CLI does not set; use the API body directly for Pinterest posts
+- The CLI posts Google Business Profile locations as `STANDARD` updates with no button; for an `EVENT`, an `OFFER` or a button, send `googleBusinessConfigs` in the API body
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing
 - For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance

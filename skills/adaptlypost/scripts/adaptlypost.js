@@ -208,6 +208,7 @@ const COMMANDS = {
       body.threadsConnectionIds = [];
       body.blueskyConnectionIds = [];
       body.mastodonConnectionIds = [];
+      body.googleBusinessConnectionIds = [];
       body.pinterestConnectionIds = [];
       body.pageIds = [];
 
@@ -222,6 +223,7 @@ const COMMANDS = {
         body.threadsConnectionIds.push(id);
         body.blueskyConnectionIds.push(id);
         body.mastodonConnectionIds.push(id);
+        body.googleBusinessConnectionIds.push(id);
         body.pinterestConnectionIds.push(id);
         body.pageIds.push(id);
       }

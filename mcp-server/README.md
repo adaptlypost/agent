@@ -1,10 +1,10 @@
 # @adaptlypost/mcp-server
 
-MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results and read post analytics across 10 platforms.
+MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results and read post analytics across 11 platforms.
 
 ## Supported Platforms
 
-Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon
+Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile
 
 ## Quick Start
 
@@ -81,7 +81,7 @@ An operation the role does not cover comes back from the API as 403 with `code: 
 
 ## Available Tools
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics API worth the price, Mastodon has none, and LinkedIn analytics are waiting on LinkedIn's approval.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics API worth the price, Mastodon has none, Google Business Profile reports location-level impressions only with no per-post metrics, and LinkedIn analytics are waiting on LinkedIn's approval.
 
 | Tool | Description |
 |---|---|

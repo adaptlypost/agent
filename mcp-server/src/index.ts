@@ -67,6 +67,7 @@ const PlatformType = z.enum([
   'BLUESKY',
   'TWITTER',
   'MASTODON',
+  'GOOGLE_BUSINESS',
 ]);
 
 const ContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL', 'DOCUMENT']);
@@ -228,6 +229,44 @@ const PinterestConfigSchema = z.object({
   link: z.string().optional().describe('Destination URL for the pin'),
 });
 
+const GoogleBusinessConfigSchema = z.object({
+  connectionId: z
+    .string()
+    .describe('Google Business Profile connection ID from list_accounts (one business location)'),
+  topicType: z
+    .enum(['STANDARD', 'EVENT', 'OFFER'])
+    .describe('STANDARD is an update. EVENT and OFFER need eventTitle, eventStart and eventEnd'),
+  callToActionType: z
+    .enum(['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'CALL'])
+    .optional()
+    .describe(
+      'Button shown on the post. Every type except CALL needs callToActionUrl; CALL dials the phone number on the business profile and ignores callToActionUrl',
+    ),
+  callToActionUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe('Button URL; required for every callToActionType except CALL'),
+  eventTitle: z.string().optional().describe('Event or offer title (required for EVENT and OFFER)'),
+  eventStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/)
+    .optional()
+    .describe(
+      "Start in the business's local time as YYYY-MM-DD or YYYY-MM-DDTHH:mm, no timezone (required for EVENT and OFFER)",
+    ),
+  eventEnd: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/)
+    .optional()
+    .describe(
+      "End in the business's local time as YYYY-MM-DD or YYYY-MM-DDTHH:mm, no timezone (required for EVENT and OFFER)",
+    ),
+  offerCouponCode: z.string().optional().describe('Coupon code (OFFER only)'),
+  offerRedeemUrl: z.string().url().optional().describe('URL to redeem the offer (OFFER only)'),
+  offerTerms: z.string().optional().describe('Offer terms and conditions (OFFER only)'),
+});
+
 // ---------------------------------------------------------------------------
 // Shared field groups (reused across create, update, bulk)
 // ---------------------------------------------------------------------------
@@ -241,6 +280,12 @@ const connectionIdFields = {
   threadsConnectionIds: z.array(z.string()).optional().describe('Threads account connection IDs to post from'),
   blueskyConnectionIds: z.array(z.string()).optional().describe('Bluesky account connection IDs to post from'),
   mastodonConnectionIds: z.array(z.string()).optional().describe('Mastodon account connection IDs to post from'),
+  googleBusinessConnectionIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Google Business Profile connection IDs to post from; each id is one business location. Takes text or one JPEG/PNG image (max 5 MB), no video or carousels, text max 1500 characters. Google removes posts with a phone number or email in the text (use the CALL button) and reviews every post, so one can come back rejected',
+    ),
   pinterestConnectionIds: z.array(z.string()).optional().describe('Pinterest account connection IDs to post from'),
   pageIds: z
     .array(z.string())
@@ -281,6 +326,12 @@ const platformConfigFields = {
     .describe(
       'Pinterest per-connection config. Each entry needs connectionId + boardId; there is no API to list boards, so ask the user for the board id',
     ),
+  googleBusinessConfigs: z
+    .array(GoogleBusinessConfigSchema)
+    .optional()
+    .describe(
+      'Google Business Profile per-location config, one per connection. Each entry needs connectionId + topicType; a location without one gets a STANDARD update with no button',
+    ),
 };
 
 const linkedinConfigsField = {
@@ -309,7 +360,7 @@ const analyticsRangeFields = {
     .array(PlatformType)
     .optional()
     .describe(
-      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) and MASTODON have no analytics and are ignored; LinkedIn analytics are pending platform approval and return no data yet',
+      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) and MASTODON have no analytics and are ignored; GOOGLE_BUSINESS has location-level impressions only, with no per-post metrics; LinkedIn analytics are pending platform approval and return no data yet',
     ),
 };
 
@@ -420,7 +471,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the token\'s workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
+        'List the social accounts connected to the token\'s workspace across all eleven platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
@@ -553,7 +604,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId; Google Business Profile takes googleBusinessConfigs with topicType (EVENT and OFFER also need eventTitle, eventStart and eventEnd). For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
       inputSchema: {
         text: z
           .string()
@@ -595,7 +646,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it',
           ),
         thumbnailUrl: z
           .string()
@@ -723,7 +774,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId, Google Business Profile with topicType); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
         text: z.string().optional().describe('Updated text; omit to keep the current text'),
@@ -756,7 +807,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it',
           ),
         thumbnailUrl: z
           .string()
@@ -967,7 +1018,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, Pinterest needs pinterestConfigs with boardId, and Google Business Profile takes googleBusinessConfigs with topicType. Use create_post for a single post or a draft; this tool has no draft mode.',
       inputSchema: {
         platforms: z
           .array(PlatformType)
@@ -996,7 +1047,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .array(z.string().max(1000))
                 .optional()
                 .describe(
-                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it',
                 ),
               thumbnailUrl: z
                 .string()

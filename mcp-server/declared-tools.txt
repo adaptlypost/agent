@@ -11,6 +11,11 @@ publish_draft
 list_post_results
 retry_failed_platforms
 bulk_schedule_posts
+list_recurring_posts
+get_recurring_post
+pause_recurring_post
+resume_recurring_post
+delete_recurring_post
 get_analytics_overview
 get_analytics_timeseries
 get_platform_breakdown

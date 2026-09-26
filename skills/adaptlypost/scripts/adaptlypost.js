@@ -141,6 +141,38 @@ function parseArgs(args) {
   return parsed;
 }
 
+function parseRepeated(args, key) {
+  const values = [];
+  for (let i = 0; i < args.length; i++) {
+    const next = args[i + 1];
+    if (args[i] === `--${key}` && next && !next.startsWith("--")) {
+      values.push(...next.split(",").map((v) => v.trim().toUpperCase()));
+      i++;
+    }
+  }
+  return values;
+}
+
+const REPEAT_FLAGS = ["repeat-every", "repeat-on", "repeat-until", "repeat-count"];
+
+function buildRecurrence(args, parsed) {
+  if (!parsed.repeat) {
+    const stray = REPEAT_FLAGS.find((flag) => parsed[flag]);
+    if (stray) {
+      error(`--${stray} needs --repeat DAILY|WEEKLY|MONTHLY`);
+      process.exit(1);
+    }
+    return undefined;
+  }
+  const recurrence = { frequency: String(parsed.repeat).toUpperCase() };
+  if (parsed["repeat-every"]) recurrence.interval = Number(parsed["repeat-every"]);
+  const weekdays = parseRepeated(args, "repeat-on");
+  if (weekdays.length > 0) recurrence.weekdays = weekdays;
+  if (parsed["repeat-until"]) recurrence.endsOn = parsed["repeat-until"];
+  if (parsed["repeat-count"]) recurrence.maxOccurrences = Number(parsed["repeat-count"]);
+  return recurrence;
+}
+
 // ── Commands ────────────────────────────────────────────────────────────────
 
 const COMMANDS = {
@@ -243,6 +275,11 @@ const COMMANDS = {
 
     if (parsed.draft) {
       body.saveAsDraft = true;
+    }
+
+    const recurrence = buildRecurrence(args, parsed);
+    if (recurrence) {
+      body.recurrence = recurrence;
     }
 
     // LinkedIn document title
@@ -411,6 +448,70 @@ const COMMANDS = {
     }
     const body = JSON.parse(fs.readFileSync(filePath, "utf8"));
     const data = await request("POST", "/api/v1/social-posts/bulk", body);
+    output(data);
+  },
+
+  recurring: async (args) => {
+    const parsed = parseArgs(args);
+    const params = new URLSearchParams();
+    if (parsed.limit) params.set("limit", parsed.limit);
+    if (parsed.offset) params.set("offset", parsed.offset);
+    if (parsed.status)
+      parsed.status.split(",").forEach((s) => params.append("statuses", s));
+    const qs = params.toString();
+    const data = await request(
+      "GET",
+      `/api/v1/recurring-posts${qs ? `?${qs}` : ""}`,
+    );
+    output(data);
+  },
+
+  "recurring:get": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js recurring:get --id <recurring_post_id>");
+      process.exit(1);
+    }
+    const data = await request("GET", `/api/v1/recurring-posts/${parsed.id}`);
+    output(data);
+  },
+
+  "recurring:pause": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js recurring:pause --id <recurring_post_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "POST",
+      `/api/v1/recurring-posts/${parsed.id}/pause`,
+    );
+    output(data);
+  },
+
+  "recurring:resume": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js recurring:resume --id <recurring_post_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "POST",
+      `/api/v1/recurring-posts/${parsed.id}/resume`,
+    );
+    output(data);
+  },
+
+  "recurring:delete": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js recurring:delete --id <recurring_post_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "DELETE",
+      `/api/v1/recurring-posts/${parsed.id}`,
+    );
     output(data);
   },
 

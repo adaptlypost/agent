@@ -96,6 +96,11 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 | `list_post_results` | Check per-platform posting results — success/failure with error details |
 | `retry_failed_platforms` | Retry publishing on platforms that failed |
 | `bulk_schedule_posts` | Schedule multiple posts at once |
+| `list_recurring_posts` | List recurring posts (series made with `recurrence` on `create_post`) by status |
+| `get_recurring_post` | Get one recurring post with its schedule, status and next occurrence |
+| `pause_recurring_post` | Pause a recurring post and delete its upcoming scheduled post |
+| `resume_recurring_post` | Resume a paused recurring post from the next occurrence after now |
+| `delete_recurring_post` | Stop a recurring post for good; posts already published are kept |
 | `get_analytics_overview` | Views, likes, comments, shares, followers and engagement rate for a date window, with the change against the previous window |
 | `get_analytics_timeseries` | The same metrics bucketed by day, week or month |
 | `get_platform_breakdown` | The same metrics split per platform, with the metrics each platform reports |

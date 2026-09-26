@@ -97,6 +97,20 @@ const PostStatus = z.enum([
 
 const PostSortOrder = z.enum(['NEWEST', 'OLDEST']);
 
+const RecurrenceFrequency = z.enum(['DAILY', 'WEEKLY', 'MONTHLY']);
+
+const Weekday = z.enum([
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+]);
+
+const RecurringPostStatus = z.enum(['ACTIVE', 'PAUSED', 'ENDED']);
+
 const AnalyticsGranularity = z.enum(['DAILY', 'WEEKLY', 'MONTHLY']);
 
 const AnalyticsSortMetric = z.enum([
@@ -226,6 +240,38 @@ const PinterestConfigSchema = z.object({
   boardId: z.string().describe('Pinterest board ID to pin to (required)'),
   title: z.string().max(100).optional().describe('Pin title (max 100 chars)'),
   link: z.string().optional().describe('Destination URL for the pin'),
+});
+
+const RecurrenceSchema = z.object({
+  frequency: RecurrenceFrequency.describe('How often the post repeats: DAILY, WEEKLY, or MONTHLY'),
+  interval: z
+    .number()
+    .int()
+    .min(1)
+    .max(30)
+    .optional()
+    .describe('Repeat every N days, weeks or months, 1 to 30 (default 1)'),
+  weekdays: z
+    .array(Weekday)
+    .optional()
+    .describe(
+      'WEEKLY only: the weekdays it goes out on (e.g. ["MONDAY", "THURSDAY"]). The weekday of scheduledAt is always included',
+    ),
+  endsOn: z
+    .string()
+    .optional()
+    .describe(
+      'Last day an occurrence may go out on, as YYYY-MM-DD (inclusive). Must be on or after the day of the first post. Cannot be combined with maxOccurrences',
+    ),
+  maxOccurrences: z
+    .number()
+    .int()
+    .min(2)
+    .max(365)
+    .optional()
+    .describe(
+      'Total number of posts the series publishes, 2 to 365. Cannot be combined with endsOn; omit both to repeat until paused or deleted',
+    ),
 });
 
 // ---------------------------------------------------------------------------
@@ -553,7 +599,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Pass recurrence with a future scheduledAt to repeat the post daily, weekly or monthly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post.',
       inputSchema: {
         text: z
           .string()
@@ -585,6 +631,9 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe(
             'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
           ),
+        recurrence: RecurrenceSchema.optional().describe(
+          'Repeat the post on a schedule. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. X and LinkedIn reject identical text, so use spintax such as {Hi|Hello} to vary each post. Manage the series with list_recurring_posts, pause_recurring_post, resume_recurring_post and delete_recurring_post',
+        ),
         mediaUrls: z
           .array(z.string())
           .optional()
@@ -616,7 +665,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         ...linkedinConfigsField,
       },
       outputSchema: resultSchema(
-        'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt. Publishing is asynchronous: check list_post_results for outcomes.',
+        'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt, plus recurringPostId when recurrence was sent. Publishing is asynchronous: check list_post_results for outcomes.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -646,7 +695,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -700,7 +749,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Posts to skip; increase by limit while hasMore is true'),
       },
       outputSchema: resultSchema(
-        'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, and platforms with per-platform status), total (count of all matches), and hasMore.',
+        'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, recurringPostId and occurrenceAt for occurrences of a recurring post, and platforms with per-platform status), total (count of all matches), and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1028,6 +1077,160 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (input) => {
       try {
         const data = await client.post('/social-posts/bulk', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // ── Recurring Posts ────────────────────────────────────────────────────
+
+  server.registerTool(
+    'list_recurring_posts',
+    {
+      title: 'List Recurring Posts',
+      description:
+        'List the recurring posts (series) in the token\'s workspace, created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
+      inputSchema: {
+        statuses: z
+          .array(RecurringPostStatus)
+          .optional()
+          .describe('Filter by status (e.g. ["ACTIVE", "PAUSED"]); omit for all statuses'),
+        limit: z.number().optional().default(20).describe('Max results, 1 to 100'),
+        offset: z
+          .number()
+          .optional()
+          .default(0)
+          .describe('Recurring posts to skip; increase by limit while hasMore is true'),
+      },
+      outputSchema: resultSchema(
+        'An object with recurringPosts (each with id, status, pauseReason, lastError, frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences, nextOccurrenceAt, occurrenceCount, contentType, text, mediaUrls, platformTypes, and platforms), total (count of all matches), and hasMore.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input) => {
+      try {
+        const data = await client.get('/recurring-posts', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_recurring_post',
+    {
+      title: 'Get Recurring Post',
+      description:
+        'Get one recurring post (series) by id: status, pauseReason and lastError when paused, the schedule (frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences), nextOccurrenceAt (the next slot not yet created as a post; absent once ENDED), occurrenceCount (posts created so far), and the content and platforms each occurrence copies. Ids outside the token\'s workspace return "Recurring post not found". Ids come from list_recurring_posts, the recurringPostId returned by create_post, or the recurringPostId on a post from get_post or list_posts.',
+      inputSchema: {
+        id: z
+          .string()
+          .describe('Recurring post ID from list_recurring_posts, create_post, or a post\'s recurringPostId'),
+      },
+      outputSchema: resultSchema(
+        'The recurring post: id, userId, status, pauseReason, lastError, frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences, nextOccurrenceAt, occurrenceCount, contentType, text, mediaUrls, mediaAltTexts, thumbnailUrl, platformTypes, platforms, createdAt, and updatedAt.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.get(`/recurring-posts/${id}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'pause_recurring_post',
+    {
+      title: 'Pause Recurring Post',
+      description:
+        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the token\'s workspace return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
+      inputSchema: {
+        id: z.string().describe('Recurring post ID to pause, from list_recurring_posts'),
+      },
+      outputSchema: resultSchema(
+        'The paused recurring post: id, status PAUSED, pauseReason USER, the schedule, occurrenceCount, and the content and platforms.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.post(`/recurring-posts/${id}/pause`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'resume_recurring_post',
+    {
+      title: 'Resume Recurring Post',
+      description:
+        'Resume a PAUSED recurring post. It continues from the next occurrence after now; slots missed while paused are not published. The next occurrence is created as a SCHEDULED post about 24 hours before it goes out and then publishes to the networks, so confirm with the user first. If the series has no slot left (endsOn passed or maxOccurrences reached) it comes back ENDED instead. When pauseReason is CONNECTION_REMOVED, ACCESS_LOST, SUBSCRIPTION_INACTIVE or INVALID_CONTENT, fix the cause first or the series pauses again. Ids outside the token\'s workspace return "Recurring post not found". Returns the recurring post with its new status and nextOccurrenceAt.',
+      inputSchema: {
+        id: z.string().describe('Recurring post ID to resume, from list_recurring_posts'),
+      },
+      outputSchema: resultSchema(
+        'The resumed recurring post: id, status (ACTIVE, or ENDED when no slot is left), nextOccurrenceAt, the schedule, occurrenceCount, and the content and platforms.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.post(`/recurring-posts/${id}/resume`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'delete_recurring_post',
+    {
+      title: 'Delete Recurring Post',
+      description:
+        'Delete a recurring post: the series stops for good and its upcoming SCHEDULED post is deleted. Posts that already went out are kept. Prefer pause_recurring_post when the user may want the series back. To skip a single date, delete that occurrence with delete_post instead; the series continues. Ids outside the token\'s workspace return "Recurring post not found". Returns { deleted: true }. Irreversible.',
+      inputSchema: {
+        id: z.string().describe('Recurring post ID to delete, from list_recurring_posts'),
+      },
+      outputSchema: resultSchema(
+        'An object with deleted: true once the recurring post is removed.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }) => {
+      try {
+        const data = await client.delete(`/recurring-posts/${id}`);
         return toolResult(data);
       } catch (error) {
         return toolError(error);

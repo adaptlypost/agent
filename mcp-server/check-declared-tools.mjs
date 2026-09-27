@@ -5,7 +5,7 @@ const declared = readFileSync(new URL('declared-tools.txt', import.meta.url), 'u
   .filter(Boolean);
 
 const source = readFileSync(new URL('src/index.ts', import.meta.url), 'utf8');
-const registered = [...source.matchAll(/registerTool\(\s*['"]([a-z_]+)['"]/g)].map((m) => m[1]);
+const registered = [...source.matchAll(/(?:registerTool|\btool)\(\s*['"]([a-z_]+)['"]/g)].map((m) => m[1]);
 
 const added = registered.filter((t) => !declared.includes(t));
 const removed = declared.filter((t) => !registered.includes(t));

@@ -104,6 +104,7 @@ docker run -i -e ADAPTLYPOST_API_TOKEN=adaptly_your_key adaptlypost-mcp
 - [AI Agents page](https://adaptlypost.com/features/agents)
 - [API Tokens](https://adaptlypost.com/api-tokens)
 - [MCP Server](./mcp-server)
+- Privacy policy: [adaptlypost.com/privacy](https://adaptlypost.com/privacy)
 
 ## License
 

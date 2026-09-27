@@ -75,9 +75,13 @@ npx skills add adaptlypost/agent
 
 ## Roles and permissions
 
-Every call runs under a workspace role: Admin, Editor, Contributor or Viewer. An API key carries the role it was created with and never does more than the member who created it; a sign-in over OAuth acts with the member's own role in their default workspace. Contributor keys create and edit their own drafts, upload media and read posts and analytics, but cannot schedule, publish, retry, bulk schedule or delete non-drafts.
+Every call runs under a workspace role: Admin, Editor, Contributor or Viewer. An API key carries the role it was created with and never does more than the member who created it; a sign-in over OAuth reaches every workspace the member belongs to, each under the member's own role there. Contributor keys create and edit their own drafts, upload media and read posts and analytics, but cannot schedule, publish, retry, bulk schedule or delete non-drafts.
 
 An operation the role does not cover comes back from the API as 403 with `code: permission_denied`, `requiredPermission` and `role`; the tool returns that as an error that says to save a draft and ask a workspace member to publish, not to retry or look for another key. A key whose creator left the workspace answers 401 with `code: token_issuer_lost_access`.
+
+## Workspaces
+
+An OAuth sign-in can reach several workspaces, each with its own accounts, posts and role. `list_workspaces` returns them, and every other tool takes an optional `workspaceId` that the server forwards as the `X-Workspace-Id` header. Without it a tool acts in the default workspace. A `workspaceId` the sign-in cannot reach returns 403 with `code: workspace_access_denied`. An API key belongs to one workspace, so `list_workspaces` shows only that one.
 
 ## Available Tools
 
@@ -85,6 +89,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 
 | Tool | Description |
 |---|---|
+| `list_workspaces` | List the workspaces the sign-in can act in; pass an id as `workspaceId` to any other tool |
 | `list_accounts` | List all connected social media accounts with IDs and platforms |
 | `create_post` | Create a post — publish immediately, schedule, or save as draft |
 | `get_post` | Get full details of a single post by ID |

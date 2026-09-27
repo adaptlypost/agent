@@ -2,6 +2,7 @@ export const PERMISSION_DENIED = 'permission_denied';
 export const SUBSCRIPTION_REQUIRED = 'subscription_required';
 export const TOKEN_ISSUER_LOST_ACCESS = 'token_issuer_lost_access';
 export const OAUTH_ACCOUNT_NOT_FOUND = 'oauth_account_not_found';
+export const WORKSPACE_ACCESS_DENIED = 'workspace_access_denied';
 
 export interface ApiErrorBody {
   statusCode?: number;
@@ -45,6 +46,10 @@ function describe(status: number, body: ApiErrorBody, fallback: string): string 
     return `Wrong sign-in (401, ${OAUTH_ACCOUNT_NOT_FOUND}): ${sentence(apiMessage)} Tell the user exactly this. No tool will work until they reconnect. ${FINAL}`;
   }
 
+  if (body.code === WORKSPACE_ACCESS_DENIED) {
+    return `Workspace not available (403, ${WORKSPACE_ACCESS_DENIED}): ${sentence(apiMessage)} Call list_workspaces and pass one of the returned ids as workspaceId, or leave workspaceId out to use the default workspace.`;
+  }
+
   if (body.code === SUBSCRIPTION_REQUIRED) {
     return `Subscription required (403, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)} Ask the user to renew the workspace's plan. ${FINAL}`;
   }
@@ -76,7 +81,14 @@ export class RestClient {
   constructor(
     private baseUrl: string,
     private apiToken: string,
+    private workspaceId?: string,
   ) {}
+
+  forWorkspace(workspaceId: string | undefined): RestClient {
+    return workspaceId
+      ? new RestClient(this.baseUrl, this.apiToken, workspaceId)
+      : this;
+  }
 
   private async request<T = unknown>(
     method: string,
@@ -90,6 +102,7 @@ export class RestClient {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiToken}`,
+        ...(this.workspaceId ? { 'X-Workspace-Id': this.workspaceId } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });

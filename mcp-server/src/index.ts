@@ -3,7 +3,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { z } from 'zod';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { z, type ZodRawShape, type ZodTypeAny } from 'zod';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
@@ -384,6 +385,15 @@ function toolError(error: unknown) {
   };
 }
 
+const workspaceIdField = {
+  workspaceId: z
+    .string()
+    .optional()
+    .describe(
+      'Workspace to act in: an id from list_workspaces. Omit to use the default workspace. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another',
+    ),
+};
+
 const resultSchema = (description: string) => ({
   result: z.unknown().describe(description),
 });
@@ -449,6 +459,8 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 
 const SERVER_INSTRUCTIONS = [
   'Every tool acts as the key or sign-in it was given, under that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
+  'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the default workspace. The role, and so what a tool may do, can differ per workspace.',
+  'A 403 with code workspace_access_denied means the workspaceId is not one this sign-in can reach. Call list_workspaces and pick an id from it.',
   'A Contributor key can create and edit its own drafts, upload media and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts or touch other members\' posts. A Viewer key only reads.',
   'A 403 with code permission_denied is final for this key. Do not retry it and do not look for another key. For schedule or publish, call create_post with saveAsDraft: true and tell the user a workspace member has to publish the draft.',
   'A 401 with code token_issuer_lost_access means the member who created the key left the workspace; the key is dead. Ask the user for a new one.',
@@ -456,7 +468,7 @@ const SERVER_INSTRUCTIONS = [
 ].join('\n');
 
 function createMcpServer(apiClient?: RestClient): McpServer {
-  const client = apiClient ?? api;
+  const baseClient = apiClient ?? api;
   const server = new McpServer(
     {
       name: 'adaptlypost',
@@ -465,14 +477,64 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     { instructions: SERVER_INSTRUCTIONS },
   );
 
-  // ── Account Tools ──────────────────────────────────────────────────────
+  const tool = <Args extends ZodRawShape>(
+    name: string,
+    config: {
+      title: string;
+      description: string;
+      inputSchema: Args;
+      outputSchema: ZodRawShape;
+      annotations: ToolAnnotations;
+    },
+    handler: (
+      args: z.objectOutputType<Args, ZodTypeAny>,
+      client: RestClient,
+    ) => Promise<CallToolResult>,
+  ) => {
+    const inputSchema: ZodRawShape = { ...config.inputSchema, ...workspaceIdField };
+    return server.registerTool(name, { ...config, inputSchema }, async (args) => {
+      const { workspaceId, ...rest } = args as { workspaceId?: string };
+      return handler(
+        rest as z.objectOutputType<Args, ZodTypeAny>,
+        baseClient.forWorkspace(workspaceId),
+      );
+    });
+  };
 
   server.registerTool(
+    'list_workspaces',
+    {
+      title: 'List Workspaces',
+      description:
+        'List the workspaces this sign-in can act in, across every organization the user belongs to. Returns { workspaces } with id, name, organization { id, name }, role { key, name }, isDefault, current and can { draft, schedule, publish }. Call this when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing: then pass the matching id as workspaceId to every other tool. Without workspaceId, tools act in the workspace marked current. An API key belongs to one workspace, so it lists only that one. Takes no arguments.',
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with workspaces: one { id, name, organization, role, isDefault, current, can } per workspace. Pass id as workspaceId to other tools.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async () => {
+      try {
+        const data = await baseClient.get('/workspaces');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // ── Account Tools ──────────────────────────────────────────────────────
+
+  tool(
     'list_accounts',
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the token\'s workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes no arguments.',
+        'List the social accounts connected to the workspace (the default one unless workspaceId names another) across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
@@ -483,7 +545,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async () => {
+    async (_args, client) => {
       try {
         const data = await client.get('/social-accounts');
         return toolResult(data);
@@ -495,7 +557,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Media Upload ────────────────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'upload_media',
     {
       title: 'Upload Media',
@@ -534,7 +596,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ urls, files }) => {
+    async ({ urls, files }, client) => {
       try {
         if (!urls?.length && !files?.length) {
           throw new Error(
@@ -561,7 +623,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_upload_urls',
     {
       title: 'Get Media Upload URLs',
@@ -588,7 +650,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async ({ files }) => {
+    async ({ files }, client) => {
       try {
         const data = await client.post('/upload-urls', { files });
         return toolResult(data);
@@ -600,7 +662,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Post CRUD ──────────────────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'create_post',
     {
       title: 'Create Post',
@@ -679,7 +741,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.post('/social-posts', input);
         return toolResult(data);
@@ -689,12 +751,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_post',
     {
       title: 'Get Post',
       description:
-        'Get one post\'s full record by id: text, contentType, status, scheduledAt, timezone, and a platforms array with each target\'s connection, status, errorMessage, and media. Visible only within the token\'s workspace; any other id returns "Post not found or access denied". Use this to inspect content before update_post or publish_draft. Use list_post_results instead when you only need per-platform publishing outcomes and the platformIds for retry_failed_platforms, and list_posts to find ids by status, platform, or date. Post ids come from create_post, bulk_schedule_posts, or list_posts.',
+        'Get one post\'s full record by id: text, contentType, status, scheduledAt, timezone, and a platforms array with each target\'s connection, status, errorMessage, and media. Visible only within the workspace (the default one unless workspaceId names another); any other id returns "Post not found or access denied". Use this to inspect content before update_post or publish_draft. Use list_post_results instead when you only need per-platform publishing outcomes and the platformIds for retry_failed_platforms, and list_posts to find ids by status, platform, or date. Post ids come from create_post, bulk_schedule_posts, or list_posts.',
       inputSchema: {
         id: z
           .string()
@@ -709,7 +771,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.get(`/social-posts/${id}`);
         return toolResult(data);
@@ -719,12 +781,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'list_posts',
     {
       title: 'List Posts',
       description:
-        'List posts in the token\'s workspace, any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
+        'List posts in the workspace (the default one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
       inputSchema: {
         statuses: z
           .array(PostStatus)
@@ -763,7 +825,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/social-posts', input);
         return toolResult(data);
@@ -773,7 +835,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'update_post',
     {
       title: 'Update Post',
@@ -840,7 +902,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id, ...rest }) => {
+    async ({ id, ...rest }, client) => {
       try {
         const data = await client.patch(`/social-posts/${id}`, rest);
         return toolResult(data);
@@ -850,12 +912,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'delete_post',
     {
       title: 'Delete Post',
       description:
-        'Delete a post record from AdaptlyPost by id. Use it to cancel a DRAFT or SCHEDULED post before it goes out; a deleted scheduled post will not publish. Deleting never removes content already on a network: for a COMPLETED or PARTIAL_FAILURE post this only drops AdaptlyPost\'s record, and the live posts stay up until removed on each platform. Prefer update_post to change a post instead of deleting and recreating it. Only posts in the token\'s workspace can be deleted; others return "Post not found or access denied". Returns { deleted: true }. Irreversible.',
+        'Delete a post record from AdaptlyPost by id. Use it to cancel a DRAFT or SCHEDULED post before it goes out; a deleted scheduled post will not publish. Deleting never removes content already on a network: for a COMPLETED or PARTIAL_FAILURE post this only drops AdaptlyPost\'s record, and the live posts stay up until removed on each platform. Prefer update_post to change a post instead of deleting and recreating it. Only posts in the workspace (the default one unless workspaceId names another) can be deleted; others return "Post not found or access denied". Returns { deleted: true }. Irreversible.',
       inputSchema: {
         id: z.string().describe('Post ID to delete, from list_posts or create_post'),
       },
@@ -868,7 +930,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.delete(`/social-posts/${id}`);
         return toolResult(data);
@@ -878,12 +940,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'unschedule_post',
     {
       title: 'Unschedule Post',
       description:
-        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the token\'s workspace return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
+        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the workspace (the default one unless workspaceId names another) return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
       inputSchema: {
         id: z.string().describe('Post ID with status DRAFT or SCHEDULED, from list_posts or create_post'),
       },
@@ -897,7 +959,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         idempotentHint: true,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.post(`/social-posts/${id}/unschedule`);
         return toolResult(data);
@@ -909,7 +971,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Publishing / Results ───────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'publish_draft',
     {
       title: 'Publish Draft',
@@ -939,7 +1001,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id, ...body }) => {
+    async ({ id, ...body }, client) => {
       try {
         const data = await client.post(`/social-posts/${id}/publish`, body);
         return toolResult(data);
@@ -949,7 +1011,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'list_post_results',
     {
       title: 'List Post Results',
@@ -969,7 +1031,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.get(`/social-posts/${id}/results`);
         return toolResult(data);
@@ -979,7 +1041,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'retry_failed_platforms',
     {
       title: 'Retry Failed Platforms',
@@ -1003,7 +1065,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id, platformIds }) => {
+    async ({ id, platformIds }, client) => {
       try {
         const data = await client.post(`/social-posts/${id}/retry`, {
           platformIds,
@@ -1017,7 +1079,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Bulk Scheduling ────────────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'bulk_schedule_posts',
     {
       title: 'Bulk Schedule Posts',
@@ -1080,7 +1142,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.post('/social-posts/bulk', input);
         return toolResult(data);
@@ -1092,12 +1154,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Recurring Posts ────────────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'list_recurring_posts',
     {
       title: 'List Recurring Posts',
       description:
-        'List the recurring posts (series) in the token\'s workspace, created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
+        'List the recurring posts (series) in the workspace (the default one unless workspaceId names another), created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
       inputSchema: {
         statuses: z
           .array(RecurringPostStatus)
@@ -1119,7 +1181,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/recurring-posts', input);
         return toolResult(data);
@@ -1129,12 +1191,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_recurring_post',
     {
       title: 'Get Recurring Post',
       description:
-        'Get one recurring post (series) by id: status, pauseReason and lastError when paused, the schedule (frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences), nextOccurrenceAt (the next slot not yet created as a post; absent once ENDED), occurrenceCount (posts created so far), and the content and platforms each occurrence copies. Ids outside the token\'s workspace return "Recurring post not found". Ids come from list_recurring_posts, the recurringPostId returned by create_post, or the recurringPostId on a post from get_post or list_posts.',
+        'Get one recurring post (series) by id: status, pauseReason and lastError when paused, the schedule (frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences), nextOccurrenceAt (the next slot not yet created as a post; absent once ENDED), occurrenceCount (posts created so far), and the content and platforms each occurrence copies. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Ids come from list_recurring_posts, the recurringPostId returned by create_post, or the recurringPostId on a post from get_post or list_posts.',
       inputSchema: {
         id: z
           .string()
@@ -1149,7 +1211,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.get(`/recurring-posts/${id}`);
         return toolResult(data);
@@ -1159,12 +1221,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'pause_recurring_post',
     {
       title: 'Pause Recurring Post',
       description:
-        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the token\'s workspace return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
+        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to pause, from list_recurring_posts'),
       },
@@ -1178,7 +1240,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         idempotentHint: true,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.post(`/recurring-posts/${id}/pause`);
         return toolResult(data);
@@ -1188,12 +1250,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'resume_recurring_post',
     {
       title: 'Resume Recurring Post',
       description:
-        'Resume a PAUSED recurring post. It continues from the next occurrence after now; slots missed while paused are not published. The next occurrence is created as a SCHEDULED post about 24 hours before it goes out and then publishes to the networks, so confirm with the user first. If the series has no slot left (endsOn passed or maxOccurrences reached) it comes back ENDED instead. When pauseReason is CONNECTION_REMOVED, ACCESS_LOST, SUBSCRIPTION_INACTIVE or INVALID_CONTENT, fix the cause first or the series pauses again. Ids outside the token\'s workspace return "Recurring post not found". Returns the recurring post with its new status and nextOccurrenceAt.',
+        'Resume a PAUSED recurring post. It continues from the next occurrence after now; slots missed while paused are not published. The next occurrence is created as a SCHEDULED post about 24 hours before it goes out and then publishes to the networks, so confirm with the user first. If the series has no slot left (endsOn passed or maxOccurrences reached) it comes back ENDED instead. When pauseReason is CONNECTION_REMOVED, ACCESS_LOST, SUBSCRIPTION_INACTIVE or INVALID_CONTENT, fix the cause first or the series pauses again. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with its new status and nextOccurrenceAt.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to resume, from list_recurring_posts'),
       },
@@ -1206,7 +1268,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.post(`/recurring-posts/${id}/resume`);
         return toolResult(data);
@@ -1216,12 +1278,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'delete_recurring_post',
     {
       title: 'Delete Recurring Post',
       description:
-        'Delete a recurring post: the series stops for good and its upcoming SCHEDULED post is deleted. Posts that already went out are kept. Prefer pause_recurring_post when the user may want the series back. To skip a single date, delete that occurrence with delete_post instead; the series continues. Ids outside the token\'s workspace return "Recurring post not found". Returns { deleted: true }. Irreversible.',
+        'Delete a recurring post: the series stops for good and its upcoming SCHEDULED post is deleted. Posts that already went out are kept. Prefer pause_recurring_post when the user may want the series back. To skip a single date, delete that occurrence with delete_post instead; the series continues. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns { deleted: true }. Irreversible.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to delete, from list_recurring_posts'),
       },
@@ -1234,7 +1296,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: true,
       },
     },
-    async ({ id }) => {
+    async ({ id }, client) => {
       try {
         const data = await client.delete(`/recurring-posts/${id}`);
         return toolResult(data);
@@ -1246,7 +1308,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   // ── Analytics ──────────────────────────────────────────────────────────
 
-  server.registerTool(
+  tool(
     'get_analytics_overview',
     {
       title: 'Get Analytics Overview',
@@ -1262,7 +1324,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/analytics/overview', input);
         return toolResult(data);
@@ -1272,7 +1334,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_analytics_timeseries',
     {
       title: 'Get Analytics Timeseries',
@@ -1293,7 +1355,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/analytics/timeseries', input);
         return toolResult(data);
@@ -1303,7 +1365,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_platform_breakdown',
     {
       title: 'Get Platform Breakdown',
@@ -1322,7 +1384,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/analytics/platform-breakdown', input);
         return toolResult(data);
@@ -1332,7 +1394,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'list_post_analytics',
     {
       title: 'List Post Analytics',
@@ -1359,7 +1421,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async (input) => {
+    async (input, client) => {
       try {
         const data = await client.get('/analytics/posts', input);
         return toolResult(data);
@@ -1369,12 +1431,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'get_analytics_sync_status',
     {
       title: 'Get Analytics Sync Status',
       description:
-        'How fresh the analytics are, per connected account. Returns syncInProgress, lastSyncedAt, historyHorizonAt (the earliest date any account has data for; earlier dates have no data rather than zero activity) and platforms: one row per account with status (IDLE, QUEUED, SYNCING, FAILED), lastSyncedAt, lastErrorMessage, historyHorizonAt and needsAnalyticsReconnect. When needsAnalyticsReconnect is true the account was connected before analytics permissions existed and returns nothing until the user reconnects it (a connect link works); tell them, do not keep querying. Call this when numbers look stale or empty, and after trigger_analytics_sync to see the run finish. Takes no arguments.',
+        'How fresh the analytics are, per connected account. Returns syncInProgress, lastSyncedAt, historyHorizonAt (the earliest date any account has data for; earlier dates have no data rather than zero activity) and platforms: one row per account with status (IDLE, QUEUED, SYNCING, FAILED), lastSyncedAt, lastErrorMessage, historyHorizonAt and needsAnalyticsReconnect. When needsAnalyticsReconnect is true the account was connected before analytics permissions existed and returns nothing until the user reconnects it (a connect link works); tell them, do not keep querying. Call this when numbers look stale or empty, and after trigger_analytics_sync to see the run finish. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accountGroupId, syncInProgress, lastSyncedAt, historyHorizonAt, and platforms: one { platform, connectionId, accountName, status, lastSyncedAt, lastErrorMessage, historyHorizonAt, lastDiscoveryAt, needsAnalyticsReconnect } per connected account.',
@@ -1385,7 +1447,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         destructiveHint: false,
       },
     },
-    async () => {
+    async (_args, client) => {
       try {
         const data = await client.get('/analytics/sync-status');
         return toolResult(data);
@@ -1395,12 +1457,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
-  server.registerTool(
+  tool(
     'trigger_analytics_sync',
     {
       title: 'Trigger Analytics Sync',
       description:
-        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 10 minutes; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes no arguments and changes no content.',
+        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 10 minutes; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with queued (true when a sync was started), message, and cooldownSecondsRemaining (seconds until the next allowed sync, null when queued).',
@@ -1412,7 +1474,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         idempotentHint: true,
       },
     },
-    async () => {
+    async (_args, client) => {
       try {
         const data = await client.post('/analytics/sync');
         return toolResult(data);

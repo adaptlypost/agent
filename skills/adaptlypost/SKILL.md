@@ -400,10 +400,11 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 }
 ```
 
-**MCP Tools available** (24 tools):
+**MCP Tools available** (25 tools):
 
 | Tool | Description |
 |------|-------------|
+| `list_workspaces` | Workspaces an OAuth sign-in can act in, with the role held in each. Every other tool takes an optional `workspaceId` from this list; without it tools act in the default workspace |
 | `list_accounts` | List connected accounts with ids, platforms and `status` (`active` or `unauthorized`). Call first; posts take these ids, never usernames |
 | `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
 | `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
@@ -428,6 +429,8 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `list_post_analytics` | Per-post metrics sorted by any metric; top posts and "how did this post do" |
 | `get_analytics_sync_status` | Freshness per account and whether one needs reconnecting for analytics |
 | `trigger_analytics_sync` | Refresh analytics now, once per 10 minutes per workspace |
+
+Over MCP with an OAuth sign-in, the user may belong to several workspaces. Call `list_workspaces` when they name a workspace, brand, client or organization, or when accounts or posts they expect are missing, and pass that id as `workspaceId` on every call about it: account, post and upload ids from one workspace do not exist in another, and the role can differ per workspace. A 403 with `code: workspace_access_denied` means the id is not one this sign-in reaches; pick one from `list_workspaces`.
 
 ## Platform Names
 

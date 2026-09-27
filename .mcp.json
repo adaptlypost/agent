@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://mcp.adaptlypost.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${ADAPTLYPOST_API_KEY}"
+        "Authorization": "Bearer ${user_config.api_key}"
       }
     }
   }

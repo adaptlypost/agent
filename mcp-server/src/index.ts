@@ -83,6 +83,18 @@ const UploadMimeType = z.enum([
   ...DOCUMENT_MIME_TYPES,
 ]);
 
+const ImageAspectRatio = z.enum(['1:1', '16:9', '9:16', '3:2', '2:3', '4:5', '5:4', '21:9', '9:21']);
+
+const ImageModel = z.enum(['standard', 'premium']);
+
+const ImageQuality = z.enum(['LOW', 'MEDIUM', 'HIGH']);
+
+const AI_PERMISSION_RULE =
+  'Needs the ai.generate permission, which Admin, Editor and Contributor hold and Viewer does not (403 permission_denied).';
+
+const CAPTION_CREDIT_RULE =
+  'Each call spends 2 of the member\'s AI credits (the member who signed in or created the key), refunded if generation fails, unless the member has their own AI provider key connected in AdaptlyPost. With no credits left the call fails: tell the user to top up credits or upgrade the plan instead of retrying.';
+
 const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
@@ -207,7 +219,9 @@ const InstagramConfigSchema = z.object({
   postType: z
     .enum(['FEED', 'REEL', 'STORY'])
     .optional()
-    .describe('Instagram post type — FEED, REEL, or STORY'),
+    .describe(
+      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE or VIDEO. Any other combination is refused with 400',
+    ),
   trialGraduation: z
     .enum(['MANUAL', 'SS_PERFORMANCE'])
     .optional()
@@ -221,7 +235,9 @@ const FacebookConfigSchema = z.object({
   postType: z
     .enum(['FEED', 'REEL', 'STORY'])
     .optional()
-    .describe('Facebook post type — FEED, REEL, or STORY'),
+    .describe(
+      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE or VIDEO. Any other combination is refused with 400',
+    ),
   videoTitle: z
     .string()
     .max(255)
@@ -260,6 +276,7 @@ const RecurrenceSchema = z.object({
     .describe('Repeat every N days, weeks or months, 1 to 30 (default 1)'),
   weekdays: z
     .array(Weekday)
+    .max(7)
     .optional()
     .describe(
       'WEEKLY only: the weekdays it goes out on (e.g. ["MONDAY", "THURSDAY"]). The weekday of scheduledAt is always included',
@@ -390,7 +407,7 @@ const workspaceIdField = {
     .string()
     .optional()
     .describe(
-      'Workspace to act in: an id from list_workspaces. Omit to use the default workspace. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another',
+      'Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another',
     ),
 };
 
@@ -459,12 +476,15 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 
 const SERVER_INSTRUCTIONS = [
   'Every tool acts as the key or sign-in it was given, under that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
-  'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the default workspace. The role, and so what a tool may do, can differ per workspace.',
+  'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the workspace list_workspaces marks current. The role, and so what a tool may do, can differ per workspace.',
   'A 403 with code workspace_access_denied means the workspaceId is not one this sign-in can reach. Call list_workspaces and pick an id from it.',
-  'A Contributor key can create and edit its own drafts, upload media and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts or touch other members\' posts. A Viewer key only reads.',
+  'A Contributor key can create and edit its own drafts, upload media, generate captions and images, and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts, trigger an analytics sync or touch other members\' posts. A Viewer key only reads.',
   'A 403 with code permission_denied is final for this key. Do not retry it and do not look for another key. For schedule or publish, call create_post with saveAsDraft: true and tell the user a workspace member has to publish the draft.',
   'A 401 with code token_issuer_lost_access means the member who created the key left the workspace; the key is dead. Ask the user for a new one.',
+  'A 403 with code subscription_required means the organization\'s plan does not include API access or has lapsed. Every tool fails the same way until the user renews it; do not retry.',
   'A 401 with code oauth_account_not_found means the user signed in with an email that has no AdaptlyPost account. Relay the message, which names that email, and ask them to disconnect and reconnect with the email they use on AdaptlyPost.',
+  'A 429 means the rate limit was hit. Wait for the Retry-After time before the next call and do not loop.',
+  'generate_caption, refine_caption and generate_image spend AI credits on every call, so generate only what the user asked for. generate_image returns a jobId, not an image: poll get_image_job until status is completed or failed.',
 ].join('\n');
 
 function createMcpServer(apiClient?: RestClient): McpServer {
@@ -506,10 +526,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Workspaces',
       description:
-        'List the workspaces this sign-in can act in, across every organization the user belongs to. Returns { workspaces } with id, name, organization { id, name }, role { key, name }, isDefault, current and can { draft, schedule, publish }. Call this when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing: then pass the matching id as workspaceId to every other tool. Without workspaceId, tools act in the workspace marked current. An API key belongs to one workspace, so it lists only that one. Takes no arguments.',
+        'List the workspaces this sign-in can act in, across every organization the user belongs to. Returns { workspaces } with id, name, organization { id, name }, role { key, name }, permissions (the permission keys held there), isDefault, current and can { draft, schedule, publish }. Call this when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing: then pass the matching id as workspaceId to every other tool. Without workspaceId, tools act in the workspace marked current. An API key belongs to one workspace, so it lists only that one. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'An object with workspaces: one { id, name, organization, role, isDefault, current, can } per workspace. Pass id as workspaceId to other tools.',
+        'An object with workspaces: one { id, name, organization, role, permissions, isDefault, current, can } per workspace. Pass id as workspaceId to other tools.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -534,10 +554,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the workspace (the default one unless workspaceId names another) across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
+        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'An object with accounts: one { id, platform, displayName, username, avatarUrl } per connected account, plus pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
+        'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized and pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -628,7 +648,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL — you MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
@@ -756,7 +776,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Post',
       description:
-        'Get one post\'s full record by id: text, contentType, status, scheduledAt, timezone, and a platforms array with each target\'s connection, status, errorMessage, and media. Visible only within the workspace (the default one unless workspaceId names another); any other id returns "Post not found or access denied". Use this to inspect content before update_post or publish_draft. Use list_post_results instead when you only need per-platform publishing outcomes and the platformIds for retry_failed_platforms, and list_posts to find ids by status, platform, or date. Post ids come from create_post, bulk_schedule_posts, or list_posts.',
+        'Get one post\'s full record by id: text, contentType, status, scheduledAt, timezone, and a platforms array with each target\'s connection, status, errorMessage, and media. Visible only within the workspace (the current one unless workspaceId names another); any other id returns "Post not found or access denied". Use this to inspect content before update_post or publish_draft. Use list_post_results instead when you only need per-platform publishing outcomes and the platformIds for retry_failed_platforms, and list_posts to find ids by status, platform, or date. Post ids come from create_post, bulk_schedule_posts, or list_posts.',
       inputSchema: {
         id: z
           .string()
@@ -786,7 +806,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Posts',
       description:
-        'List posts in the workspace (the default one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
+        'List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
       inputSchema: {
         statuses: z
           .array(PostStatus)
@@ -809,9 +829,11 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'Upper bound (ISO 8601, e.g. "2026-03-31") on scheduledAt, or createdAt for posts never scheduled',
           ),
         sortOrder: PostSortOrder.optional().describe('NEWEST (default) or OLDEST'),
-        limit: z.number().optional().default(20).describe('Max results, 1 to 100'),
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Max results, 1 to 100'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Posts to skip; increase by limit while hasMore is true'),
@@ -873,7 +895,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
+            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it. Applied only when platforms is also sent',
           ),
         thumbnailUrl: z
           .string()
@@ -917,7 +939,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Delete Post',
       description:
-        'Delete a post record from AdaptlyPost by id. Use it to cancel a DRAFT or SCHEDULED post before it goes out; a deleted scheduled post will not publish. Deleting never removes content already on a network: for a COMPLETED or PARTIAL_FAILURE post this only drops AdaptlyPost\'s record, and the live posts stay up until removed on each platform. Prefer update_post to change a post instead of deleting and recreating it. Only posts in the workspace (the default one unless workspaceId names another) can be deleted; others return "Post not found or access denied". Returns { deleted: true }. Irreversible.',
+        'Delete a post record from AdaptlyPost by id. Use it to cancel a DRAFT or SCHEDULED post before it goes out; a deleted scheduled post will not publish. Deleting never removes content already on a network: for a COMPLETED or PARTIAL_FAILURE post this only drops AdaptlyPost\'s record, and the live posts stay up until removed on each platform. Prefer update_post to change a post instead of deleting and recreating it. A post in PUBLISHING fails with 409; wait for list_post_results to settle. Only posts in the workspace (the current one unless workspaceId names another) can be deleted; others return "Post not found or access denied". Returns { deleted: true }. Irreversible.',
       inputSchema: {
         id: z.string().describe('Post ID to delete, from list_posts or create_post'),
       },
@@ -945,7 +967,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Unschedule Post',
       description:
-        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the workspace (the default one unless workspaceId names another) return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
+        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the workspace (the current one unless workspaceId names another) return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
       inputSchema: {
         id: z.string().describe('Post ID with status DRAFT or SCHEDULED, from list_posts or create_post'),
       },
@@ -1016,14 +1038,14 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Post Results',
       description:
-        'Get one post\'s per-platform publishing outcomes: { postId, status, results[] } where each result has platformId, platform, accountName, status (PENDING, PUBLISHING, PUBLISHED, or FAILED), platformPostId, errorMessage, and publishedAt. Each platform reports separately, so read every row instead of treating the post as one pass or fail. Call this after create_post, publish_draft, or retry_failed_platforms, since publishing is asynchronous and their responses only confirm queueing; poll until no row is PENDING or PUBLISHING. Take platformId from FAILED rows for retry_failed_platforms. Use get_post when you also need the content and schedule.',
+        'Get one post\'s per-platform publishing outcomes: { postId, status, results[] } where each result has platformId, platform, accountName, status (PENDING, PUBLISHING, PUBLISHED, or FAILED), platformPostId, errorMessage, publishedAt, and tiktokDraftFallback (true when TikTok\'s daily cap sent the content to the TikTok inbox as a draft instead of publishing it; tell the user to finish it in the TikTok app). Each platform reports separately, so read every row instead of treating the post as one pass or fail. Call this after create_post, publish_draft, or retry_failed_platforms, since publishing is asynchronous and their responses only confirm queueing; poll until no row is PENDING or PUBLISHING. Take platformId from FAILED rows for retry_failed_platforms. Use get_post when you also need the content and schedule.',
       inputSchema: {
         id: z
           .string()
           .describe('Post ID from create_post, publish_draft, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'An object with postId, the overall post status, and results: one { platformId, platform, accountName, status, platformPostId, errorMessage, publishedAt } per targeted platform.',
+        'An object with postId, the overall post status, and results: one { platformId, platform, accountName, status, platformPostId, errorMessage, tiktokDraftFallback, publishedAt } per targeted platform.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1084,7 +1106,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs or pinterestConfigs to replace the shared ones. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode.',
       inputSchema: {
         platforms: z
           .array(PlatformType)
@@ -1127,8 +1149,30 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .array(z.object({ platform: PlatformType, text: z.string() }))
                 .optional()
                 .describe('Per-platform caption overrides for this item'),
+              tiktokConfigs: z
+                .array(TikTokConfigSchema)
+                .optional()
+                .describe('TikTok config for this item only; replaces the batch-level tiktokConfigs'),
+              youtubeConfigs: z
+                .array(YouTubeConfigSchema)
+                .optional()
+                .describe('YouTube config for this item only, such as its own videoTitle; replaces the batch-level youtubeConfigs'),
+              instagramConfigs: z
+                .array(InstagramConfigSchema)
+                .optional()
+                .describe('Instagram config for this item only; replaces the batch-level instagramConfigs'),
+              facebookConfigs: z
+                .array(FacebookConfigSchema)
+                .optional()
+                .describe('Facebook config for this item only; replaces the batch-level facebookConfigs'),
+              pinterestConfigs: z
+                .array(PinterestConfigSchema)
+                .optional()
+                .describe('Pinterest config for this item only, such as its own title or link; replaces the batch-level pinterestConfigs'),
             }),
           )
+          .min(1)
+          .max(100)
           .describe('1 to 100 posts to schedule; each is created independently'),
         ...connectionIdFields,
         ...platformConfigFields,
@@ -1159,15 +1203,17 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Recurring Posts',
       description:
-        'List the recurring posts (series) in the workspace (the default one unless workspaceId names another), created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
+        'List the recurring posts (series) in the workspace (the current one unless workspaceId names another), created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
       inputSchema: {
         statuses: z
           .array(RecurringPostStatus)
           .optional()
           .describe('Filter by status (e.g. ["ACTIVE", "PAUSED"]); omit for all statuses'),
-        limit: z.number().optional().default(20).describe('Max results, 1 to 100'),
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Max results, 1 to 100'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Recurring posts to skip; increase by limit while hasMore is true'),
@@ -1196,7 +1242,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Recurring Post',
       description:
-        'Get one recurring post (series) by id: status, pauseReason and lastError when paused, the schedule (frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences), nextOccurrenceAt (the next slot not yet created as a post; absent once ENDED), occurrenceCount (posts created so far), and the content and platforms each occurrence copies. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Ids come from list_recurring_posts, the recurringPostId returned by create_post, or the recurringPostId on a post from get_post or list_posts.',
+        'Get one recurring post (series) by id: status, pauseReason and lastError when paused, the schedule (frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences), nextOccurrenceAt (the next slot not yet created as a post; absent once ENDED), occurrenceCount (posts created so far), and the content and platforms each occurrence copies. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Ids come from list_recurring_posts, the recurringPostId returned by create_post, or the recurringPostId on a post from get_post or list_posts.',
       inputSchema: {
         id: z
           .string()
@@ -1226,7 +1272,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Pause Recurring Post',
       description:
-        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
+        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to pause, from list_recurring_posts'),
       },
@@ -1255,7 +1301,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Resume Recurring Post',
       description:
-        'Resume a PAUSED recurring post. It continues from the next occurrence after now; slots missed while paused are not published. The next occurrence is created as a SCHEDULED post about 24 hours before it goes out and then publishes to the networks, so confirm with the user first. If the series has no slot left (endsOn passed or maxOccurrences reached) it comes back ENDED instead. When pauseReason is CONNECTION_REMOVED, ACCESS_LOST, SUBSCRIPTION_INACTIVE or INVALID_CONTENT, fix the cause first or the series pauses again. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with its new status and nextOccurrenceAt.',
+        'Resume a PAUSED recurring post. It continues from the next occurrence after now; slots missed while paused are not published. The next occurrence is created as a SCHEDULED post about 24 hours before it goes out and then publishes to the networks, so confirm with the user first. If the series has no slot left (endsOn passed or maxOccurrences reached) it comes back ENDED instead. When pauseReason is CONNECTION_REMOVED, ACCESS_LOST, SUBSCRIPTION_INACTIVE or INVALID_CONTENT, fix the cause first or the series pauses again. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with its new status and nextOccurrenceAt.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to resume, from list_recurring_posts'),
       },
@@ -1283,7 +1329,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Delete Recurring Post',
       description:
-        'Delete a recurring post: the series stops for good and its upcoming SCHEDULED post is deleted. Posts that already went out are kept. Prefer pause_recurring_post when the user may want the series back. To skip a single date, delete that occurrence with delete_post instead; the series continues. Ids outside the workspace (the default one unless workspaceId names another) return "Recurring post not found". Returns { deleted: true }. Irreversible.',
+        'Delete a recurring post: the series stops for good and its upcoming SCHEDULED post is deleted. Posts that already went out are kept. Prefer pause_recurring_post when the user may want the series back. To skip a single date, delete that occurrence with delete_post instead; the series continues. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Returns { deleted: true }. Irreversible.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to delete, from list_recurring_posts'),
       },
@@ -1405,9 +1451,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         sortBy: AnalyticsSortMetric.optional().describe(
           'Metric to sort by, descending. PUBLISHED_AT (default) lists newest first',
         ),
-        page: z.number().optional().default(1).describe('Page number, from 1'),
+        page: z.number().int().min(1).optional().default(1).describe('Page number, from 1'),
         limit: z
           .number()
+          .int()
+          .min(1)
+          .max(100)
           .optional()
           .default(20)
           .describe('Posts per page, 1 to 100'),
@@ -1484,11 +1533,173 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
+  // ── AI Generation ──────────────────────────────────────────────────────
+
+  tool(
+    'generate_caption',
+    {
+      title: 'Generate Caption',
+      description:
+        `Write a new social media caption from a prompt with AdaptlyPost AI. Returns { caption }, text only; nothing is saved or posted, so pass the caption to create_post, update_post or bulk_schedule_posts yourself. Pass platform and the caption is kept within that platform's character limit. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} To rework a caption you already have, use refine_caption instead.`,
+      inputSchema: {
+        prompt: z
+          .string()
+          .min(1)
+          .max(2000)
+          .describe(
+            'What the caption should say or be about, including tone, audience, hashtags or a call to action (max 2000 characters)',
+          ),
+        platform: PlatformType.optional().describe(
+          "Platform the caption is for; the caption is kept within that platform's character limit. Omit for a general caption",
+        ),
+      },
+      outputSchema: resultSchema('An object with caption: the generated text.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/ai/captions', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'refine_caption',
+    {
+      title: 'Refine Caption',
+      description:
+        `Rewrite an existing caption following an instruction, such as "shorter", "more playful" or "add a question at the end". Returns { caption }, the rewritten text; nothing is saved or posted. Send partialText to continue from a partly written caption. Pass platform to keep the result within that platform's character limit. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} Costs the same as generate_caption.`,
+      inputSchema: {
+        prompt: z
+          .string()
+          .min(1)
+          .max(2000)
+          .describe('How the caption should change (max 2000 characters)'),
+        originalText: z
+          .string()
+          .min(1)
+          .max(10000)
+          .describe('The caption to rewrite (max 10000 characters)'),
+        partialText: z
+          .string()
+          .max(10000)
+          .optional()
+          .describe('A partly written caption to continue from (max 10000 characters)'),
+        platform: PlatformType.optional().describe(
+          "Platform the caption is for; the result is kept within that platform's character limit",
+        ),
+      },
+      outputSchema: resultSchema('An object with caption: the rewritten text.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/ai/captions/refine', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'generate_image',
+    {
+      title: 'Generate Image',
+      description:
+        `Start generating an image from a prompt with AdaptlyPost AI. This is asynchronous: it returns { jobId, sessionId, status } right away with status queued, not the image. Poll get_image_job with the jobId every few seconds until status is completed or failed (usually 10 to 40 seconds), or wait for the image.completed or image.failed webhook if the workspace has one. A completed job carries imageUrl, a public URL you can pass straight into mediaUrls of create_post, so there is no need to run it through upload_media. The image is also saved to the member's AI image studio in AdaptlyPost; reuse sessionId to group related images. ${AI_PERMISSION_RULE} Charges the member's AI credits when generation starts (2 for standard, 4 for premium) unless the member has their own image provider key connected in AdaptlyPost, and refunds them if generation fails. With no credits left the job ends as failed and its error says so: tell the user to top up or upgrade instead of retrying.`,
+      inputSchema: {
+        prompt: z
+          .string()
+          .min(1)
+          .max(2000)
+          .describe('What the image should show, including style and composition (max 2000 characters)'),
+        aspectRatio: ImageAspectRatio.optional().describe(
+          'Image shape (default 1:1). Pick one that suits the target platform, e.g. 9:16 for stories and reels, 4:5 for Instagram feed, 16:9 for YouTube and X',
+        ),
+        model: ImageModel.optional().describe(
+          'standard (default, 2 credits) or premium (higher fidelity, 4 credits)',
+        ),
+        quality: ImageQuality.optional().describe('LOW, MEDIUM or HIGH rendering quality'),
+        sessionId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            'Image studio session to add the image to, as returned by an earlier generate_image. Omit to start a new session',
+          ),
+        referenceImages: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe('Up to 5 public image URLs that steer the style or subject of the result'),
+      },
+      outputSchema: resultSchema(
+        'An object with jobId (pass it to get_image_job), sessionId, and status (queued).',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/ai/images', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'get_image_job',
+    {
+      title: 'Get Image Job',
+      description:
+        `Read the state of an image started with generate_image. Returns { jobId, sessionId, status, imageUrl, imageId, error }; status moves from queued through processing and generating to completed or failed. When completed, imageUrl is a public URL ready for mediaUrls in create_post. When failed, error says why, for example no credits left; a failed job is final, so do not poll it again. Poll every few seconds while status is queued, processing or generating, and stop after a couple of minutes. Only jobs started by the same member are visible. ${AI_PERMISSION_RULE} Reading a job spends no credits.`,
+      inputSchema: {
+        jobId: z.string().min(1).describe('jobId returned by generate_image'),
+      },
+      outputSchema: resultSchema(
+        'An object with jobId, sessionId, status (queued, processing, generating, completed or failed), imageUrl (null until completed), imageId, and error (null unless failed).',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ jobId }, client) => {
+      try {
+        const data = await client.get(`/ai/images/${encodeURIComponent(jobId)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
   return server;
 }
 
 // ---------------------------------------------------------------------------
-// Transport — stdio (local) or HTTP (deployed, single URL)
+// Transport: stdio (local) or HTTP (deployed, single URL)
 // ---------------------------------------------------------------------------
 
 const SSE_ACCEPT = 'application/json, text/event-stream';

@@ -218,10 +218,15 @@ const COMMANDS = {
       process.exit(1);
     }
 
-    const accounts = parsed.accounts ? parsed.accounts.split(",") : [];
+    const accountIds = splitList(parsed.accounts);
+    if (accountIds.length === 0) {
+      error("--accounts is required: pass account ids from ./scripts/adaptlypost.js accounts");
+      process.exit(1);
+    }
+    const accounts = await resolveAccounts(accountIds);
     const platforms = parsed.platforms
-      ? parsed.platforms.split(",")
-      : guessPlafformsFromAccounts(accounts);
+      ? splitList(parsed.platforms).map((p) => p.toUpperCase())
+      : [...new Set(accounts.map((account) => account.platform))];
 
     const body = {
       text: parsed.caption || parsed.text,
@@ -230,39 +235,21 @@ const COMMANDS = {
       timezone: parsed.timezone || "UTC",
     };
 
-    // Map account IDs to connection ID arrays
-    if (accounts.length > 0) {
-      body.linkedinConnectionIds = [];
-      body.twitterConnectionIds = [];
-      body.instagramConnectionIds = [];
-      body.youtubeConnectionIds = [];
-      body.tiktokConnectionIds = [];
-      body.threadsConnectionIds = [];
-      body.blueskyConnectionIds = [];
-      body.mastodonConnectionIds = [];
-      body.pinterestConnectionIds = [];
-      body.pageIds = [];
-
-      // When --accounts is used, we pass them to all platform connection arrays
-      // The backend will ignore IDs that don't belong to that platform
-      for (const id of accounts) {
-        body.linkedinConnectionIds.push(id);
-        body.twitterConnectionIds.push(id);
-        body.instagramConnectionIds.push(id);
-        body.youtubeConnectionIds.push(id);
-        body.tiktokConnectionIds.push(id);
-        body.threadsConnectionIds.push(id);
-        body.blueskyConnectionIds.push(id);
-        body.mastodonConnectionIds.push(id);
-        body.pinterestConnectionIds.push(id);
-        body.pageIds.push(id);
+    for (const account of accounts) {
+      if (!platforms.includes(account.platform)) {
+        error(
+          `Account ${account.id} is a ${account.platform} account, which is not in --platforms ${platforms.join(",")}`,
+        );
+        process.exit(1);
       }
+      const field = CONNECTION_FIELDS[account.platform];
+      body[field] = [...(body[field] || []), account.id];
     }
 
     if (parsed["media-urls"]) {
       body.mediaUrls = parsed["media-urls"].split(",");
       if (!parsed.type) {
-        body.contentType = body.mediaUrls.some(isDocumentUrl) ? "DOCUMENT" : "IMAGE";
+        body.contentType = inferContentType(body.mediaUrls);
       }
       if (parsed["alt-texts"]) {
         body.mediaAltTexts = parsed["alt-texts"].split("|").map((alt) => alt.trim());
@@ -323,6 +310,9 @@ const COMMANDS = {
       parsed.status.split(",").forEach((s) => params.append("statuses", s));
     if (parsed.platform)
       parsed.platform.split(",").forEach((p) => params.append("platforms", p));
+    if (parsed.sort) params.set("sortOrder", String(parsed.sort).toUpperCase());
+    if (parsed.from) params.set("startDate", parsed.from);
+    if (parsed.to) params.set("endDate", parsed.to);
     const qs = params.toString();
     const data = await request(
       "GET",
@@ -587,16 +577,52 @@ function analyticsQuery(parsed, extra = {}) {
 }
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".ppt", ".pptx", ".doc", ".docx"];
+const VIDEO_EXTENSIONS = [".mp4", ".mov"];
 
-function isDocumentUrl(url) {
-  const pathname = url.split(/[?#]/)[0].toLowerCase();
-  return DOCUMENT_EXTENSIONS.some((ext) => pathname.endsWith(ext));
+const CONNECTION_FIELDS = {
+  LINKEDIN: "linkedinConnectionIds",
+  TWITTER: "twitterConnectionIds",
+  INSTAGRAM: "instagramConnectionIds",
+  YOUTUBE: "youtubeConnectionIds",
+  TIKTOK: "tiktokConnectionIds",
+  THREADS: "threadsConnectionIds",
+  BLUESKY: "blueskyConnectionIds",
+  MASTODON: "mastodonConnectionIds",
+  PINTEREST: "pinterestConnectionIds",
+  FACEBOOK: "pageIds",
+};
+
+function splitList(value) {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function guessPlafformsFromAccounts() {
-  // Default to common platforms — the backend ignores connection IDs
-  // that don't match the platform, so this is safe
-  return ["LINKEDIN", "TWITTER", "INSTAGRAM"];
+function hasExtension(url, extensions) {
+  const pathname = url.split(/[?#]/)[0].toLowerCase();
+  return extensions.some((ext) => pathname.endsWith(ext));
+}
+
+function inferContentType(mediaUrls) {
+  if (mediaUrls.some((url) => hasExtension(url, DOCUMENT_EXTENSIONS))) return "DOCUMENT";
+  if (mediaUrls.some((url) => hasExtension(url, VIDEO_EXTENSIONS))) return "VIDEO";
+  return "IMAGE";
+}
+
+async function resolveAccounts(ids) {
+  const { accounts = [] } = await request("GET", "/api/v1/social-accounts");
+  return ids.map((id) => {
+    const account = accounts.find(
+      (candidate) => candidate.id === id || (candidate.pageId && candidate.pageId === id),
+    );
+    if (!account) {
+      error(`Unknown account id: ${id}. Run ./scripts/adaptlypost.js accounts for the ids.`);
+      process.exit(1);
+    }
+    return account;
+  });
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────

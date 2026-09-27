@@ -4,6 +4,9 @@ export const TOKEN_ISSUER_LOST_ACCESS = 'token_issuer_lost_access';
 export const OAUTH_ACCOUNT_NOT_FOUND = 'oauth_account_not_found';
 export const WORKSPACE_ACCESS_DENIED = 'workspace_access_denied';
 
+const PAYMENT_REQUIRED = 402;
+const TOO_MANY_REQUESTS = 429;
+
 export interface ApiErrorBody {
   statusCode?: number;
   error?: string;
@@ -24,11 +27,25 @@ const messageOf = (body: ApiErrorBody, fallback: string) =>
 
 const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
-function describe(status: number, body: ApiErrorBody, fallback: string): string {
+const waitFor = (retryAfter: string | null) =>
+  retryAfter && /^\d+$/.test(retryAfter.trim())
+    ? `Wait ${retryAfter.trim()} seconds (Retry-After)`
+    : retryAfter
+      ? `Wait until ${retryAfter} (Retry-After)`
+      : 'Wait a minute';
+
+const withCode = (status: number, code?: string) => (code ? `${status}, ${code}` : `${status}`);
+
+function describe(
+  status: number,
+  body: ApiErrorBody,
+  fallback: string,
+  retryAfter: string | null,
+): string {
   const apiMessage = messageOf(body, fallback);
 
   if (body.code === PERMISSION_DENIED) {
-    const denied = `Permission denied (403): the key's role "${body.role ?? 'unknown'}" lacks ${body.requiredPermission ?? 'the required permission'}.`;
+    const denied = `Permission denied (${status}, ${PERMISSION_DENIED}): the key's role "${body.role ?? 'unknown'}" lacks ${body.requiredPermission ?? 'the required permission'}.`;
     if (
       body.requiredPermission === 'posts.schedule' ||
       body.requiredPermission === 'posts.publish'
@@ -39,22 +56,30 @@ function describe(status: number, body: ApiErrorBody, fallback: string): string 
   }
 
   if (body.code === TOKEN_ISSUER_LOST_ACCESS) {
-    return `This key no longer works (401, ${TOKEN_ISSUER_LOST_ACCESS}): the member who created it lost access to the workspace. Stop and ask the user for a key created by a current member. ${FINAL}`;
+    return `This key no longer works (${status}, ${TOKEN_ISSUER_LOST_ACCESS}): the member who created it lost access to the workspace. Stop and ask the user for a key created by a current member. ${FINAL}`;
   }
 
   if (body.code === OAUTH_ACCOUNT_NOT_FOUND) {
-    return `Wrong sign-in (401, ${OAUTH_ACCOUNT_NOT_FOUND}): ${sentence(apiMessage)} Tell the user exactly this. No tool will work until they reconnect. ${FINAL}`;
+    return `Wrong sign-in (${status}, ${OAUTH_ACCOUNT_NOT_FOUND}): ${sentence(apiMessage)} Tell the user exactly this. No tool will work until they reconnect. ${FINAL}`;
   }
 
   if (body.code === WORKSPACE_ACCESS_DENIED) {
-    return `Workspace not available (403, ${WORKSPACE_ACCESS_DENIED}): ${sentence(apiMessage)} Call list_workspaces and pass one of the returned ids as workspaceId, or leave workspaceId out to use the default workspace.`;
+    return `Workspace not available (${status}, ${WORKSPACE_ACCESS_DENIED}): ${sentence(apiMessage)} Call list_workspaces and pass one of the returned ids as workspaceId, or leave workspaceId out to act in the workspace list_workspaces marks current.`;
   }
 
   if (body.code === SUBSCRIPTION_REQUIRED) {
-    return `Subscription required (403, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)} Ask the user to renew the workspace's plan. ${FINAL}`;
+    return `Subscription required (${status}, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)} Ask the user to renew the workspace's plan. ${FINAL}`;
   }
 
-  return `API error (${status}): ${apiMessage}`;
+  if (status === PAYMENT_REQUIRED) {
+    return `Out of AI credits (${withCode(status, body.code)}): ${sentence(apiMessage)} Tell the user to top up credits or upgrade the plan in AdaptlyPost. ${FINAL}`;
+  }
+
+  if (status === TOO_MANY_REQUESTS) {
+    return `Rate limited (${withCode(status, body.code)}): ${sentence(apiMessage)} ${waitFor(retryAfter)} before the next call and do not retry in a loop.`;
+  }
+
+  return `API error (${withCode(status, body.code)}): ${apiMessage}`;
 }
 
 export class ApiError extends Error {
@@ -63,16 +88,18 @@ export class ApiError extends Error {
   readonly requiredPermission?: string;
   readonly role?: string;
   readonly tokenType?: string;
+  readonly retryAfter: string | null;
   readonly apiMessage: string;
 
-  constructor(status: number, body: ApiErrorBody, fallback: string) {
-    super(describe(status, body, fallback));
+  constructor(status: number, body: ApiErrorBody, fallback: string, retryAfter: string | null) {
+    super(describe(status, body, fallback, retryAfter));
     this.name = 'ApiError';
     this.status = status;
     this.code = body.code;
     this.requiredPermission = body.requiredPermission;
     this.role = body.role;
     this.tokenType = body.tokenType;
+    this.retryAfter = retryAfter;
     this.apiMessage = messageOf(body, fallback);
   }
 }
@@ -120,7 +147,7 @@ export class RestClient {
       } catch {
         errorBody = {};
       }
-      throw new ApiError(response.status, errorBody, fallback);
+      throw new ApiError(response.status, errorBody, fallback, response.headers.get('retry-after'));
     }
 
     return (await response.json()) as T;

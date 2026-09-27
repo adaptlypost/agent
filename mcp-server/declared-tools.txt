@@ -23,3 +23,7 @@ get_platform_breakdown
 list_post_analytics
 get_analytics_sync_status
 trigger_analytics_sync
+generate_caption
+refine_caption
+generate_image
+get_image_job

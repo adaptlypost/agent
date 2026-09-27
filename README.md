@@ -46,6 +46,7 @@ Once installed, your AI agent can:
 - **Check results** per-platform success/failure with error details
 - **Retry** just the failed platforms
 - **Draft & publish** workflow — save drafts, review, publish later
+- **Repeat** a post daily, weekly or monthly, then pause, resume or stop the series
 - **Read analytics** — views, likes, comments, followers and engagement per window, per platform and per post
 
 ## Example

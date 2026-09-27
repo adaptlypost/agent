@@ -18,8 +18,9 @@ configured by hand, and no API token is stored in this extension.
 
 ## Notes
 
-- Every tool acts on the workspace the signed-in account belongs to, with that account's
-  own workspace role: Admin, Editor, Contributor or Viewer. A Contributor can draft and
+- A sign-in can reach several workspaces. `list_workspaces` lists them, and every other tool
+  takes an optional `workspaceId`. In each workspace a tool acts with the account's own role
+  there: Admin, Editor, Contributor or Viewer. A Contributor can draft and
   upload media but cannot schedule or publish; a Viewer only reads.
 - A 403 with `code: permission_denied` is final. Do not retry it and do not look for
   another key. For scheduling or publishing, save the post as a draft

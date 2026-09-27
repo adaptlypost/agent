@@ -207,6 +207,12 @@ const InstagramConfigSchema = z.object({
     .enum(['FEED', 'REEL', 'STORY'])
     .optional()
     .describe('Instagram post type — FEED, REEL, or STORY'),
+  trialGraduation: z
+    .enum(['MANUAL', 'SS_PERFORMANCE'])
+    .optional()
+    .describe(
+      "Publish a video reel as a trial reel: Instagram shows it to non-followers first and keeps it off followers' feeds and the profile grid until it is shared. MANUAL means the account owner shares it from the Instagram app; SS_PERFORMANCE means Instagram shares it if it performs well. Only for a single video posted as a reel or feed video, never a story, image or carousel (400 otherwise). Needs a professional account Instagram has enabled for trial reels; otherwise that platform fails with a message saying so",
+    ),
 });
 
 const FacebookConfigSchema = z.object({
@@ -313,7 +319,7 @@ const platformConfigFields = {
     .array(InstagramConfigSchema)
     .optional()
     .describe(
-      'Instagram per-connection config to set post type (FEED, REEL, STORY)',
+      'Instagram per-connection config to set post type (FEED, REEL, STORY) and publish a reel as a trial reel',
     ),
   facebookConfigs: z
     .array(FacebookConfigSchema)

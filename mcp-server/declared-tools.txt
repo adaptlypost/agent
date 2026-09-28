@@ -2,6 +2,8 @@ list_workspaces
 list_accounts
 upload_media
 get_upload_urls
+open_upload_widget
+get_upload_ticket
 create_post
 get_post
 list_posts

@@ -17,8 +17,22 @@ import {
   openPublicMedia,
   putStream,
   requireMediaContent,
+  requireStreamedMedia,
+  SNIFF_BYTES,
+  splitHead,
 } from './media.js';
-import { RestClient } from './rest-client.js';
+import { ApiError, RestClient } from './rest-client.js';
+import {
+  decodeFileName,
+  MCP_APP_MIME_TYPE,
+  openUploadTicket,
+  sealUploadTicket,
+  UPLOAD_FILE_NAME_HEADER,
+  UPLOAD_TICKET_HEADER,
+  UPLOAD_WIDGET_URI,
+  uploadTicketsEnabled,
+  uploadWidgetHtml,
+} from './upload-widget.js';
 import { withoutSchemaDialect } from './schema-dialect.js';
 import {
   oauthConfigFromEnv,
@@ -48,6 +62,9 @@ if (!API_TOKEN && !isHttpMode) {
 }
 
 const api = new RestClient(API_BASE_URL, API_TOKEN);
+
+const PUBLIC_ORIGIN = process.env.MCP_PUBLIC_ORIGIN ?? 'https://mcp.adaptlypost.com';
+const UPLOAD_ENDPOINT = `${PUBLIC_ORIGIN}/upload`;
 
 const oauthConfig = oauthConfigFromEnv({
   resourceUrl: 'https://mcp.adaptlypost.com/mcp',
@@ -506,6 +523,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       inputSchema: Args;
       outputSchema: ZodRawShape;
       annotations: ToolAnnotations;
+      _meta?: Record<string, unknown>;
     },
     handler: (
       args: z.objectOutputType<Args, ZodTypeAny>,
@@ -675,6 +693,115 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       try {
         const data = await client.post('/upload-urls', { files });
         return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  const uploadWidgetMeta = {
+    ui: {
+      csp: { connectDomains: [PUBLIC_ORIGIN], resourceDomains: [] },
+      prefersBorder: true,
+    },
+    'openai/widgetCSP': { connect_domains: [PUBLIC_ORIGIN], resource_domains: [] },
+    'openai/widgetPrefersBorder': true,
+    'openai/widgetDomain': 'https://adaptlypost.com',
+    'openai/widgetDescription':
+      "An upload box where the user adds photos, videos and documents from their own device.",
+  };
+
+  server.registerResource(
+    'upload_widget',
+    UPLOAD_WIDGET_URI,
+    {
+      title: 'AdaptlyPost upload box',
+      description: 'Upload box shown by open_upload_widget.',
+      mimeType: MCP_APP_MIME_TYPE,
+      _meta: uploadWidgetMeta,
+    },
+    async () => ({
+      contents: [
+        {
+          uri: UPLOAD_WIDGET_URI,
+          mimeType: MCP_APP_MIME_TYPE,
+          text: uploadWidgetHtml(UPLOAD_ENDPOINT),
+          _meta: uploadWidgetMeta,
+        },
+      ],
+    }),
+  );
+
+  tool(
+    'open_upload_widget',
+    {
+      title: 'Upload From Device',
+      description:
+        "Show an upload box in the chat so the user can add photos, videos or documents from their phone or computer. Use it when the user wants to post a file that has no public URL, such as a photo on their phone or a file attached in the chat that upload_media cannot read. Nothing is uploaded until the user picks files in the box. When the upload finishes, the box sends a message listing the public media URLs; pass them as mediaUrls to create_post, update_post or bulk_schedule_posts. Accepts JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC and DOCX, up to 250 MB per file, 50 MB per image and 100 MB per document. Uploaded files are stored at public URLs. The box only appears in apps that show MCP Apps widgets, such as ChatGPT and Claude; elsewhere ask the user for a public URL and use upload_media.",
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with status waiting_for_upload. The media URLs arrive later, in a message the upload box sends when the user finishes.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+      _meta: {
+        ui: { resourceUri: UPLOAD_WIDGET_URI },
+        'ui/resourceUri': UPLOAD_WIDGET_URI,
+        'openai/outputTemplate': UPLOAD_WIDGET_URI,
+        'openai/toolInvocation/invoking': 'Opening the upload box',
+        'openai/toolInvocation/invoked': 'Upload box ready',
+      },
+    },
+    async () => {
+      if (!uploadTicketsEnabled()) {
+        return toolError(
+          new Error(
+            'Uploading from a device is not available on this server. Ask the user for a public URL and use upload_media.',
+          ),
+        );
+      }
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'The upload box is showing. Wait for the user to upload; the box sends the media URLs in a message when it finishes.',
+          },
+        ],
+        structuredContent: { result: { status: 'waiting_for_upload' } },
+      };
+    },
+  );
+
+  tool(
+    'get_upload_ticket',
+    {
+      title: 'Get Upload Ticket',
+      description:
+        'Called by the upload box that open_upload_widget shows, once per file, to authorize storing that file in AdaptlyPost media storage. Returns a ticket valid for 5 minutes. Do not call this yourself; call open_upload_widget instead.',
+      inputSchema: {},
+      outputSchema: resultSchema('An object with expiresAt and uploadUrl for the upload box.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+      _meta: {
+        ui: { visibility: ['app'] },
+        'openai/widgetAccessible': true,
+        'openai/visibility': 'private',
+      },
+    },
+    async (_args, client) => {
+      try {
+        const { ticket, expiresAt } = await sealUploadTicket(client.credentials());
+        return {
+          content: [{ type: 'text' as const, text: `Upload ticket issued, valid until ${expiresAt}.` }],
+          structuredContent: { result: { expiresAt, uploadUrl: UPLOAD_ENDPOINT } },
+          _meta: { uploadTicket: ticket },
+        };
       } catch (error) {
         return toolError(error);
       }
@@ -1746,6 +1873,51 @@ function sendBodyTooLarge(res: ServerResponse): void {
   );
 }
 
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
+async function handleWidgetUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const startedAt = Date.now();
+  const size = Number(req.headers['content-length']);
+  const fileName = decodeFileName(req.headers[UPLOAD_FILE_NAME_HEADER]);
+  const ticket = await openUploadTicket(String(req.headers[UPLOAD_TICKET_HEADER] ?? ''));
+  const finish = (status: number, body: unknown) => {
+    console.error(`upload status=${status} bytes=${size} ms=${Date.now() - startedAt}`);
+    sendJson(res, status, body);
+  };
+
+  if (!ticket) {
+    req.resume();
+    finish(401, { error: 'This upload box expired. Ask for a new one.' });
+    return;
+  }
+  if (!Number.isSafeInteger(size) || size <= 0) {
+    req.resume();
+    finish(411, { error: 'The upload is missing its Content-Length.' });
+    return;
+  }
+
+  try {
+    const { head, body } = await splitHead(req, SNIFF_BYTES);
+    const mimeType = requireStreamedMedia(head, fileName, size);
+    const client = new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId);
+    const stem = fileName.replace(/\.[^.]*$/, '').replace(/[^\w.-]+/g, '-').slice(0, 80) || 'upload';
+    const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+      client,
+      `${stem}${EXT_BY_MIME[mimeType]}`,
+      mimeType,
+    );
+    await putStream(uploadUrl, { mimeType, contentLength: size, body });
+    finish(200, { publicUrl, key, mimeType, fileName });
+  } catch (error) {
+    req.resume();
+    const status = error instanceof ApiError ? error.status : 400;
+    finish(status, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // The MCP SDK 406s unless Accept lists both types. `@hono/node-server` v1 rebuilds the
 // request from rawHeaders, so headers.accept alone is not enough.
 const forceStreamableAccept = (req: IncomingMessage) => {
@@ -1785,7 +1957,7 @@ async function main() {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, mcp-session-id',
+            'Content-Type, Authorization, mcp-session-id, X-Upload-Ticket, X-File-Name',
         });
         res.end();
         return;
@@ -1817,6 +1989,11 @@ async function main() {
           res.writeHead(404);
           res.end('Not found');
         }
+        return;
+      }
+
+      if (req.url === '/upload' && req.method === 'POST') {
+        await handleWidgetUpload(req, res);
         return;
       }
 

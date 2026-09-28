@@ -9,7 +9,7 @@ export const MAX_IMAGE_BYTES = 50 * MB;
 export const MAX_DOCUMENT_BYTES = 100 * MB;
 export const MAX_DOWNLOAD_BYTES = 250 * MB;
 export const MAX_INLINE_UPLOAD_BYTES = 30 * MB;
-const SNIFF_BYTES = 12;
+export const SNIFF_BYTES = 12;
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const USER_AGENT = 'AdaptlyPost-MCP/1.1 (+https://adaptlypost.com)';
@@ -96,6 +96,40 @@ export function requireMediaContent(bytes: Uint8Array, fileName: string): string
   const mimeType = requireMediaType(bytes, fileName, fileName);
   requireSizeLimit(mimeType, bytes.length, fileName);
   return mimeType;
+}
+
+export function requireStreamedMedia(head: Uint8Array, fileName: string, size: number): string {
+  const mimeType = requireMediaType(head, fileName, fileName);
+  if (size > MAX_DOWNLOAD_BYTES) {
+    throw new Error(`${fileName} is over the ${formatBytes(MAX_DOWNLOAD_BYTES)} upload limit.`);
+  }
+  requireSizeLimit(mimeType, size, fileName);
+  return mimeType;
+}
+
+export async function splitHead(
+  stream: AsyncIterable<Buffer>,
+  headBytes: number,
+): Promise<{ head: Buffer; body: Readable }> {
+  const iterator = stream[Symbol.asyncIterator]();
+  const chunks: Buffer[] = [];
+  let length = 0;
+  while (length < headBytes) {
+    const next = await iterator.next();
+    if (next.done) break;
+    chunks.push(next.value);
+    length += next.value.length;
+  }
+  const head = Buffer.concat(chunks);
+  async function* everything() {
+    yield head;
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) return;
+      yield next.value;
+    }
+  }
+  return { head, body: Readable.from(everything()) };
 }
 
 const BLOCKED_ADDRESSES = new BlockList();

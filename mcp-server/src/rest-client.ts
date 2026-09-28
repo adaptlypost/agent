@@ -72,7 +72,7 @@ function describe(
   }
 
   if (status === PAYMENT_REQUIRED) {
-    return `Out of AI credits (${withCode(status, body.code)}): ${sentence(apiMessage)} Tell the user to top up credits or upgrade the plan in AdaptlyPost. ${FINAL}`;
+    return `Out of AI credits (${withCode(status, body.code)}): ${sentence(apiMessage)} Tell the user the workspace has run out of AI credits. ${FINAL}`;
   }
 
   if (status === TOO_MANY_REQUESTS) {
@@ -110,6 +110,10 @@ export class RestClient {
     private apiToken: string,
     private workspaceId?: string,
   ) {}
+
+  credentials(): { token: string; workspaceId?: string } {
+    return { token: this.apiToken, workspaceId: this.workspaceId };
+  }
 
   forWorkspace(workspaceId: string | undefined): RestClient {
     return workspaceId

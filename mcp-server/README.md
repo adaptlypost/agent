@@ -1,6 +1,6 @@
 # @adaptlypost/mcp-server
 
-MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics and generate captions and images across 10 platforms. The server exposes 29 tools.
+MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics and generate captions and images across 10 platforms. The server exposes 31 tools.
 
 ## Supported Platforms
 
@@ -93,6 +93,8 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 | `list_accounts` | List all connected social media accounts with IDs, platforms and `status` (`active` or `unauthorized`) |
 | `upload_media` | Upload images, videos or documents from public URLs or base64 and get `mediaUrls` for a post |
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
+| `open_upload_widget` | Show an upload box in ChatGPT or Claude so the user can add files from their device; the box sends back the `mediaUrls` |
+| `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |
 | `create_post` | Create a post: publish immediately, schedule, or save as draft |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |

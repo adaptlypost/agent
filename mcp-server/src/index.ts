@@ -19,6 +19,7 @@ import {
   requireMediaContent,
 } from './media.js';
 import { RestClient } from './rest-client.js';
+import { withoutSchemaDialect } from './schema-dialect.js';
 import {
   oauthConfigFromEnv,
   handleProtectedResourceMetadata,
@@ -1861,7 +1862,7 @@ async function main() {
           enableJsonResponse: !wantsSse,
         });
         const reqServer = createMcpServer(reqApi);
-        await reqServer.connect(transport);
+        await reqServer.connect(withoutSchemaDialect(transport));
         try {
           let parsedBody: unknown;
           if (req.method === 'POST') {
@@ -1902,7 +1903,7 @@ async function main() {
   } else {
     const server = createMcpServer();
     const transport = new StdioServerTransport();
-    await server.connect(transport);
+    await server.connect(withoutSchemaDialect(transport));
   }
 }
 

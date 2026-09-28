@@ -94,7 +94,7 @@ const AI_PERMISSION_RULE =
   'Needs the ai.generate permission, which Admin, Editor and Contributor hold and Viewer does not (403 permission_denied).';
 
 const CAPTION_CREDIT_RULE =
-  'Each call spends 2 of the member\'s AI credits (the member who signed in or created the key), refunded if generation fails, unless the member has their own AI provider key connected in AdaptlyPost. With no credits left the call fails: tell the user to top up credits or upgrade the plan instead of retrying.';
+  'Each call spends 2 of the member\'s AI credits (the member who signed in or created the key), refunded if generation fails, unless the member has their own AI provider key connected in AdaptlyPost. With no credits left the call fails: explain that generation is unavailable with the current credit balance and do not retry automatically.';
 
 const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
@@ -1273,7 +1273,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Pause Recurring Post',
       description:
-        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, so nothing more goes out until resume_recurring_post. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
+        'Pause a recurring post: it stops creating occurrences and deletes its upcoming SCHEDULED post, preventing future scheduled occurrences until resume_recurring_post; an occurrence already publishing may still complete. Posts already published are kept. Slots that pass while paused are skipped, never published later. Use it when the user wants to hold the series; use delete_recurring_post to stop it for good. Deleting only the upcoming post with delete_post skips that one date and the series continues. Ids outside the workspace (the current one unless workspaceId names another) return "Recurring post not found". Returns the recurring post with status PAUSED and pauseReason USER.',
       inputSchema: {
         id: z.string().describe('Recurring post ID to pause, from list_recurring_posts'),
       },
@@ -1541,7 +1541,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Generate Caption',
       description:
-        `Write a new social media caption from a prompt with AdaptlyPost AI. Returns { caption }, text only; nothing is saved or posted, so pass the caption to create_post, update_post or bulk_schedule_posts yourself. Pass platform and the caption is kept within that platform's character limit. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} To rework a caption you already have, use refine_caption instead.`,
+        `Write a new social media caption from a prompt with AdaptlyPost AI. Returns { caption }, text only; nothing is saved or posted, so pass the caption to create_post, update_post or bulk_schedule_posts yourself. Pass platform and generation targets that platform's character limit; check the returned text before posting. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} To rework a caption you already have, use refine_caption instead.`,
       inputSchema: {
         prompt: z
           .string()
@@ -1551,7 +1551,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'What the caption should say or be about, including tone, audience, hashtags or a call to action (max 2000 characters)',
           ),
         platform: PlatformType.optional().describe(
-          "Platform the caption is for; the caption is kept within that platform's character limit. Omit for a general caption",
+          "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting. Omit for a general caption",
         ),
       },
       outputSchema: resultSchema('An object with caption: the generated text.'),
@@ -1577,7 +1577,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Refine Caption',
       description:
-        `Rewrite an existing caption following an instruction, such as "shorter", "more playful" or "add a question at the end". Returns { caption }, the rewritten text; nothing is saved or posted. Send partialText to continue from a partly written caption. Pass platform to keep the result within that platform's character limit. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} Costs the same as generate_caption.`,
+        `Rewrite an existing caption following an instruction, such as "shorter", "more playful" or "add a question at the end". Returns { caption }, the rewritten text; nothing is saved or posted. Send partialText to continue from a partly written caption. Pass platform to target that platform's character limit; check the returned text before posting. ${AI_PERMISSION_RULE} ${CAPTION_CREDIT_RULE} Costs the same as generate_caption.`,
       inputSchema: {
         prompt: z
           .string()
@@ -1595,7 +1595,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .optional()
           .describe('A partly written caption to continue from (max 10000 characters)'),
         platform: PlatformType.optional().describe(
-          "Platform the caption is for; the result is kept within that platform's character limit",
+          "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting",
         ),
       },
       outputSchema: resultSchema('An object with caption: the rewritten text.'),
@@ -1621,7 +1621,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Generate Image',
       description:
-        `Start generating an image from a prompt with AdaptlyPost AI. This is asynchronous: it returns { jobId, sessionId, status } right away with status queued, not the image. Poll get_image_job with the jobId every few seconds until status is completed or failed (usually 10 to 40 seconds), or wait for the image.completed or image.failed webhook if the workspace has one. A completed job carries imageUrl, a public URL you can pass straight into mediaUrls of create_post, so there is no need to run it through upload_media. The image is also saved to the member's AI image studio in AdaptlyPost; reuse sessionId to group related images. ${AI_PERMISSION_RULE} Charges the member's AI credits when generation starts (2 for standard, 4 for premium) unless the member has their own image provider key connected in AdaptlyPost, and refunds them if generation fails. With no credits left the job ends as failed and its error says so: tell the user to top up or upgrade instead of retrying.`,
+        `Start generating an image from a prompt with AdaptlyPost AI. This is asynchronous: it returns { jobId, sessionId, status } right away with status queued, not the image. Poll get_image_job with the jobId every few seconds until status is completed or failed (usually 10 to 40 seconds), or wait for the image.completed or image.failed webhook if the workspace has one. A completed job carries imageUrl, a public URL you can pass straight into mediaUrls of create_post, so there is no need to run it through upload_media. The image is also saved to the member's AI image studio in AdaptlyPost; reuse sessionId to group related images. ${AI_PERMISSION_RULE} Charges the member's AI credits when generation starts (2 for standard, 4 for premium) unless the member has their own image provider key connected in AdaptlyPost, and refunds them if generation fails. With no credits left the job ends as failed and its error says so: explain that generation is unavailable with the current credit balance and do not retry automatically.`,
       inputSchema: {
         prompt: z
           .string()
@@ -1654,7 +1654,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
       },
     },

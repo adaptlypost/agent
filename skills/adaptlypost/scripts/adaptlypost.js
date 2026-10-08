@@ -588,6 +588,7 @@ const CONNECTION_FIELDS = {
   THREADS: "threadsConnectionIds",
   BLUESKY: "blueskyConnectionIds",
   MASTODON: "mastodonConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   FACEBOOK: "pageIds",
 };

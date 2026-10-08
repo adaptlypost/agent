@@ -2,9 +2,9 @@
 
 [![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
 
-Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, and Mastodon from a single command, and to read how those posts performed.
+Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile from a single command, and to read how those posts performed.
 
-**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon
+**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile
 
 ## Install
 
@@ -40,7 +40,7 @@ An operation outside the role answers 403 with `code: permission_denied`; the sk
 
 Once installed, your AI agent can:
 
-- **Post** to 10 platforms simultaneously with per-platform caption overrides
+- **Post** to 11 platforms simultaneously with per-platform caption overrides
 - **Schedule** posts for any future time
 - **Bulk schedule** up to 100 posts at once
 - **Check results** per-platform success/failure with error details

@@ -1873,6 +1873,16 @@ function sendBodyTooLarge(res: ServerResponse): void {
   );
 }
 
+type JsonRpcRequest = { id?: string | number | null; method?: string };
+
+function isDiscoverRequest(body: unknown): body is JsonRpcRequest {
+  return !!body && typeof body === 'object' && (body as JsonRpcRequest).method === 'server/discover';
+}
+
+function sendMethodNotFound(res: ServerResponse, id: JsonRpcRequest['id']): void {
+  sendJson(res, 200, { jsonrpc: '2.0', id: id ?? null, error: { code: -32601, message: 'Method not found' } });
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -2055,6 +2065,10 @@ async function main() {
               rpcLabel = 'unparseable';
             }
             rpcLabel = describeRpc(parsedBody) ?? rpcLabel;
+            if (isDiscoverRequest(parsedBody)) {
+              sendMethodNotFound(res, parsedBody.id);
+              return;
+            }
           }
           await transport.handleRequest(req, res, parsedBody);
         } catch (err) {

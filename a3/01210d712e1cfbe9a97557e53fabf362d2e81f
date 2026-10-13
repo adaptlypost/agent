@@ -1,0 +1,27 @@
+mcp-server/README.md
+  s_6328936de459ec::t_506725fb6fd4d1 3,95
+mcp-server/declared-tools.txt
+  s_6328936de459ec::t_55c9d2df6254e0 4
+mcp-server/src/index.ts
+  s_6328936de459ec::t_3d621fb5764d26 355-360,485,787,849-880,1102,1267,1504
+skills/adaptlypost/SKILL.md
+  s_6328936de459ec::t_1cedb950110a7e 102,140,143,194,207,415-422,554,561,644-645
+skills/adaptlypost/scripts/adaptlypost.js
+  s_6328936de459ec::t_f9cb8a32d0e36b 252-257,354-366,458
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a301210d712e1cfbe9a97557e53fabf362d2e81f",
+  "prompts": {},
+  "sessions": {
+    "s_6328936de459ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4199d67b-ea6b-43cc-bc3b-f9e110820672",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

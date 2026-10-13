@@ -1,0 +1,73 @@
+mcp-server/src/index.ts
+  s_b7d8d6d1e334ce::t_a3a085529af529 1519-1522
+  s_b7d8d6d1e334ce::t_fe9de79e884316 1472
+  s_b7d8d6d1e334ce::t_b34f0bdba86077 1070,1074,1077
+  s_b7d8d6d1e334ce::t_730d4a0ac647c0 1265-1271
+  s_b7d8d6d1e334ce::t_2500195afdc3b9 1495-1498
+  s_b7d8d6d1e334ce::t_8e3bac32a98e51 132-143
+  s_b7d8d6d1e334ce::t_7218a8fca98153 600,603,607-608
+  s_b7d8d6d1e334ce::t_a6da43bae15d33 1149
+  s_b7d8d6d1e334ce::t_47df9ca6d16b37 437-442
+  s_b7d8d6d1e334ce::t_43380efec85f56 785,803-836,841
+  s_b7d8d6d1e334ce::t_f16440413d1cd3 490-513
+  s_b7d8d6d1e334ce::t_6787ba8ac4f001 468,474,482-489,514-574
+  s_b7d8d6d1e334ce::t_f330af206907cc 782
+  s_b7d8d6d1e334ce::t_7cb58a946d8259 89,92-102
+  s_b7d8d6d1e334ce::t_7e800ca3566a6d 286-299,301-303
+  s_b7d8d6d1e334ce::t_1fd69044692ba1 1230
+  s_b7d8d6d1e334ce::t_a9b50327bcce3d 1233-1236
+  s_b7d8d6d1e334ce::t_0bef53e33baa99 1467
+  s_b7d8d6d1e334ce::t_0b92fe30bca3aa 1481,1483
+  s_b7d8d6d1e334ce::t_74538e7d4cc4e3 318-324,331-337
+  s_b7d8d6d1e334ce::t_ba835001793d65 360-387,389-391,398
+  s_b7d8d6d1e334ce::t_586a06bc7367e8 1179,1181-1183
+  s_b7d8d6d1e334ce::t_74cf02cd3288f3 258-277
+  s_b7d8d6d1e334ce::t_a5d60550bb351c 1244
+  s_b7d8d6d1e334ce::t_da3a4ee4427ab1 1109-1113
+  s_b7d8d6d1e334ce::t_0ac90ce6d6ac8d 1713
+  s_b7d8d6d1e334ce::t_773dad1bb95c3c 1065
+  s_b7d8d6d1e334ce::t_731c00673543a0 156
+  s_b7d8d6d1e334ce::t_ca58e8098c3dfc 103,609,837-840,842-843,1770,1799
+skills/adaptlypost/scripts/adaptlypost.js
+  s_b7d8d6d1e334ce::t_806261e96ce993 156-273,280
+  s_b7d8d6d1e334ce::t_94bb3d228dbcd2 436-440
+  s_b7d8d6d1e334ce::t_9655199be2bae3 488
+  s_b7d8d6d1e334ce::t_6f10922c56b9e0 734
+  s_b7d8d6d1e334ce::t_573e571f716280 330-347
+.claude-plugin/marketplace.json
+  s_b7d8d6d1e334ce::t_4f30fb171b8a02 8,15-16
+.claude-plugin/plugin.json
+  s_b7d8d6d1e334ce::t_57e4e4dcb8a74d 3-4
+GEMINI.md
+  s_b7d8d6d1e334ce::t_6bbf8bae94aa1a 3
+README.md
+  s_b7d8d6d1e334ce::t_46f97d21d21a22 5,7,43,49
+mcp-server/README.md
+  s_b7d8d6d1e334ce::t_6203f8ad48f4a1 3,7,88,94,99,109
+mcp-server/declared-tools.txt
+  s_b7d8d6d1e334ce::t_a883471becce0e 3
+mcp-server/package.json
+  s_b7d8d6d1e334ce::t_569102e70c16a8 4
+package.json
+  s_b7d8d6d1e334ce::t_8ea92ce603a4f6 4
+plugin.json
+  s_b7d8d6d1e334ce::t_3423b1c7c22690 5
+skills/adaptlypost/SKILL.md
+  s_b7d8d6d1e334ce::t_5c707e63bee083 5-6,9,15,101,103,106,109,126-142,163,190-191,194,201-203,208-246,265-266,293-294,309,319,328,387,405-412,430,511,522,544,550,553,586-598,602-606,629,633
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d220b2243f85cfcef07d97e31e57d13b13fade6f",
+  "prompts": {},
+  "sessions": {
+    "s_b7d8d6d1e334ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "617ac642-7097-4821-81a1-2d1931f0e965",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 list_workspaces
 list_accounts
 search_instagram_audio
+list_pinterest_boards
 upload_media
 get_upload_urls
 open_upload_widget

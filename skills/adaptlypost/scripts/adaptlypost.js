@@ -249,6 +249,12 @@ function buildFacebookConfig(parsed) {
   });
 }
 
+function buildPinterestConfig(parsed) {
+  return withoutEmpty({
+    boardId: parsed["pinterest-board"] && String(parsed["pinterest-board"]),
+  });
+}
+
 function buildGoogleBusinessConfig(parsed) {
   const config = withoutEmpty({
     topicType: parsed["google-topic"] && String(parsed["google-topic"]).toUpperCase(),
@@ -345,6 +351,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "pinterest:boards": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js pinterest:boards --id <pinterest_account_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "GET",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/pinterest-boards`,
+    );
+    output(data);
+  },
+
   post: async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.caption && !parsed.text) {
@@ -436,6 +455,7 @@ const COMMANDS = {
     applyPostExtras(args, parsed, body);
     attachConfigs(body, "instagramConnectionIds", "instagramConfigs", "connectionId", buildInstagramConfig(args, parsed));
     attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(parsed));
+    attachConfigs(body, "pinterestConnectionIds", "pinterestConfigs", "connectionId", buildPinterestConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
 
     const data = await request("POST", "/api/v1/social-posts", body);

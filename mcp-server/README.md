@@ -1,10 +1,10 @@
 # @adaptlypost/mcp-server
 
-MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics and generate captions and images across 10 platforms. The server exposes 31 tools.
+MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics and generate captions and images across 11 platforms. The server exposes 32 tools.
 
 ## Supported Platforms
 
-Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon
+Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile
 
 ## Quick Start
 
@@ -85,17 +85,18 @@ An OAuth sign-in can reach several workspaces, each with its own accounts, posts
 
 ## Available Tools
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics API worth the price, Mastodon has none, and LinkedIn analytics are waiting on LinkedIn's approval.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon and Telegram have no analytics. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected.
 
 | Tool | Description |
 |---|---|
 | `list_workspaces` | List the workspaces the sign-in can act in; pass an id as `workspaceId` to any other tool |
 | `list_accounts` | List all connected social media accounts with IDs, platforms and `status` (`active` or `unauthorized`) |
+| `search_instagram_audio` | Search Instagram music and original sounds to add to a Reel |
 | `upload_media` | Upload images, videos or documents from public URLs or base64 and get `mediaUrls` for a post |
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
 | `open_upload_widget` | Show an upload box in ChatGPT or Claude so the user can add files from their device; the box sends back the `mediaUrls` |
 | `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |
-| `create_post` | Create a post: publish immediately, schedule, or save as draft |
+| `create_post` | Create a post: publish immediately, schedule, or save as draft. Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators and Reel audio, Facebook text backgrounds and Google Business Profile events and offers |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |
 | `update_post` | Update a scheduled or draft post |
@@ -105,7 +106,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and You
 | `list_post_results` | Check per-platform posting results, success or failure with error details |
 | `retry_failed_platforms` | Retry publishing on platforms that failed |
 | `bulk_schedule_posts` | Schedule up to 100 posts at once |
-| `list_recurring_posts` | List recurring posts (series made with `recurrence` on `create_post`) by status |
+| `list_recurring_posts` | List recurring posts (daily, weekly, monthly or yearly series made with `recurrence` on `create_post`) by status |
 | `get_recurring_post` | Get one recurring post with its schedule, status and next occurrence |
 | `pause_recurring_post` | Pause a recurring post and delete its upcoming scheduled post |
 | `resume_recurring_post` | Resume a paused recurring post from the next occurrence after now |

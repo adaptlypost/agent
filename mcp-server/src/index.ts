@@ -86,7 +86,20 @@ const PlatformType = z.enum([
   'BLUESKY',
   'TWITTER',
   'MASTODON',
+  'GOOGLE_BUSINESS',
 ]);
+
+const PostFilterPlatform = z.enum([...PlatformType.options, 'TELEGRAM']);
+
+const FirstCommentPlatform = z.enum(['LINKEDIN', 'TWITTER', 'THREADS', 'BLUESKY', 'MASTODON', 'YOUTUBE']);
+
+const ThumbnailPlatform = z.enum(['YOUTUBE', 'FACEBOOK', 'LINKEDIN', 'INSTAGRAM', 'PINTEREST', 'TIKTOK']);
+
+const AspectRatioPlatform = z.enum(['INSTAGRAM', 'TIKTOK']);
+
+const MediaAspectRatio = z.enum(['SQUARE', 'PORTRAIT', 'VERTICAL', 'LANDSCAPE']);
+
+const MediaAspectRatioFit = z.enum(['CROP', 'PAD']);
 
 const ContentType = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL', 'DOCUMENT']);
 
@@ -116,6 +129,18 @@ const CAPTION_CREDIT_RULE =
 const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
+const CAROUSEL_RULE =
+  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK and THREADS, 20 on LINKEDIN and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel';
+
+const GOOGLE_BUSINESS_RULE =
+  'GOOGLE_BUSINESS takes TEXT or IMAGE with one JPEG or PNG image up to 5 MB, and text up to 1500 characters';
+
+const LINKEDIN_MENTION_RULE =
+  'On LinkedIn, mention a company page with @[Page Name](urn:li:organization:<id>), using the page name exactly as LinkedIn shows it';
+
+const ALT_TEXT_RULE =
+  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
+
 const PostStatus = z.enum([
   'COMPLETED',
   'DRAFT',
@@ -128,7 +153,7 @@ const PostStatus = z.enum([
 
 const PostSortOrder = z.enum(['NEWEST', 'OLDEST']);
 
-const RecurrenceFrequency = z.enum(['DAILY', 'WEEKLY', 'MONTHLY']);
+const RecurrenceFrequency = z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']);
 
 const Weekday = z.enum([
   'MONDAY',
@@ -230,6 +255,26 @@ const YouTubeConfigSchema = z.object({
   playlistId: z.string().optional().describe('Add video to this playlist'),
 });
 
+const InstagramAudioSchema = z.object({
+  audioId: z.string().min(1).max(64).describe('audioId from search_instagram_audio'),
+  title: z.string().max(255).optional().describe('Track title, stored for display only'),
+  artist: z.string().max(255).optional().describe('Artist or creator, stored for display only'),
+  audioVolume: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Volume of the added audio, 1 to 100. Defaults to 100'),
+  videoVolume: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Volume of the video's own sound, 1 to 100. Defaults to 100"),
+});
+
 const InstagramConfigSchema = z.object({
   connectionId: z
     .string()
@@ -238,8 +283,24 @@ const InstagramConfigSchema = z.object({
     .enum(['FEED', 'REEL', 'STORY'])
     .optional()
     .describe(
-      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE or VIDEO. Any other combination is refused with 400',
+      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE, VIDEO or CAROUSEL (a CAROUSEL story publishes each media item as its own story, in order). Any other combination is refused with 400',
     ),
+  shareToStory: z
+    .boolean()
+    .optional()
+    .describe(
+      'Also publish the same media as a story on this account, next to the FEED or REEL post. The story shows as its own entry in platforms with postType STORY, so it succeeds, fails and retries on its own. It skips the caption, first comment, cover, collaborators, trial and audio, needs IMAGE, VIDEO or CAROUSEL, and a video must fit the story length limit (60 seconds). Ignored when postType is STORY',
+    ),
+  collaborators: z
+    .array(z.string().regex(/^@?[A-Za-z0-9._]{1,30}$/))
+    .max(3)
+    .optional()
+    .describe(
+      'Instagram usernames invited as collaborators (Instagram Collab), up to 3. A leading @ is stripped and duplicates are dropped. Works on feed images, carousels and reels; a story or a trial reel with collaborators is refused with 400. Each collaborator gets an invite in Instagram and must accept it before the post shows on their profile',
+    ),
+  audio: InstagramAudioSchema.optional().describe(
+    "Music or an original sound from Instagram's audio library, added to the Reel when it is published. Needs contentType VIDEO and a postType other than STORY, and only works for accounts with supportsInstagramAudio: true in list_accounts (connected through Facebook). Find ids with search_instagram_audio",
+  ),
   trialGraduation: z
     .enum(['MANUAL', 'SS_PERFORMANCE'])
     .optional()
@@ -254,13 +315,26 @@ const FacebookConfigSchema = z.object({
     .enum(['FEED', 'REEL', 'STORY'])
     .optional()
     .describe(
-      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE or VIDEO. Any other combination is refused with 400',
+      'Where the post goes: FEED works with every content type, REEL needs contentType VIDEO, STORY needs IMAGE, VIDEO or CAROUSEL (a CAROUSEL story publishes each media item as its own story, in order). Any other combination is refused with 400',
+    ),
+  shareToStory: z
+    .boolean()
+    .optional()
+    .describe(
+      'Also publish the same media as a story on this page, next to the FEED or REEL post. The story shows as its own entry in platforms with postType STORY, so it succeeds, fails and retries on its own. It skips the caption, video title and text background, needs IMAGE, VIDEO or CAROUSEL, and a video must fit the story length limit (60 seconds). Ignored when postType is STORY',
     ),
   videoTitle: z
     .string()
     .max(255)
     .optional()
     .describe('Video title for Facebook (max 255 chars)'),
+  textFormatPresetId: z
+    .string()
+    .regex(/^\d{1,20}$/)
+    .optional()
+    .describe(
+      "Facebook's id for a colored text background (for example 106018623298955 is solid purple, 249307305544279 is a red to blue gradient). Only for contentType TEXT posts with no media and text up to 130 characters; anything else is refused with 400. Links in the text show without a preview. If Facebook refuses the background, the post goes out as plain text",
+    ),
 });
 
 const LinkedInConfigSchema = z.object({
@@ -283,15 +357,45 @@ const PinterestConfigSchema = z.object({
   link: z.string().optional().describe('Destination URL for the pin'),
 });
 
+const GoogleBusinessEventDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/);
+
+const GoogleBusinessConfigSchema = z.object({
+  connectionId: z.string().describe('Google Business Profile account id from list_accounts'),
+  topicType: z
+    .enum(['STANDARD', 'EVENT', 'OFFER'])
+    .describe('STANDARD is an update. EVENT and OFFER need eventTitle, eventStart and eventEnd'),
+  callToActionType: z
+    .enum(['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'CALL'])
+    .optional()
+    .describe(
+      'Button shown on the post. Every type except CALL needs callToActionUrl; CALL dials the phone number on the Business Profile',
+    ),
+  callToActionUrl: z.string().url().optional().describe('Ignored when callToActionType is CALL'),
+  eventTitle: z.string().optional().describe('Title of the event or offer'),
+  eventStart: GoogleBusinessEventDate.optional().describe(
+    "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset (e.g. \"2026-10-01T18:00\"). Google reads event times in the location's time zone",
+  ),
+  eventEnd: GoogleBusinessEventDate.optional().describe(
+    "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset (e.g. \"2026-10-01T21:00\")",
+  ),
+  offerCouponCode: z.string().optional().describe('OFFER only: coupon code'),
+  offerRedeemUrl: z.string().url().optional().describe('OFFER only: where the offer is redeemed'),
+  offerTerms: z.string().optional().describe('OFFER only: terms and conditions'),
+});
+
 const RecurrenceSchema = z.object({
-  frequency: RecurrenceFrequency.describe('How often the post repeats: DAILY, WEEKLY, or MONTHLY'),
+  frequency: RecurrenceFrequency.describe(
+    'How often the post repeats: DAILY, WEEKLY, MONTHLY or YEARLY. YEARLY repeats on the same date; a series started on February 29 posts on February 28 in other years',
+  ),
   interval: z
     .number()
     .int()
     .min(1)
     .max(30)
     .optional()
-    .describe('Repeat every N days, weeks or months, 1 to 30 (default 1)'),
+    .describe('Repeat every N days, weeks, months or years, 1 to 30 (default 1)'),
   weekdays: z
     .array(Weekday)
     .max(7)
@@ -330,6 +434,12 @@ const connectionIdFields = {
   blueskyConnectionIds: z.array(z.string()).optional().describe('Bluesky account connection IDs to post from'),
   mastodonConnectionIds: z.array(z.string()).optional().describe('Mastodon account connection IDs to post from'),
   pinterestConnectionIds: z.array(z.string()).optional().describe('Pinterest account connection IDs to post from'),
+  googleBusinessConnectionIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Google Business Profile locations to post to, by the account id from list_accounts. A location without an entry in googleBusinessConfigs gets a STANDARD update',
+    ),
   pageIds: z
     .array(z.string())
     .optional()
@@ -355,19 +465,112 @@ const platformConfigFields = {
     .array(InstagramConfigSchema)
     .optional()
     .describe(
-      'Instagram per-connection config to set post type (FEED, REEL, STORY) and publish a reel as a trial reel',
+      'Instagram per-connection config: post type (FEED, REEL, STORY), shareToStory, collaborators, Reel audio, and trial reels',
     ),
   facebookConfigs: z
     .array(FacebookConfigSchema)
     .optional()
     .describe(
-      'Facebook per-page config with post type and video title. pageId must match an entry in pageIds',
+      'Facebook per-page config: post type, shareToStory, video title and text background. pageId must match an entry in pageIds',
     ),
   pinterestConfigs: z
     .array(PinterestConfigSchema)
     .optional()
     .describe(
       'Pinterest per-connection config. Each entry needs connectionId + boardId; there is no API to list boards, so ask the user for the board id',
+    ),
+  googleBusinessConfigs: z
+    .array(GoogleBusinessConfigSchema)
+    .optional()
+    .describe(
+      `Google Business Profile per-location config: update, event or offer, plus a button. connectionId must match an entry in googleBusinessConnectionIds. ${GOOGLE_BUSINESS_RULE}`,
+    ),
+};
+
+const postThumbnailFields = {
+  thumbnailUrl: z
+    .string()
+    .optional()
+    .describe(
+      'Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless platformThumbnails overrides it',
+    ),
+  thumbnailTimestampMs: z
+    .number()
+    .optional()
+    .describe(
+      'Video frame timestamp (ms) to use as the thumbnail, used by INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it',
+    ),
+};
+
+const platformTextsField = z
+  .array(
+    z.object({
+      platform: PlatformType,
+      text: z.string().describe(LINKEDIN_MENTION_RULE),
+    }),
+  )
+  .optional();
+
+const postExtrasFields = {
+  firstComments: z
+    .array(
+      z.object({
+        platform: FirstCommentPlatform,
+        text: z
+          .string()
+          .min(1)
+          .max(10000)
+          .describe("The comment's text, trimmed. The limit depends on the platform, see firstComments"),
+      }),
+    )
+    .optional()
+    .describe(
+      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply) and YOUTUBE (10000). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
+    ),
+  platformThumbnails: z
+    .array(
+      z.object({
+        platform: ThumbnailPlatform,
+        thumbnailUrl: z
+          .string()
+          .optional()
+          .describe("The image to use as this platform's thumbnail, an https URL or an image data URI"),
+        thumbnailTimestampMs: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("The video frame (ms from the start) to use as this platform's thumbnail"),
+      }),
+    )
+    .optional()
+    .describe(
+      'A different thumbnail for one platform of a VIDEO post, one entry per platform. A platform without an entry uses the post-level thumbnailUrl and thumbnailTimestampMs. YOUTUBE, FACEBOOK and LINKEDIN take an image (thumbnailUrl); INSTAGRAM and PINTEREST take an image or a frame (thumbnailTimestampMs), the image winning when both are sent; TIKTOK takes only a frame. Posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use are refused with 400. On an update, sending the array replaces every override and omitting it keeps the stored ones',
+    ),
+  platformAspectRatios: z
+    .array(
+      z.object({
+        platform: AspectRatioPlatform,
+        aspectRatio: MediaAspectRatio.describe(
+          'SQUARE is 1:1, PORTRAIT 4:5, VERTICAL 9:16 and LANDSCAPE 1.91:1',
+        ),
+        fit: MediaAspectRatioFit.optional().describe(
+          'How an image of another shape reaches the ratio. CROP (the default) cuts it from the center; PAD keeps the whole image and fills the rest with a blurred copy of it',
+        ),
+      }),
+    )
+    .optional()
+    .describe(
+      'Reframe every image of an IMAGE or CAROUSEL post to one shape on a platform, one entry per platform. INSTAGRAM takes SQUARE, PORTRAIT or LANDSCAPE (Instagram refuses 9:16 feed and carousel images); TIKTOK takes all four. Video posts, Instagram stories and a second entry for the same platform are refused with 400. Omit a platform to keep its images as uploaded. On an update it applies to the mediaUrls sent in the same request',
+    ),
+};
+
+const twitterKeepLinksField = {
+  twitterKeepLinks: z
+    .boolean()
+    .optional()
+    .describe(
+      'Keep links in the X text clickable. X charges over 10 times more for a post with a link, so by default every link in X text is broken (example.com becomes example. com). Only AppSumo lifetime deals can turn this on, and a kept link costs 20 credits instead of 2. true on any other plan is refused with 400; it is ignored when the X text has no link',
     ),
 };
 
@@ -394,12 +597,15 @@ const analyticsRangeFields = {
     .string()
     .describe('End of the reporting window (ISO 8601). Must not be earlier than from'),
   platforms: z
-    .array(PlatformType)
+    .array(PostFilterPlatform)
     .optional()
     .describe(
-      'Restrict to these platforms; omit for every platform with analytics. X (TWITTER) and MASTODON have no analytics and are ignored; LinkedIn analytics are pending platform approval and return no data yet',
+      'Restrict to these platforms; omit for every platform with analytics. MASTODON and TELEGRAM have no analytics and are ignored. GOOGLE_BUSINESS reports location impressions only, with no per-post numbers',
     ),
 };
+
+const ANALYTICS_COVERAGE =
+  'Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile (location impressions only, no per-post numbers); Mastodon and Telegram have none. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected, so any date range in that history can be queried.';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -573,10 +779,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
+        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all eleven platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
-        'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized and pageId for Facebook pages. Use id as the connection id (or in pageIds for Facebook).',
+        'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized, pageId for Facebook pages and supportsInstagramAudio for Instagram. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
@@ -587,6 +793,47 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (_args, client) => {
       try {
         const data = await client.get('/social-accounts');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'search_instagram_audio',
+    {
+      title: 'Search Instagram Audio',
+      description:
+        "Search Instagram music and original sounds to add to a Reel. Returns { audio } with audioId, audioType, title, displayArtist (music), igUsername (original sounds), durationMs, coverArtworkUrl, profilePictureUrl, previewUrl (a temporary audio file, expires after about 1.5 days), instagramUrl and isAdsEligible. Leave out searchQuery to get what is trending. Only audio Meta has cleared for third-party publishing comes back, which can differ from what the Instagram app shows. Only works for Instagram accounts with supportsInstagramAudio: true in list_accounts; otherwise, or when Instagram rejects the search, it fails with 400. Pass the chosen audioId, with its title and artist, in instagramConfigs[].audio of create_post, update_post or bulk_schedule_posts. Nothing is posted.",
+      inputSchema: {
+        accountId: z
+          .string()
+          .describe('The Instagram account id from list_accounts'),
+        audioType: z
+          .enum(['music', 'original_sound'])
+          .describe('music for licensed tracks, original_sound for sounds from other Instagram posts'),
+        searchQuery: z
+          .string()
+          .max(100)
+          .optional()
+          .describe('Keyword filter (max 100 characters). Leave out for trending audio'),
+      },
+      outputSchema: resultSchema(
+        'An object with audio: one { audioId, audioType, title, displayArtist, igUsername, durationMs, coverArtworkUrl, profilePictureUrl, previewUrl, instagramUrl, isAdsEligible } per match. Pass audioId as instagramConfigs[].audio.audioId.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async ({ accountId, ...query }, client) => {
+      try {
+        const data = await client.get(
+          `/social-accounts/${encodeURIComponent(accountId)}/instagram-audio`,
+          query,
+        );
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -815,19 +1062,19 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Pass recurrence with a future scheduledAt to repeat the post daily, weekly or monthly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post. This publishes publicly to the user\'s social accounts: unless saveAsDraft is set, show the user the final text, media, accounts and time or repeat schedule, and get their confirmation before calling. Each call creates a new post, so calling again after an error or timeout can publish a duplicate; check list_posts first.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId; a Google Business Profile event, offer or button goes in googleBusinessConfigs. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Optional per-platform extras: firstComments, platformThumbnails for videos, platformAspectRatios for images, Instagram and Facebook shareToStory, Instagram collaborators and Reel audio (ids from search_instagram_audio), a Facebook text background, and twitterKeepLinks. Pass recurrence with a future scheduledAt to repeat the post daily, weekly, monthly or yearly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post. This publishes publicly to the user\'s social accounts: unless saveAsDraft is set, show the user the final text, media, accounts and time or repeat schedule, and get their confirmation before calling. Each call creates a new post, so calling again after an error or timeout can publish a duplicate; check list_posts first.',
       inputSchema: {
         text: z
           .string()
           .optional()
-          .describe('Default post text shared across platforms'),
+          .describe(`Default post text shared across platforms. ${LINKEDIN_MENTION_RULE}`),
         platforms: z
           .array(PlatformType)
           .describe(
-            'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from list_accounts',
+            'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS) filled with ids from list_accounts',
           ),
         contentType: ContentType.describe(
-          `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls (CAROUSEL needs several). ${DOCUMENT_POST_RULE}`,
+          `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${DOCUMENT_POST_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -859,23 +1106,11 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         mediaAltTexts: z
           .array(z.string().max(1000))
           .optional()
-          .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
-          ),
-        thumbnailUrl: z
-          .string()
-          .optional()
-          .describe('Custom thumbnail image URL for video posts'),
-        thumbnailTimestampMs: z
-          .number()
-          .optional()
-          .describe(
-            'Generate thumbnail from video at this timestamp (milliseconds)',
-          ),
-        platformTexts: z
-          .array(z.object({ platform: PlatformType, text: z.string() }))
-          .optional()
-          .describe('Per-platform caption overrides'),
+          .describe(ALT_TEXT_RULE),
+        ...postThumbnailFields,
+        platformTexts: platformTextsField.describe('Per-platform caption overrides'),
+        ...postExtrasFields,
+        ...twitterKeepLinksField,
         ...connectionIdFields,
         ...platformConfigFields,
         ...linkedinConfigsField,
@@ -911,7 +1146,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls). previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId; twitterKeepLinks; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. Posts created in the AdaptlyPost app can also target TELEGRAM, which this server cannot post to. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -941,9 +1176,11 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .optional()
           .describe('Filter by status (e.g. ["SCHEDULED", "DRAFT"]); omit for all statuses'),
         platforms: z
-          .array(PlatformType)
+          .array(PostFilterPlatform)
           .optional()
-          .describe('Filter to posts targeting any of these platforms'),
+          .describe(
+            'Filter to posts targeting any of these platforms. TELEGRAM matches posts created in the AdaptlyPost app',
+          ),
         startDate: z
           .string()
           .optional()
@@ -990,10 +1227,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, and thumbnail fields you omit keep their values. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
-        text: z.string().optional().describe('Updated text; omit to keep the current text'),
+        text: z
+          .string()
+          .optional()
+          .describe(`Updated text; omit to keep the current text. ${LINKEDIN_MENTION_RULE}`),
         platforms: z
           .array(PlatformType)
           .optional()
@@ -1001,7 +1241,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'New target platforms. Sending this replaces every target, so also resend the connection-id arrays and platform configs to keep; omit to leave targets unchanged',
           ),
         contentType: ContentType.optional().describe(
-          `New content type; must match the media on the post. ${DOCUMENT_POST_RULE}`,
+          `New content type; must match the media on the post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${DOCUMENT_POST_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -1022,23 +1262,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         mediaAltTexts: z
           .array(z.string().max(1000))
           .optional()
-          .describe(
-            'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it. Applied only when platforms is also sent',
-          ),
-        thumbnailUrl: z
-          .string()
-          .optional()
-          .describe('Custom thumbnail image URL for video posts'),
-        thumbnailTimestampMs: z
-          .number()
-          .optional()
-          .describe(
-            'Generate thumbnail from video at this timestamp (milliseconds)',
-          ),
-        platformTexts: z
-          .array(z.object({ platform: PlatformType, text: z.string() }))
-          .optional()
-          .describe('Per-platform caption overrides; applied to the targets sent in platforms'),
+          .describe(`${ALT_TEXT_RULE}. Applied only when platforms is also sent`),
+        ...postThumbnailFields,
+        platformTexts: platformTextsField.describe(
+          'Per-platform caption overrides; applied to the targets sent in platforms',
+        ),
+        ...postExtrasFields,
+        ...twitterKeepLinksField,
         ...connectionIdFields,
         ...platformConfigFields,
         ...linkedinConfigsField,
@@ -1234,12 +1464,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs or pinterestConfigs to replace the shared ones. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs or googleBusinessConfigs to replace the shared ones, plus its own firstComments, platformThumbnails and platformAspectRatios. twitterKeepLinks is not available in bulk. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel and Pinterest needs pinterestConfigs with boardId. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: {
         platforms: z
           .array(PlatformType)
           .describe(
-            'Target platforms shared by every item. Each needs its connection-id array (pageIds for FACEBOOK)',
+            'Target platforms shared by every item. Each needs its connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS)',
           ),
         timezone: z
           .string()
@@ -1248,9 +1478,9 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         posts: z
           .array(
             z.object({
-              text: z.string().optional().describe('Post text/caption'),
+              text: z.string().optional().describe(`Post text/caption. ${LINKEDIN_MENTION_RULE}`),
               contentType: BulkContentType.describe(
-                'TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post',
+                `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}`,
               ),
               scheduledAt: z
                 .string()
@@ -1262,21 +1492,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
               mediaAltTexts: z
                 .array(z.string().max(1000))
                 .optional()
-                .describe(
-                  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube and videos ignore it',
-                ),
-              thumbnailUrl: z
-                .string()
-                .optional()
-                .describe('Custom thumbnail image URL'),
-              thumbnailTimestampMs: z
-                .number()
-                .optional()
-                .describe('Thumbnail timestamp in ms'),
-              platformTexts: z
-                .array(z.object({ platform: PlatformType, text: z.string() }))
-                .optional()
-                .describe('Per-platform caption overrides for this item'),
+                .describe(ALT_TEXT_RULE),
+              ...postThumbnailFields,
+              platformTexts: platformTextsField.describe('Per-platform caption overrides for this item'),
+              ...postExtrasFields,
               tiktokConfigs: z
                 .array(TikTokConfigSchema)
                 .optional()
@@ -1297,6 +1516,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
                 .array(PinterestConfigSchema)
                 .optional()
                 .describe('Pinterest config for this item only, such as its own title or link; replaces the batch-level pinterestConfigs'),
+              googleBusinessConfigs: z
+                .array(GoogleBusinessConfigSchema)
+                .optional()
+                .describe('Google Business Profile config for this item only, such as its own event or offer; replaces the batch-level googleBusinessConfigs'),
             }),
           )
           .min(1)
@@ -1487,7 +1710,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Analytics Overview',
       description:
-        'Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use this for "how did we do this month" questions and for follower counts. Metrics are summed over the selected platforms; partialMetrics names metrics some selected platform cannot report, and a metric no platform reports is null. Analytics cover the last 180 days and refresh every few hours (lastSyncedAt says when); if the user just published, call trigger_analytics_sync first. Use get_analytics_timeseries for a trend, get_platform_breakdown to compare platforms, and list_post_analytics for individual posts.',
+        `Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use this for "how did we do this month" questions and for follower counts. Metrics are summed over the selected platforms; partialMetrics names metrics some selected platform cannot report, and a metric no platform reports is null. ${ANALYTICS_COVERAGE} Analytics refresh every few hours (lastSyncedAt says when); if the user just published, call trigger_analytics_sync first. Use get_analytics_timeseries for a trend, get_platform_breakdown to compare platforms, and list_post_analytics for individual posts.`,
       inputSchema: analyticsRangeFields,
       outputSchema: resultSchema(
         'An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, and lastSyncedAt.',
@@ -1544,7 +1767,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Platform Breakdown',
       description:
-        'The overview metrics split per platform for a date window, for "which platform performs best" comparisons. Returns { platforms }: one row per platform with analytics data, carrying followers, views, likes, comments, shares, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }) plus supportedMetrics, the metrics that platform actually reports; compare only metrics both platforms list there. Takes no platform filter. Use get_analytics_overview for the combined total.',
+        'The overview metrics split per platform for a date window, for "which platform performs best" comparisons. Returns { platforms }: one row per platform with analytics data, carrying followers, views, likes, comments, shares, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }) plus supportedMetrics, the metrics that platform actually reports; compare only metrics both platforms list there. Google Business Profile reports location impressions only. Takes no platform filter. Use get_analytics_overview for the combined total.',
       inputSchema: {
         from: analyticsRangeFields.from,
         to: analyticsRangeFields.to,
@@ -1573,7 +1796,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Post Analytics',
       description:
-        'Per-post metrics for posts published inside the window, sorted by a metric or by publish date, paginated. Use it for "top posts", "which post got the most comments" and "how did post X do". Covers posts published through AdaptlyPost and posts discovered on the connected accounts; discovered posts have postId and postPlatformId set to null, while AdaptlyPost posts carry the postId used by get_post. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, thumbnailUrl, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review. Not for publishing status: use list_post_results for that.',
+        'Per-post metrics for posts published inside the window, sorted by a metric or by publish date, paginated. Use it for "top posts", "which post got the most comments" and "how did post X do". Covers posts published through AdaptlyPost and posts discovered on the connected accounts; Google Business Profile posts are listed with null metrics, since that platform reports only location impressions; discovered posts have postId and postPlatformId set to null, while AdaptlyPost posts carry the postId used by get_post. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, thumbnailUrl, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review. Not for publishing status: use list_post_results for that.',
       inputSchema: {
         ...analyticsRangeFields,
         sortBy: AnalyticsSortMetric.optional().describe(

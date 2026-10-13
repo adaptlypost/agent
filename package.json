@@ -1,7 +1,7 @@
 {
   "name": "@adaptlypost/agent",
   "version": "1.0.0",
-  "description": "AdaptlyPost agent — post to 9 social media platforms from any AI agent",
+  "description": "AdaptlyPost agent: post to 11 social media platforms from any AI agent",
   "license": "MIT",
   "author": "AdaptlyPost",
   "repository": {

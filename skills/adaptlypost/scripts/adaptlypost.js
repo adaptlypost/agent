@@ -153,13 +153,131 @@ function parseRepeated(args, key) {
   return values;
 }
 
+function parseRepeatedRaw(args, key) {
+  const values = [];
+  for (let i = 0; i < args.length; i++) {
+    const next = args[i + 1];
+    if (args[i] === `--${key}` && next !== undefined && !next.startsWith("--")) {
+      values.push(next);
+      i++;
+    }
+  }
+  return values;
+}
+
+function splitPlatformPair(value, flag) {
+  const at = value.indexOf("=");
+  if (at <= 0) {
+    error(`--${flag} takes PLATFORM=value, got: ${value}`);
+    process.exit(1);
+  }
+  return [value.slice(0, at).trim().toUpperCase(), value.slice(at + 1).trim()];
+}
+
+function parseBoolean(value) {
+  return value === true || String(value).toLowerCase() === "true";
+}
+
+function buildFirstComments(args) {
+  return parseRepeatedRaw(args, "first-comment").map((value) => {
+    const [platform, text] = splitPlatformPair(value, "first-comment");
+    return { platform, text };
+  });
+}
+
+function buildPlatformThumbnails(args) {
+  return parseRepeatedRaw(args, "platform-thumbnail").map((value) => {
+    const [platform, source] = splitPlatformPair(value, "platform-thumbnail");
+    return /^\d+$/.test(source)
+      ? { platform, thumbnailTimestampMs: Number(source) }
+      : { platform, thumbnailUrl: source };
+  });
+}
+
+function buildAspectRatios(args) {
+  return parseRepeatedRaw(args, "aspect-ratio").map((value) => {
+    const [platform, shape] = splitPlatformPair(value, "aspect-ratio");
+    const [aspectRatio, fit] = shape.toUpperCase().split(":");
+    return fit ? { platform, aspectRatio, fit } : { platform, aspectRatio };
+  });
+}
+
+function applyPostExtras(args, parsed, body, { aspectRatios = true } = {}) {
+  const firstComments = buildFirstComments(args);
+  if (firstComments.length > 0) body.firstComments = firstComments;
+  const thumbnails = buildPlatformThumbnails(args);
+  if (thumbnails.length > 0) body.platformThumbnails = thumbnails;
+  if (aspectRatios) {
+    const ratios = buildAspectRatios(args);
+    if (ratios.length > 0) body.platformAspectRatios = ratios;
+  }
+  if (parsed["twitter-keep-links"] !== undefined) {
+    body.twitterKeepLinks = parseBoolean(parsed["twitter-keep-links"]);
+  }
+}
+
+function withoutEmpty(config) {
+  return Object.fromEntries(
+    Object.entries(config).filter(([, value]) => value !== undefined),
+  );
+}
+
+function buildInstagramConfig(args, parsed) {
+  const collaborators = parseRepeatedRaw(args, "instagram-collaborator");
+  const audio = parsed["instagram-audio"]
+    ? withoutEmpty({
+        audioId: String(parsed["instagram-audio"]),
+        title: parsed["instagram-audio-title"],
+        artist: parsed["instagram-audio-artist"],
+        audioVolume: parsed["instagram-audio-volume"] && Number(parsed["instagram-audio-volume"]),
+        videoVolume: parsed["instagram-video-volume"] && Number(parsed["instagram-video-volume"]),
+      })
+    : undefined;
+  return withoutEmpty({
+    postType: parsed["instagram-type"] && String(parsed["instagram-type"]).toUpperCase(),
+    shareToStory: parsed["instagram-story"] ? true : undefined,
+    collaborators: collaborators.length > 0 ? collaborators : undefined,
+    audio,
+  });
+}
+
+function buildFacebookConfig(parsed) {
+  return withoutEmpty({
+    postType: parsed["facebook-type"] && String(parsed["facebook-type"]).toUpperCase(),
+    shareToStory: parsed["facebook-story"] ? true : undefined,
+    textFormatPresetId: parsed["facebook-background"] && String(parsed["facebook-background"]),
+  });
+}
+
+function buildGoogleBusinessConfig(parsed) {
+  const config = withoutEmpty({
+    topicType: parsed["google-topic"] && String(parsed["google-topic"]).toUpperCase(),
+    callToActionType: parsed["google-cta"] && String(parsed["google-cta"]).toUpperCase(),
+    callToActionUrl: parsed["google-cta-url"],
+    eventTitle: parsed["google-event-title"],
+    eventStart: parsed["google-event-start"],
+    eventEnd: parsed["google-event-end"],
+    offerCouponCode: parsed["google-offer-code"],
+    offerRedeemUrl: parsed["google-offer-url"],
+    offerTerms: parsed["google-offer-terms"],
+  });
+  if (Object.keys(config).length > 0 && !config.topicType) config.topicType = "STANDARD";
+  return config;
+}
+
+function attachConfigs(body, idsField, configsField, idKey, config) {
+  const ids = body[idsField] || [];
+  if (ids.length === 0 || Object.keys(config).length === 0) return;
+  body[configsField] = ids.map((id) => ({ [idKey]: id, ...config }));
+}
+
 const REPEAT_FLAGS = ["repeat-every", "repeat-on", "repeat-until", "repeat-count"];
 
 function buildRecurrence(args, parsed) {
   if (!parsed.repeat) {
     const stray = REPEAT_FLAGS.find((flag) => parsed[flag]);
     if (stray) {
-      error(`--${stray} needs --repeat DAILY|WEEKLY|MONTHLY`);
+      error(`--${stray} needs --repeat DAILY|WEEKLY|MONTHLY|YEARLY`);
       process.exit(1);
     }
     return undefined;
@@ -205,6 +323,24 @@ const COMMANDS = {
     const data = await request(
       "POST",
       `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/check`,
+    );
+    output(data);
+  },
+
+  "instagram:audio": async (args) => {
+    const parsed = parseArgs(args);
+    const audioType = parsed.type || "music";
+    if (!parsed.id || !["music", "original_sound"].includes(audioType)) {
+      error(
+        'Usage: ./scripts/adaptlypost.js instagram:audio --id <instagram_account_id> [--type music|original_sound] [--search "keywords"]',
+      );
+      process.exit(1);
+    }
+    const params = new URLSearchParams({ audioType });
+    if (parsed.search && parsed.search !== true) params.set("searchQuery", parsed.search);
+    const data = await request(
+      "GET",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/instagram-audio?${params}`,
     );
     output(data);
   },
@@ -297,6 +433,11 @@ const COMMANDS = {
       }
     }
 
+    applyPostExtras(args, parsed, body);
+    attachConfigs(body, "instagramConnectionIds", "instagramConfigs", "connectionId", buildInstagramConfig(args, parsed));
+    attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(parsed));
+    attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
+
     const data = await request("POST", "/api/v1/social-posts", body);
     output(data);
   },
@@ -344,6 +485,7 @@ const COMMANDS = {
       body.text = parsed.caption || parsed.text;
     if (parsed.schedule) body.scheduledAt = parsed.schedule;
     if (parsed.timezone) body.timezone = parsed.timezone;
+    applyPostExtras(args, parsed, body, { aspectRatios: false });
 
     const data = await request(
       "PATCH",
@@ -589,6 +731,7 @@ const CONNECTION_FIELDS = {
   BLUESKY: "blueskyConnectionIds",
   MASTODON: "mastodonConnectionIds",
   PINTEREST: "pinterestConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   FACEBOOK: "pageIds",
 };
 

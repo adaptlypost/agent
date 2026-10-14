@@ -1077,8 +1077,8 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       outputSchema: resultSchema('An object with expiresAt and uploadUrl for the upload box.'),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: true,
-        destructiveHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
       },
       _meta: {
         ui: { visibility: ['app'] },
@@ -1380,7 +1380,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
       },
     },
@@ -2048,8 +2048,8 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       ),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: true,
-        destructiveHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
         idempotentHint: false,
       },
     },

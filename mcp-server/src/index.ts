@@ -429,7 +429,7 @@ const RecurrenceSchema = z.object({
     .max(365)
     .optional()
     .describe(
-      'Total number of posts the series publishes, 2 to 365. Cannot be combined with endsOn; omit both to repeat until paused or deleted',
+      'Total number of posts the series publishes, 2 to 365. Cannot be combined with endsOn; omit both to repeat until the user pauses or deletes the series',
     ),
 });
 
@@ -1140,7 +1140,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
             'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
           ),
         recurrence: RecurrenceSchema.optional().describe(
-          'Repeat the post on a schedule. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. X and LinkedIn reject identical text, so use spintax such as {Hi|Hello} to vary each post. Manage the series with list_recurring_posts, pause_recurring_post, resume_recurring_post and delete_recurring_post',
+          'Repeat the post on a schedule the user asked for, and confirm that schedule with them first. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. The user can pause or stop the series at any time with pause_recurring_post or delete_recurring_post; list_recurring_posts shows it',
         ),
         mediaUrls: z
           .array(z.string())

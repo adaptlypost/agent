@@ -250,8 +250,17 @@ function buildFacebookConfig(parsed) {
 }
 
 function buildPinterestConfig(parsed) {
+  if (parsed["pinterest-board"] && parsed["pinterest-board-name"]) {
+    error("Pass --pinterest-board or --pinterest-board-name, not both");
+    process.exit(1);
+  }
+  if (parsed["pinterest-board-name"] === true) {
+    error("--pinterest-board-name needs a board name");
+    process.exit(1);
+  }
   return withoutEmpty({
     boardId: parsed["pinterest-board"] && String(parsed["pinterest-board"]),
+    boardName: parsed["pinterest-board-name"] && String(parsed["pinterest-board-name"]),
   });
 }
 

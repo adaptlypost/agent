@@ -99,7 +99,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js setup --key <key>` | Store the API key (`--local` for this project only). The user runs this, not the agent |
 | `./scripts/adaptlypost.js accounts` | List connected accounts with their ids and `status`. Run first: every post command takes these ids, never usernames. Skip accounts whose `status` is `unauthorized` and tell the user to reconnect them |
 | `./scripts/adaptlypost.js instagram:audio --id <instagram_account_id> [--type music\|original_sound] [--search "keywords"]` | Search Instagram music (the default) or original sounds to add to a Reel. Leave out `--search` for trending audio. Only for accounts with `supportsInstagramAudio: true`. Pass the `audioId` to `post --instagram-audio` |
-| `./scripts/adaptlypost.js pinterest:boards --id <pinterest_account_id>` | List the boards a Pinterest account can pin to, secret boards included, with `id`, `name` and `privacy`. A board belongs to one Pinterest account, so run it for each Pinterest account you post to. Ask the user which board to use and pass its `id` to `post --pinterest-board` |
+| `./scripts/adaptlypost.js pinterest:boards --id <pinterest_account_id>` | List the boards a Pinterest account can pin to, secret boards included, with `id`, `name` and `privacy`. A board belongs to one Pinterest account, so run it for each Pinterest account you post to. Ask the user which board to use and pass its `id` to `post --pinterest-board`, or its name to `--pinterest-board-name` |
 | `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. `--accounts` is required: the CLI looks up each id with `accounts` and puts it in its platform's connection array (Facebook pages in `pageIds`). `--platforms` defaults to the platforms of those accounts; an account whose platform is missing from `--platforms` stops the command. Optional: `--media-urls` (sets the content type to DOCUMENT, VIDEO or IMAGE from the file extension unless `--type` is given), `--alt-texts` (one per image, separated by `\|`), `--type`, `--document-title` (LinkedIn document posts), `--timezone`, `--tiktok-privacy`, `--platform-text`, plus the per-platform flags in [Post options in the CLI](#post-options-in-the-cli) |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms TWITTER --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
@@ -137,7 +137,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3) | `instagramConfigs[].postType`, `shareToStory`, `collaborators` |
 | `--instagram-audio <audioId>` with optional `--instagram-audio-title`, `--instagram-audio-artist`, `--instagram-audio-volume 1-100`, `--instagram-video-volume 1-100` | `instagramConfigs[].audio`. Find the id with `instagram:audio` |
 | `--facebook-type FEED\|REEL\|STORY`, `--facebook-story`, `--facebook-background <presetId>` | `facebookConfigs[].postType`, `shareToStory`, `textFormatPresetId` |
-| `--pinterest-board <boardId>` | `pinterestConfigs[].boardId`. Find the id with `pinterest:boards`. Without it the pin goes to a public board named "AdaptlyPost" |
+| `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
 | `--google-topic STANDARD\|EVENT\|OFFER`, `--google-cta <type>`, `--google-cta-url`, `--google-event-title`, `--google-event-start`, `--google-event-end`, `--google-offer-code`, `--google-offer-url`, `--google-offer-terms` | `googleBusinessConfigs[]`. The topic defaults to `STANDARD` |
 
 Pinterest titles and links, YouTube settings, trial reels and TikTok options other than privacy still need a raw API body.
@@ -191,7 +191,7 @@ Body: {
 
 Each platform takes its connection ids in its own array: `linkedinConnectionIds`, `twitterConnectionIds`, `instagramConnectionIds`, `youtubeConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `pinterestConnectionIds`, `googleBusinessConnectionIds`, and `pageIds` for Facebook. On LinkedIn, `text` and `platformTexts[].text` can mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
 
-**Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. For Pinterest, list the account's boards with [Pinterest boards](#pinterest-boards), ask the user which one to use and pass its `id` as `pinterestConfigs[].boardId`. Without a `boardId` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed; leave it out only when the user is happy with that board. Only one account per platform is allowed per post.
+**Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. For Pinterest, list the account's boards with [Pinterest boards](#pinterest-boards), ask the user which one to use and pass its `id` as `pinterestConfigs[].boardId`, or pass the board's name as `boardName` instead (never both). A `boardName` that no board on the account has, or that several boards share, fails with 400; it never falls back to another board. Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed; leave it out only when the user is happy with that board. Only one account per platform is allowed per post.
 
 `mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile and videos ignore it.
 
@@ -204,7 +204,7 @@ Per-platform configs, each an array with one entry per connection:
 | `facebookConfigs` | `pageId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `videoTitle` (max 255), `textFormatPresetId` (digits) |
 | `googleBusinessConfigs` | `connectionId`, `topicType` (required: `STANDARD`, `EVENT` or `OFFER`), `callToActionType` (`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`), `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
 | `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
-| `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards); without it the pin goes to a public board named "AdaptlyPost"), `title` (max 100), `link` (a URL) |
+| `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards)), `boardName` (optional, max 180, the board's name instead of `boardId`, never both; 400 when no board or several boards have it), `title` (max 100), `link` (a URL) |
 | `linkedinConfigs` | `connectionId`, `documentTitle` (max 100, `DOCUMENT` posts only) |
 
 For Instagram and Facebook, `FEED` works with every content type, `REEL` needs `VIDEO` and `STORY` needs `IMAGE`, `VIDEO` or `CAROUSEL` (each carousel item goes out as its own story, in order); any other pair returns 400. Instagram feed and Reel videos can run up to 15 minutes.
@@ -420,6 +420,8 @@ GET /api/v1/social-accounts/<id>/pinterest-boards
 
 `<id>` is a Pinterest account id from Social Accounts. Returns `{ boards: [{ id, name, description, privacy, pinCount }] }` with every board the account can pin to, secret boards included. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`; `description`, `privacy` and `pinCount` can be missing. Needs `posts.draft`. Returns 404 when the account is not found or is not a Pinterest account in this workspace, and 400 when Pinterest refuses the request, usually because the account must be reconnected. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. Ask the user which board to use, or take the one they named, and pass its `id` as `pinterestConfigs[].boardId` on Create Post, Update Post or Bulk Schedule.
 
+`pinterestConfigs[].boardName` takes the board's name instead of its id; sending both in one config is a 400. The name is matched against this same list when the request is handled: names are trimmed, a single exact match wins, then a single case-insensitive match. A name no board has, or one several boards share, fails with 400 (for a shared name the message lists the matching ids); it never falls back to another board. In Bulk Schedule only that item fails. The resolved id is stored, and `boardName` is not returned.
+
 ### Upload URLs
 
 ```
@@ -558,7 +560,7 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `list_workspaces` | Workspaces an OAuth sign-in can act in, with the role held in each. Every other tool takes an optional `workspaceId` from this list; without it tools act in the workspace marked `current` |
 | `list_accounts` | List connected accounts with ids, platforms and `status` (`active` or `unauthorized`). Call first; posts take these ids, never usernames |
 | `search_instagram_audio` | Search Instagram music or original sounds for a Reel; pass the `audioId` in `instagramConfigs[].audio` |
-| `list_pinterest_boards` | List the boards a Pinterest account can pin to; pass the chosen `id` as `pinterestConfigs[].boardId` |
+| `list_pinterest_boards` | List the boards a Pinterest account can pin to; pass the chosen `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) |
 | `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
 | `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
 | `open_upload_widget` | Show an upload box in the chat so the user can add files from their device; it sends back the `mediaUrls` |
@@ -641,7 +643,7 @@ Use these exact names (uppercase) for platforms:
 - TikTok requires privacy level — defaults to PUBLIC_TO_EVERYONE via the CLI
 - Check `results` after posting to see per-platform success/failure. `post`, `posts:publish`, and `posts:retry` only confirm queueing; the outcome arrives asynchronously
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
-- For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`. Leave the flag out only when the user is happy with the default "AdaptlyPost" board
+- For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings; use the API body directly for those
 - The MCP server has no tools for connect links, account checks or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)

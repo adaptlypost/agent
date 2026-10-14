@@ -356,7 +356,15 @@ const PinterestConfigSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Board id from list_pinterest_boards. Leave out to pin to a public board named AdaptlyPost, created on the account the first time it is needed',
+      'Board id from list_pinterest_boards. Leave out boardId and boardName to pin to a public board named AdaptlyPost, created on the account the first time it is needed',
+    ),
+  boardName: z
+    .string()
+    .min(1)
+    .max(180)
+    .optional()
+    .describe(
+      "The board's name, instead of boardId; never send both. Matched against this account's boards, exact first, then case-insensitive. A name no board has, or one several boards share, fails with 400 and never falls back to another board",
     ),
   title: z.string().max(100).optional().describe('Pin title (max 100 chars)'),
   link: z.string().optional().describe('Destination URL for the pin'),
@@ -482,7 +490,7 @@ const platformConfigFields = {
     .array(PinterestConfigSchema)
     .optional()
     .describe(
-      'Pinterest per-connection config: the board to pin to, a pin title and a destination link. Get boardId from list_pinterest_boards for that connectionId; a board belongs to one Pinterest account. Without boardId the pin goes to a board named AdaptlyPost',
+      'Pinterest per-connection config: the board to pin to, a pin title and a destination link. Get boardId from list_pinterest_boards for that connectionId, or pass the board name as boardName instead (not both); a board belongs to one Pinterest account. A boardName that matches no board or several fails with 400. Without either the pin goes to a board named AdaptlyPost',
     ),
   googleBusinessConfigs: z
     .array(GoogleBusinessConfigSchema)
@@ -851,14 +859,14 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Pinterest Boards',
       description:
-        "List the boards of a connected Pinterest account, secret boards included. Returns { boards } with id, name, description, privacy (PUBLIC, PROTECTED or SECRET) and pinCount. Call it before posting to Pinterest, ask the user which board to pin to unless they already named one, and pass that board's id as pinterestConfigs[].boardId in create_post, update_post or bulk_schedule_posts. A board belongs to one Pinterest account, so call it once per Pinterest account. A post sent without a boardId goes to a public board named AdaptlyPost, which is created on first use. Fails with 404 when accountId is not a Pinterest account in the workspace, and with 400 when Pinterest refuses the request, which usually means the user must reconnect the account in AdaptlyPost. Nothing is posted.",
+        "List the boards of a connected Pinterest account, secret boards included. Returns { boards } with id, name, description, privacy (PUBLIC, PROTECTED or SECRET) and pinCount. Call it before posting to Pinterest, ask the user which board to pin to unless they already named one, and pass that board's id as pinterestConfigs[].boardId in create_post, update_post or bulk_schedule_posts. When the user named a board you may pass that name as boardName instead, never both; a name that matches no board, or several, fails with 400 and nothing falls back. A board belongs to one Pinterest account, so call it once per Pinterest account. A post sent without boardId or boardName goes to a public board named AdaptlyPost, which is created on first use. Fails with 404 when accountId is not a Pinterest account in the workspace, and with 400 when Pinterest refuses the request, which usually means the user must reconnect the account in AdaptlyPost. Nothing is posted.",
       inputSchema: {
         accountId: z
           .string()
           .describe('The Pinterest account id from list_accounts'),
       },
       outputSchema: resultSchema(
-        'An object with boards: one { id, name, description, privacy, pinCount } per board. Pass id as pinterestConfigs[].boardId.',
+        'An object with boards: one { id, name, description, privacy, pinCount } per board. Pass id as pinterestConfigs[].boardId, or name as boardName.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1099,7 +1107,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards (without one the pin goes to a board named AdaptlyPost); a Google Business Profile event, offer or button goes in googleBusinessConfigs. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Optional per-platform extras: firstComments, platformThumbnails for videos, platformAspectRatios for images, Instagram and Facebook shareToStory, Instagram collaborators and Reel audio (ids from search_instagram_audio), a Facebook text background, and twitterKeepLinks. Pass recurrence with a future scheduledAt to repeat the post daily, weekly, monthly or yearly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post. This publishes publicly to the user\'s social accounts: unless saveAsDraft is set, show the user the final text, media, accounts and time or repeat schedule, and get their confirmation before calling. Each call creates a new post, so calling again after an error or timeout can publish a duplicate; check list_posts first.',
+        'Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both (an unknown or shared name fails with 400; without either the pin goes to a board named AdaptlyPost); a Google Business Profile event, offer or button goes in googleBusinessConfigs. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Optional per-platform extras: firstComments, platformThumbnails for videos, platformAspectRatios for images, Instagram and Facebook shareToStory, Instagram collaborators and Reel audio (ids from search_instagram_audio), a Facebook text background, and twitterKeepLinks. Pass recurrence with a future scheduledAt to repeat the post daily, weekly, monthly or yearly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post. This publishes publicly to the user\'s social accounts: unless saveAsDraft is set, show the user the final text, media, accounts and time or repeat schedule, and get their confirmation before calling. Each call creates a new post, so calling again after an error or timeout can publish a duplicate; check list_posts first.',
       inputSchema: {
         text: z
           .string()
@@ -1264,7 +1272,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
         text: z
@@ -1501,7 +1509,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs or googleBusinessConfigs to replace the shared ones, plus its own firstComments, platformThumbnails and platformAspectRatios. twitterKeepLinks is not available in bulk. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs or googleBusinessConfigs to replace the shared ones, plus its own firstComments, platformThumbnails and platformAspectRatios. twitterKeepLinks is not available in bulk. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: {
         platforms: z
           .array(PlatformType)
@@ -1552,7 +1560,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
               pinterestConfigs: z
                 .array(PinterestConfigSchema)
                 .optional()
-                .describe('Pinterest config for this item only, such as its own title or link; replaces the batch-level pinterestConfigs'),
+                .describe('Pinterest config for this item only, such as its own board, title or link; replaces the batch-level pinterestConfigs'),
               googleBusinessConfigs: z
                 .array(GoogleBusinessConfigSchema)
                 .optional()

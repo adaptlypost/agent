@@ -1107,7 +1107,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts: publish now, schedule, or save a draft. Before publishing or scheduling, show the user the final text, media, accounts and time or repeat schedule and get their confirmation; a draft needs no confirmation. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT and defers validation to publish_draft. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read list_post_results, where each platform succeeds or fails on its own. Call list_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both (an unknown or shared name fails with 400; without either the pin goes to a board named AdaptlyPost); a Google Business Profile event, offer or button goes in googleBusinessConfigs. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with the one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from upload_media, or the call fails with "Media file(s) not found in storage". Optional per-platform extras: firstComments, platformThumbnails for videos, platformAspectRatios for images, Instagram and Facebook shareToStory, Instagram collaborators and Reel audio (ids from search_instagram_audio), a Facebook text background, and twitterKeepLinks. Pass recurrence with a future scheduledAt to repeat the post daily, weekly, monthly or yearly; the response then adds recurringPostId and postId is the first occurrence. Use bulk_schedule_posts for many posts on the same accounts, and update_post or publish_draft for an existing post. Each call creates a separate post, so after an error or timeout check list_posts before trying again.',
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a future scheduledAt schedules it; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document, Google Business event or offer, first comments, recurrence) are described on each field. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: {
         text: z
           .string()
@@ -2048,7 +2048,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       ),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
         destructiveHint: false,
         idempotentHint: false,
       },

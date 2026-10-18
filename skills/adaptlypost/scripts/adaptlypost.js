@@ -237,6 +237,7 @@ function buildInstagramConfig(args, parsed) {
     postType: parsed["instagram-type"] && String(parsed["instagram-type"]).toUpperCase(),
     shareToStory: parsed["instagram-story"] ? true : undefined,
     collaborators: collaborators.length > 0 ? collaborators : undefined,
+    aiGenerated: parsed["instagram-ai-generated"] ? true : undefined,
     audio,
   });
 }

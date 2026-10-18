@@ -134,7 +134,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only |
 | `--aspect-ratio PLATFORM=RATIO[:PAD]` (repeatable) | `platformAspectRatios`, e.g. `INSTAGRAM=PORTRAIT` or `TIKTOK=VERTICAL:PAD`. IMAGE and CAROUSEL posts only |
 | `--twitter-keep-links` (also `posts:update --twitter-keep-links false`) | `twitterKeepLinks` |
-| `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3) | `instagramConfigs[].postType`, `shareToStory`, `collaborators` |
+| `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3), `--instagram-ai-generated` | `instagramConfigs[].postType`, `shareToStory`, `collaborators`, `aiGenerated` |
 | `--instagram-audio <audioId>` with optional `--instagram-audio-title`, `--instagram-audio-artist`, `--instagram-audio-volume 1-100`, `--instagram-video-volume 1-100` | `instagramConfigs[].audio`. Find the id with `instagram:audio` |
 | `--facebook-type FEED\|REEL\|STORY`, `--facebook-story`, `--facebook-background <presetId>` | `facebookConfigs[].postType`, `shareToStory`, `textFormatPresetId` |
 | `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
@@ -200,7 +200,7 @@ Per-platform configs, each an array with one entry per connection:
 | Field | Keys |
 |-------|------|
 | `tiktokConfigs` | `connectionId`, `privacyLevel` (required), `title` (max 90), `caption` (max 2200), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
-| `instagramConfigs` | `connectionId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `collaborators` (up to 3 usernames), `audio` (`audioId` required, `title`, `artist`, `audioVolume` and `videoVolume` 1 to 100, default 100), `trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) |
+| `instagramConfigs` | `connectionId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `collaborators` (up to 3 usernames), `aiGenerated`, `audio` (`audioId` required, `title`, `artist`, `audioVolume` and `videoVolume` 1 to 100, default 100), `trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) |
 | `facebookConfigs` | `pageId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `videoTitle` (max 255), `textFormatPresetId` (digits) |
 | `googleBusinessConfigs` | `connectionId`, `topicType` (required: `STANDARD`, `EVENT` or `OFFER`), `callToActionType` (`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`), `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
 | `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
@@ -212,6 +212,8 @@ For Instagram and Facebook, `FEED` works with every content type, `REEL` needs `
 `shareToStory: true` also publishes the same media as a story next to the `FEED` or `REEL` post. The story is its own entry in `platforms` with `postType: STORY`, so it succeeds, fails and retries on its own. It skips the caption, first comment, cover, collaborators, trial and audio (on Facebook: the caption, video title and text background), needs `IMAGE`, `VIDEO` or `CAROUSEL`, and a video must be 60 seconds or shorter. It is ignored when `postType` is `STORY`.
 
 Instagram `collaborators` invites up to 3 usernames (Instagram Collab). A leading `@` is stripped and duplicates are dropped. It works on feed images, carousels and reels; a story or trial reel with collaborators returns 400. Each collaborator has to accept the invite in Instagram.
+
+Instagram `aiGenerated: true` discloses that the post was made or edited with AI. Instagram shows its "AI info" label on the post. It works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too. The post reads it back as `instagramAiGenerated`.
 
 Instagram `audio` adds music or an original sound to a Reel. It needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account with `supportsInstagramAudio: true`. Find the `audioId` with [Instagram audio search](#instagram-audio-search).
 

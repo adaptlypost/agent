@@ -242,11 +242,25 @@ function buildInstagramConfig(args, parsed) {
   });
 }
 
-function buildFacebookConfig(parsed) {
+function parseFacebookCard(value) {
+  if (!value.trim().startsWith("{")) return { link: value.trim() };
+  try {
+    return JSON.parse(value);
+  } catch {
+    error(`Invalid JSON in --facebook-card: ${value}`);
+    process.exit(1);
+  }
+}
+
+function buildFacebookConfig(args, parsed) {
+  const carouselCards = parseRepeatedRaw(args, "facebook-card").map(parseFacebookCard);
+  const layout = parsed["facebook-layout"] && String(parsed["facebook-layout"]).toUpperCase();
   return withoutEmpty({
     postType: parsed["facebook-type"] && String(parsed["facebook-type"]).toUpperCase(),
     shareToStory: parsed["facebook-story"] ? true : undefined,
     textFormatPresetId: parsed["facebook-background"] && String(parsed["facebook-background"]),
+    imageLayout: layout || (carouselCards.length > 0 ? "CAROUSEL" : undefined),
+    carouselCards: carouselCards.length > 0 ? carouselCards : undefined,
   });
 }
 
@@ -464,7 +478,7 @@ const COMMANDS = {
 
     applyPostExtras(args, parsed, body);
     attachConfigs(body, "instagramConnectionIds", "instagramConfigs", "connectionId", buildInstagramConfig(args, parsed));
-    attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(parsed));
+    attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(args, parsed));
     attachConfigs(body, "pinterestConnectionIds", "pinterestConfigs", "connectionId", buildPinterestConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
 

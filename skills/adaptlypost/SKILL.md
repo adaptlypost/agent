@@ -140,9 +140,10 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--facebook-type FEED\|REEL\|STORY`, `--facebook-story`, `--facebook-background <presetId>` | `facebookConfigs[].postType`, `shareToStory`, `textFormatPresetId` |
 | `--facebook-layout GRID\|CAROUSEL`, `--facebook-card <url or JSON>` (repeatable, one per image in order) | `facebookConfigs[].imageLayout`, `carouselCards`. A card is a link URL or `{"link":"...","title":"...","description":"..."}`. Cards without `--facebook-layout` set `CAROUSEL` |
 | `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
+| `--youtube-ai-generated` | `youtubeConfigs[].aiGenerated` |
 | `--google-topic STANDARD\|EVENT\|OFFER`, `--google-cta <type>`, `--google-cta-url`, `--google-event-title`, `--google-event-start`, `--google-event-end`, `--google-offer-code`, `--google-offer-url`, `--google-offer-terms` | `googleBusinessConfigs[]`. The topic defaults to `STANDARD` |
 
-Pinterest titles and links, YouTube settings, trial reels and TikTok options other than privacy still need a raw API body.
+Pinterest titles and links, YouTube settings other than `aiGenerated`, trial reels and TikTok options other than privacy still need a raw API body.
 
 ## API Reference
 
@@ -205,7 +206,7 @@ Per-platform configs, each an array with one entry per connection:
 | `instagramConfigs` | `connectionId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `collaborators` (up to 3 usernames), `aiGenerated`, `audio` (`audioId` required, `title`, `artist`, `audioVolume` and `videoVolume` 1 to 100, default 100), `trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) |
 | `facebookConfigs` | `pageId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `videoTitle` (max 255), `textFormatPresetId` (digits), `imageLayout` (`GRID` or `CAROUSEL`), `carouselCards` (up to 5 of `link` required, http or https, max 2048; `title` max 100; `description` max 200) |
 | `googleBusinessConfigs` | `connectionId`, `topicType` (required: `STANDARD`, `EVENT` or `OFFER`), `callToActionType` (`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`), `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
-| `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
+| `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId` |
 | `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards)), `boardName` (optional, max 180, the board's name instead of `boardId`, never both; 400 when no board or several boards have it), `title` (max 100), `link` (a URL) |
 | `linkedinConfigs` | `connectionId`, `documentTitle` (max 100, `DOCUMENT` posts only) |
 
@@ -216,6 +217,8 @@ For Instagram and Facebook, `FEED` works with every content type, `REEL` needs `
 Instagram `collaborators` invites up to 3 usernames (Instagram Collab). A leading `@` is stripped and duplicates are dropped. It works on feed images, carousels and reels; a story or trial reel with collaborators returns 400. Each collaborator has to accept the invite in Instagram.
 
 Instagram `aiGenerated: true` discloses that the post was made or edited with AI. Instagram shows its "AI info" label on the post. It works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too. The post reads it back as `instagramAiGenerated`.
+
+YouTube `aiGenerated: true` discloses altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. It works on videos and Shorts. Omit it or send `false` for no label. The post reads it back as `youtubeAiGenerated`.
 
 Instagram `audio` adds music or an original sound to a Reel. It needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account with `supportsInstagramAudio: true`. Find the `audioId` with [Instagram audio search](#instagram-audio-search).
 
@@ -671,7 +674,7 @@ Use these exact names (uppercase) for platforms:
 - Check `results` after posting to see per-platform success/failure. `post`, `posts:publish`, and `posts:retry` only confirm queueing; the outcome arrives asynchronously
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
-- The CLI does not set Pinterest titles and links, trial reels or YouTube settings; use the API body directly for those
+- The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`; use the API body directly for those
 - The MCP server has no tools for connect links, account checks, account removal or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing

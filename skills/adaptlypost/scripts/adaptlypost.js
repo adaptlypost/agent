@@ -279,6 +279,12 @@ function buildPinterestConfig(parsed) {
   });
 }
 
+function buildYouTubeConfig(parsed) {
+  return withoutEmpty({
+    aiGenerated: parsed["youtube-ai-generated"] ? true : undefined,
+  });
+}
+
 function buildGoogleBusinessConfig(parsed) {
   const config = withoutEmpty({
     topicType: parsed["google-topic"] && String(parsed["google-topic"]).toUpperCase(),
@@ -493,6 +499,7 @@ const COMMANDS = {
     attachConfigs(body, "instagramConnectionIds", "instagramConfigs", "connectionId", buildInstagramConfig(args, parsed));
     attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(args, parsed));
     attachConfigs(body, "pinterestConnectionIds", "pinterestConfigs", "connectionId", buildPinterestConfig(parsed));
+    attachConfigs(body, "youtubeConnectionIds", "youtubeConfigs", "connectionId", buildYouTubeConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
 
     const data = await request("POST", "/api/v1/social-posts", body);

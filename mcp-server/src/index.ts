@@ -665,15 +665,44 @@ async function mintUploadUrl(
   return urls[0];
 }
 
-async function uploadFromUrl(apiClient: RestClient, sourceUrl: string): Promise<Uploaded> {
-  const media = await openPublicMedia(sourceUrl);
-  const { uploadUrl, publicUrl, key } = await mintUploadUrl(
-    apiClient,
-    fileNameFor(media.url, media.mimeType),
-    media.mimeType,
-  );
-  await putStream(uploadUrl, media);
-  return { publicUrl, key };
+async function uploadFromUrl(
+  apiClient: RestClient,
+  sourceUrl: string,
+  fileName?: string,
+): Promise<Uploaded & { bytes: number }> {
+  const media = await openPublicMedia(sourceUrl, fileName);
+  try {
+    const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+      apiClient,
+      fileNameFor(media.name, media.mimeType),
+      media.mimeType,
+    );
+    await putStream(uploadUrl, media);
+    return { publicUrl, key, bytes: media.contentLength };
+  } finally {
+    await media.dispose();
+  }
+}
+
+type ChatAttachment = {
+  download_url: string;
+  file_id: string;
+  mime_type?: string | null;
+  file_name?: string | null;
+};
+
+async function uploadFromAttachment(apiClient: RestClient, attachment: ChatAttachment): Promise<Uploaded> {
+  const startedAt = Date.now();
+  const host = URL.canParse(attachment.download_url) ? new URL(attachment.download_url).hostname : 'invalid';
+  try {
+    const uploaded = await uploadFromUrl(apiClient, attachment.download_url, attachment.file_name ?? undefined);
+    console.error(`attachment upload ok host=${host} bytes=${uploaded.bytes} ms=${Date.now() - startedAt}`);
+    return uploaded;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`attachment upload failed host=${host} ms=${Date.now() - startedAt} error=${message}`);
+    throw error;
+  }
 }
 
 async function uploadFromBase64(
@@ -893,8 +922,21 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload Media',
       description:
-        'Upload images, videos or documents to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Two sources, combinable in one call: urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused, and the source must send a Content-Length) and files (base64 data, for media attached in the conversation; 30 MB decoded per call in total). Omitting both returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension, so keep it in the name or URL); 50 MB per image, 100 MB per document, 250 MB per URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For inline files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse rather than re-uploading per post.',
+        'Upload images, videos or documents to AdaptlyPost storage and return public URLs for the mediaUrls of create_post, update_post, or bulk_schedule_posts. Three sources, combinable in one call: attachments (files the user attached in a ChatGPT conversation, which ChatGPT passes as file references; use this for every file attached in ChatGPT, whatever its size), urls (public https URLs the server streams straight into storage; private, internal and non-https addresses are refused) and files (base64 data, for small media attached in other apps; 30 MB decoded per call in total). Omitting all three returns an error. Accepts JPEG, PNG, WebP, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension, so keep it in the name or URL); 50 MB per image, 100 MB per document, 250 MB per attachment or URL download. Stored files are public immediately, post or no post, so only upload media the user supplied or asked for. For base64 files over 30 MB use get_upload_urls and PUT the bytes yourself. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse rather than re-uploading per post.',
       inputSchema: {
+        attachments: z
+          .array(
+            z.object({
+              download_url: z.string().describe('Temporary download URL of the attached file'),
+              file_id: z.string().describe('ChatGPT file id of the attached file'),
+              mime_type: z.string().nullish().describe('MIME type of the attached file'),
+              file_name: z.string().nullish().describe('Name of the attached file, with its extension'),
+            }).passthrough(),
+          )
+          .optional()
+          .describe(
+            'Files the user attached in the ChatGPT conversation: images, videos or documents, up to 250 MB each. ChatGPT fills in each file reference; put every attached file the user wants to post here',
+          ),
         urls: z
           .array(z.string())
           .optional()
@@ -915,7 +957,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           )
           .optional()
           .describe(
-            'Direct file uploads as base64, 30 MB decoded per call in total. Use this when the user attaches/pastes an image, video or document in the conversation',
+            'Direct file uploads as base64, 30 MB decoded per call in total. Use this for small media attached in apps other than ChatGPT; in ChatGPT use attachments',
           ),
       },
       outputSchema: resultSchema(
@@ -926,18 +968,20 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         openWorldHint: true,
         destructiveHint: true,
       },
+      _meta: { 'openai/fileParams': ['attachments'] },
     },
-    async ({ urls, files }, client) => {
+    async ({ attachments, urls, files }, client) => {
       try {
-        if (!urls?.length && !files?.length) {
+        if (!attachments?.length && !urls?.length && !files?.length) {
           throw new Error(
-            'Provide at least one of: urls (public URLs) or files (base64 data)',
+            'Provide at least one of: attachments (files attached in ChatGPT), urls (public URLs) or files (base64 data)',
           );
         }
 
         if (files?.length) requireInlineBudget(files);
 
         const results: Uploaded[] = [];
+        for (const a of attachments ?? []) results.push(await uploadFromAttachment(client, a));
         for (const u of urls ?? []) results.push(await uploadFromUrl(client, u));
         for (const f of files ?? []) results.push(await uploadFromBase64(client, f.data, f.fileName));
 
@@ -1029,7 +1073,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload From Device',
       description:
-        "Show an upload box in the chat so the user can add photos, videos or documents from their phone or computer. Use it when the user wants to post a file that has no public URL, such as a photo on their phone, a file attached in the chat that upload_media cannot read, or a file you built in a sandbox whose network blocks the get_upload_urls uploadUrl. Nothing is uploaded until the user picks files in the box. When the upload finishes, the box sends a message listing the public media URLs; pass them as mediaUrls to create_post, update_post or bulk_schedule_posts. Accepts JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC and DOCX, up to 250 MB per file, 50 MB per image and 100 MB per document. Uploaded files are stored at public URLs. The box only appears in apps that show MCP Apps widgets, such as ChatGPT and Claude; elsewhere ask the user for a public URL and use upload_media.",
+        "Show an upload box in the chat so the user can add photos, videos or documents from their phone or computer. Use it when the user wants to post a file that has no public URL, such as a photo on their phone, a file attached in the chat that upload_media cannot read (in ChatGPT, pass attached files to upload_media as attachments instead), or a file you built in a sandbox whose network blocks the get_upload_urls uploadUrl. Nothing is uploaded until the user picks files in the box. When the upload finishes, the box sends a message listing the public media URLs; pass them as mediaUrls to create_post, update_post or bulk_schedule_posts. Accepts JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC and DOCX, up to 250 MB per file, 50 MB per image and 100 MB per document. Uploaded files are stored at public URLs. The box only appears in apps that show MCP Apps widgets, such as ChatGPT and Claude; elsewhere ask the user for a public URL and use upload_media.",
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with status waiting_for_upload. The media URLs arrive later, in a message the upload box sends when the user finishes.',

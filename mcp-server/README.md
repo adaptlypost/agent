@@ -93,7 +93,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, Linked
 | `list_accounts` | List all connected social media accounts with IDs, platforms and `status` (`active` or `unauthorized`) |
 | `search_instagram_audio` | Search Instagram music and original sounds to add to a Reel |
 | `list_pinterest_boards` | List the boards of a Pinterest account; pass a board `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) |
-| `upload_media` | Upload images, videos or documents from public URLs or base64 and get `mediaUrls` for a post |
+| `upload_media` | Upload images, videos or documents from ChatGPT attachments, public URLs or base64 and get `mediaUrls` for a post |
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
 | `open_upload_widget` | Show an upload box in ChatGPT or Claude so the user can add files from their device; the box sends back the `mediaUrls` |
 | `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |

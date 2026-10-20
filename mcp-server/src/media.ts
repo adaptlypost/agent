@@ -1,8 +1,13 @@
 import { lookup, type LookupAddress, type LookupOptions } from 'node:dns';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import { request } from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 const MB = 1024 * 1024;
 export const MAX_IMAGE_BYTES = 50 * MB;
@@ -266,9 +271,11 @@ function readHead(res: IncomingMessage, size: number): Promise<Buffer> {
 
 export type MediaStream = {
   url: URL;
+  name: string;
   mimeType: string;
   contentLength: number;
   body: Readable;
+  dispose: () => Promise<void>;
 };
 
 async function* exactLength(
@@ -291,7 +298,37 @@ async function* exactLength(
   }
 }
 
-export async function openPublicMedia(sourceUrl: string): Promise<MediaStream> {
+async function* capped(head: Buffer, rest: IncomingMessage, source: string): AsyncGenerator<Buffer> {
+  let total = head.length;
+  yield head;
+  for await (const chunk of rest as AsyncIterable<Buffer>) {
+    total += chunk.length;
+    if (total > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`${source} is over the ${formatBytes(MAX_DOWNLOAD_BYTES)} download limit.`);
+    }
+    yield chunk;
+  }
+}
+
+async function spoolToDisk(
+  head: Buffer,
+  rest: IncomingMessage,
+  source: string,
+): Promise<{ path: string; size: number; dispose: () => Promise<void> }> {
+  const dir = await mkdtemp(join(tmpdir(), 'adaptlypost-media-'));
+  const dispose = () => rm(dir, { recursive: true, force: true });
+  const path = join(dir, 'media');
+  try {
+    await pipeline(Readable.from(capped(head, rest, source)), createWriteStream(path));
+    return { path, size: (await stat(path)).size, dispose };
+  } catch (error) {
+    rest.destroy();
+    await dispose();
+    throw error;
+  }
+}
+
+export async function openPublicMedia(sourceUrl: string, fileName?: string): Promise<MediaStream> {
   const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
   let url = parsePublicUrl(sourceUrl);
 
@@ -312,14 +349,10 @@ export async function openPublicMedia(sourceUrl: string): Promise<MediaStream> {
       throw new Error(`Failed to download ${source}: HTTP ${status}`);
     }
 
+    const name = fileName ?? url.pathname;
     const declared = Number(res.headers['content-length']);
-    if (!Number.isInteger(declared) || declared <= 0) {
-      res.destroy();
-      throw new Error(
-        `${source} did not declare its size, so it cannot be streamed. Download it yourself and use get_upload_urls.`,
-      );
-    }
-    if (declared > MAX_DOWNLOAD_BYTES) {
+    const sized = Number.isInteger(declared) && declared > 0;
+    if (sized && declared > MAX_DOWNLOAD_BYTES) {
       res.destroy();
       throw new Error(`${source} is ${formatBytes(declared)}, over the ${formatBytes(MAX_DOWNLOAD_BYTES)} download limit.`);
     }
@@ -327,18 +360,40 @@ export async function openPublicMedia(sourceUrl: string): Promise<MediaStream> {
     const head = await readHead(res, SNIFF_BYTES);
     let mimeType: string;
     try {
-      mimeType = requireMediaType(head, source, url.pathname);
-      requireSizeLimit(mimeType, declared, source);
+      mimeType = requireMediaType(head, source, name);
+      if (sized) requireSizeLimit(mimeType, declared, source);
     } catch (error) {
       res.destroy();
       throw error;
     }
 
+    if (sized) {
+      return {
+        url,
+        name,
+        mimeType,
+        contentLength: declared,
+        body: Readable.from(exactLength(head, res, declared, source)),
+        dispose: async () => {
+          res.destroy();
+        },
+      };
+    }
+
+    const spooled = await spoolToDisk(head, res, source);
+    try {
+      requireSizeLimit(mimeType, spooled.size, source);
+    } catch (error) {
+      await spooled.dispose();
+      throw error;
+    }
     return {
       url,
+      name,
       mimeType,
-      contentLength: declared,
-      body: Readable.from(exactLength(head, res, declared, source)),
+      contentLength: spooled.size,
+      body: createReadStream(spooled.path),
+      dispose: spooled.dispose,
     };
   }
 }
@@ -363,8 +418,8 @@ export async function putStream(
   }
 }
 
-export function fileNameFor(url: URL, mimeType: string): string {
-  const lastSegment = url.pathname.split('/').pop() ?? '';
+export function fileNameFor(name: string, mimeType: string): string {
+  const lastSegment = name.split('/').pop() ?? '';
   const stem = lastSegment.replace(/\.[^.]*$/, '').replace(/[^\w.-]+/g, '-').slice(0, 80);
   return `${stem || 'upload'}${EXT_BY_MIME[mimeType]}`;
 }

@@ -357,6 +357,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "accounts:remove": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js accounts:remove --id <account_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "DELETE",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}`,
+    );
+    output(data);
+  },
+
   "instagram:audio": async (args) => {
     const parsed = parseArgs(args);
     const audioType = parsed.type || "music";

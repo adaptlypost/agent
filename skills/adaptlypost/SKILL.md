@@ -6,7 +6,7 @@ description: >
   and read how they performed.
   Covers post creation, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-10-13
+last-updated: 2026-10-20
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -101,6 +101,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js instagram:audio --id <instagram_account_id> [--type music\|original_sound] [--search "keywords"]` | Search Instagram music (the default) or original sounds to add to a Reel. Leave out `--search` for trending audio. Only for accounts with `supportsInstagramAudio: true`. Pass the `audioId` to `post --instagram-audio` |
 | `./scripts/adaptlypost.js pinterest:boards --id <pinterest_account_id>` | List the boards a Pinterest account can pin to, secret boards included, with `id`, `name` and `privacy`. A board belongs to one Pinterest account, so run it for each Pinterest account you post to. Ask the user which board to use and pass its `id` to `post --pinterest-board`, or its name to `--pinterest-board-name` |
 | `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
+| `./scripts/adaptlypost.js accounts:remove --id <id>` | Disconnect an account from the workspace, `unauthorized` ones included. Irreversible: confirm with the user first, naming the account. Pending and recurring posts stop publishing to it, and the user has to connect it again to bring it back |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. `--accounts` is required: the CLI looks up each id with `accounts` and puts it in its platform's connection array (Facebook pages in `pageIds`). `--platforms` defaults to the platforms of those accounts; an account whose platform is missing from `--platforms` stops the command. Optional: `--media-urls` (sets the content type to DOCUMENT, VIDEO or IMAGE from the file extension unless `--type` is given), `--alt-texts` (one per image, separated by `\|`), `--type`, `--document-title` (LinkedIn document posts), `--timezone`, `--tiktok-privacy`, `--platform-text`, plus the per-platform flags in [Post options in the CLI](#post-options-in-the-cli) |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms TWITTER --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms TWITTER --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
@@ -516,6 +517,14 @@ POST /api/v1/social-accounts/<id>/check
 
 Takes the account `id` or a Facebook `pageId`. Facebook pages only (400 for other platforms). Returns `{ id, platform, displayName, pageId, status, unauthorizedReason, checkedAt }`. Needs `accounts.manage`.
 
+### Remove an Account
+
+```
+DELETE /api/v1/social-accounts/<id>
+```
+
+Disconnects the account the same way the Connectors page does: the stored tokens are deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. Works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. Takes the account `id` or a Facebook `pageId`; for Facebook only that page goes, other pages from the same login stay connected. Returns `{ id, platform, displayName, pageId, removed: true }`, or 404 when the workspace does not hold the account. Needs `accounts.manage`. It cannot be undone, so confirm with the user before calling it.
+
 ### Webhooks
 
 ```
@@ -652,7 +661,7 @@ Use these exact names (uppercase) for platforms:
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings; use the API body directly for those
-- The MCP server has no tools for connect links, account checks or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
+- The MCP server has no tools for connect links, account checks, account removal or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing
 - For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance

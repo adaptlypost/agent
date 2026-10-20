@@ -507,7 +507,18 @@ POST   /api/v1/connect-links
 DELETE /api/v1/connect-links/<token>
 ```
 
-Create returns `{ url, token, expiresAt }`: a link that lets someone connect social accounts to this workspace without signing in. Revoke returns `{ success: true }`, or 404 when the token is unknown. Both need `accounts.manage`, which only Admin holds. Treat the link as a secret.
+Create makes a link that lets someone connect social accounts to this workspace without signing in. Send no body for a quick link: every platform, every account in the workspace visible to the client, no limit, and it expires after 7 days. Every body field is optional:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string, up to 80 characters | Label in the dashboard list of links |
+| `visibility` | `PUBLIC` or `PRIVATE` | `PRIVATE` shows the client only the accounts they connected through this link |
+| `allowedPlatforms` | array of platform types | Platforms the client can pick. Omit or send `[]` for every platform |
+| `maxAccounts` | integer, 1 or more | The link stops working once that many accounts are connected through it |
+| `expiresAt` | ISO 8601 date-time with `Z` or an offset | When the link stops working, at least 1 hour and at most 365 days away |
+| `neverExpires` | boolean | `true` keeps the link working until it is revoked. Don't send it with `expiresAt` |
+
+Create returns `{ url, token, expiresAt, name, visibility, allowedPlatforms, maxAccounts }`. `expiresAt` is `null` for a link that never expires. An expiry out of range, or both `expiresAt` and `neverExpires`, answers 400. Revoke returns `{ success: true }`, or 404 when the token is unknown. Both need `accounts.manage`, which only Admin holds. Treat the link as a secret. Only make one that never expires when the user asks for it.
 
 ### Check an Account
 

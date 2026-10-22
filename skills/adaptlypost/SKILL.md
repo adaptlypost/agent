@@ -4,9 +4,9 @@ description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
   Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile via the AdaptlyPost API,
   and read how they performed.
-  Covers post creation, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
+  Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-10-20
+last-updated: 2026-10-22
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -105,6 +105,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER` | Publish now, irreversibly. `--accounts` is required: the CLI looks up each id with `accounts` and puts it in its platform's connection array (Facebook pages in `pageIds`). `--platforms` defaults to the platforms of those accounts; an account whose platform is missing from `--platforms` stops the command. Optional: `--media-urls` (sets the content type to DOCUMENT, VIDEO or IMAGE from the file extension unless `--type` is given), `--alt-texts` (one per image, separated by `\|`), `--type`, `--document-title` (LinkedIn document posts), `--timezone`, `--tiktok-privacy`, `--platform-text`, plus the per-platform flags in [Post options in the CLI](#post-options-in-the-cli) |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms TWITTER --schedule "2026-03-15T09:00:00Z"` | Schedule for a future instant. A past time publishes immediately |
 | `./scripts/adaptlypost.js post --caption "..." --accounts id1 --platforms TWITTER --draft` | Save as DRAFT for review; nothing is published until `posts:publish` |
+| `./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 [any post flags] --dry-run` | Check the post without creating it. Sends the same body to `POST /api/v1/social-posts/validate` and prints the report: `valid`, each account's `status` and `issues`, and `notChecked`. Nothing is created, uploaded or published. See [Check a Post Before Creating It](#check-a-post-before-creating-it) |
 | `./scripts/adaptlypost.js post --caption "{Hi\|Hello} ..." --accounts id1 --platforms LINKEDIN --schedule "2026-03-16T09:00:00Z" --repeat WEEKLY [--repeat-every 2] [--repeat-on MONDAY --repeat-on THURSDAY] [--repeat-until 2026-06-30 \| --repeat-count 10]` | Repeat the post DAILY, WEEKLY, MONTHLY or YEARLY from the first `--schedule`. Repeat `--repeat-on` once per weekday (WEEKLY only). Pick `--repeat-until` or `--repeat-count`, not both; with neither it repeats until paused or deleted. No `--draft`, no TIKTOK. Returns `recurringPostId` |
 | `./scripts/adaptlypost.js posts [--status A,B] [--platform X,Y] [--sort NEWEST\|OLDEST] [--from 2026-03-01] [--to 2026-03-31] [--limit n] [--offset n]` | List posts in the workspace, any status, newest first by default. `--from` and `--to` bound `scheduledAt`, or `createdAt` for posts never scheduled. Use it to find ids and see what is already queued |
 | `./scripts/adaptlypost.js posts:get --id <id>` | One post's full record with per-platform status and errors. Ids outside the workspace return 404 |
@@ -120,6 +121,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js recurring:resume --id <id>` | Continue from the next occurrence after now. Slots missed while paused are skipped |
 | `./scripts/adaptlypost.js recurring:delete --id <id>` | Stop the series for good and delete its upcoming scheduled post. Published posts are kept |
 | `./scripts/adaptlypost.js posts:bulk --file posts.json` | Schedule up to 100 posts, each processed independently. Read every result row |
+| `./scripts/adaptlypost.js posts:bulk --file posts.json --dry-run` | Check every item of the same file with `POST /api/v1/social-posts/bulk/validate` and print one report per item. Nothing is created |
 | `./scripts/adaptlypost.js analytics --from 2026-08-01 --to 2026-08-31 [--platforms A,B]` | Views, likes, comments, shares, followers, posts and engagement rate for the window, each with the change against the previous window of the same length |
 | `./scripts/adaptlypost.js analytics:posts --from ... --to ... [--sort VIEWS] [--limit n] [--page n] [--platforms A,B]` | Per-post metrics for posts published in the window. `--sort VIEWS --limit 5` is a top-posts list; the default sort is `PUBLISHED_AT` |
 | `./scripts/adaptlypost.js analytics:status` | When each account last synced and whether one needs reconnecting for analytics |
@@ -195,6 +197,16 @@ Body: {
 Each platform takes its connection ids in its own array: `linkedinConnectionIds`, `twitterConnectionIds`, `instagramConnectionIds`, `youtubeConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `pinterestConnectionIds`, `googleBusinessConnectionIds`, and `pageIds` for Facebook. On LinkedIn, `text` and `platformTexts[].text` can mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
 
 **Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. For Pinterest, list the account's boards with [Pinterest boards](#pinterest-boards), ask the user which one to use and pass its `id` as `pinterestConfigs[].boardId`, or pass the board's name as `boardName` instead (never both). A `boardName` that no board on the account has, or that several boards share, fails with 400; it never falls back to another board. Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed; leave it out only when the user is happy with that board. Only one account per platform is allowed per post.
+
+A post refused for its content (text too long, a disconnected account, media the platform cannot take, and so on) answers 400 with a machine-readable body:
+
+```
+400 { "statusCode": 400, "error": "Bad Request", "code": "post_validation_failed",
+      "message": "...", "issues": [{ "code": "TEXT_TOO_LONG", "severity": "ERROR",
+      "message": "...", "platform": "TWITTER", "connectionId": "conn_id" }] }
+```
+
+`message` is one string when there is one issue and an array of strings when there are several. Read `issues`: each one names its `platform` and `connectionId` when it belongs to one account. The script prints each issue on its own line. Fix what they name and send the post again; resending it unchanged fails the same way.
 
 `mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile and videos ignore it.
 
@@ -312,6 +324,38 @@ Body: {
 `scheduledAt` must be in the future: that post is the first occurrence and sets the time of day, read in `timezone`. `endsOn` and `maxOccurrences` are mutually exclusive; send neither and the series repeats until paused or deleted. The API answers 400 when `recurrence` comes with `saveAsDraft: true`, with a past or missing `scheduledAt`, with both end fields, with an `endsOn` before the first post, or with `TIKTOK` in `platforms`. Slots that pass while the series is paused are skipped, never published late. X and LinkedIn reject identical text, so put spintax such as `{Hi|Hello}` in the text and each post comes out different.
 
 The response adds `recurringPostId`, and `postId` is the first occurrence. Only the next occurrence of an active series exists as a SCHEDULED post, created about 24 hours ahead. Every post carries `recurringPostId` (the series it belongs to, or null) and `occurrenceAt` (the series slot it fills, unchanged if the post is rescheduled). Deleting that one post skips that date and the series continues.
+
+### Check a Post Before Creating It
+
+```
+POST /api/v1/social-posts/validate        Body: same as Create Post
+POST /api/v1/social-posts/bulk/validate   Body: same as Bulk Schedule
+```
+
+A dry run. The API runs every check Create Post runs, plus several that otherwise only fail at publish time: TikTok creator limits and video length, the YouTube upload quota, expired Instagram and Threads tokens, Mastodon attachment limits, Pinterest boards and X credits on lifetime deals. It creates nothing, uploads nothing and writes nothing. Content problems still answer 200 with a report; only a malformed body is a 400. It needs `posts.draft` and no active plan, so a Contributor key can check a post it cannot schedule.
+
+The single report:
+
+| Field | Meaning |
+|-------|---------|
+| `valid` | `false` when any issue has severity `ERROR`. Create Post would refuse the post |
+| `outcome` | What creating it would do: `PUBLISH_NOW`, `SCHEDULED` (with `scheduledAt`) or `DRAFT` |
+| `requiredPermissions` | The keys creating it would need. A missing one shows up as a `PERMISSION_DENIED` issue |
+| `accounts` | One row per selected account: `platform`, `connectionId`, `accountName`, `status` and `issues`. `status` is `READY`, `WARNING` (goes out, but read the issue) or `BLOCKED` (an `ERROR` stops the post) |
+| `issues` | Problems with the post as a whole, not tied to one account |
+| `notChecked` | What only the platform can decide at publish time, each with a `code` and a `message` (`PLATFORM_PROCESSING`, `DUPLICATE_CONTENT`, `PLATFORM_RATE_LIMITS`, `LIVE_ACCOUNT_ACCESS`, `VIDEO_DURATION`). A valid report is not a guarantee |
+
+Each issue is `{ code, severity, message, platform?, connectionId? }`. Show the user `message`, which is already translated. Codes include `TEXT_TOO_LONG`, `VIDEO_TOO_LARGE`, `ACCOUNT_DISCONNECTED`, `ACCOUNT_TOKEN_EXPIRED`, `MEDIA_NOT_UPLOADED`, `TIKTOK_POSTING_BLOCKED`, `YOUTUBE_UPLOAD_QUOTA_EXHAUSTED`, `PINTEREST_BOARD_NOT_FOUND`, `X_CREDITS_INSUFFICIENT`, `PERMISSION_DENIED`, `SUBSCRIPTION_REQUIRED` and `CHECK_UNAVAILABLE`; more can appear, so never branch on a code you do not know.
+
+The bulk report is `{ valid, totalValid, totalInvalid, results: [{ index, report }] }`, one report per item, where `index` is the item's 0-based position in `posts`.
+
+When to run it:
+
+- Before publishing now or scheduling a post the user approved, when it carries video, goes to TikTok, YouTube, Pinterest or X, or targets several accounts. It finds the problem while the user is still there to fix it, instead of a FAILED platform later.
+- Before a bulk schedule, so a bad item gets fixed instead of failing alone.
+- When Create Post answered 400 `post_validation_failed` and you want the per-account picture after a fix.
+
+Report every `BLOCKED` account and every `ERROR` to the user and fix them before creating the post. A `WARNING` lets the post through; tell the user what it says. Mention `notChecked` in one short line. The dry run is never required: Create Post runs the same checks, so skip it for a plain text post.
 
 ### List Posts
 
@@ -653,6 +697,7 @@ Use these exact names (uppercase) for platforms:
 - **No duplicate content** across multiple accounts on the same platform
 - **Respect rate limits** — don't spam requests
 - **Use draft mode for review** — when in doubt, use `--draft` so the user can review before publishing
+- **Check before you publish.** For a post with video, TikTok, YouTube, Pinterest or X, or a bulk batch, run it with `--dry-run` first and fix every `ERROR` before creating it. A dry run creates nothing, so it needs no confirmation
 - **Publishing confirmation**: Unless the user explicitly asks to "post now" or "publish immediately", always confirm before posting. Creating a draft is safe; posting is irreversible.
 - **Show the whole post before confirming.** Name every account, the timing, each platform's visibility, and every caption including per-platform text. A "yes" covers that one post, not the next.
 - **Unattended runs save drafts.** From cron or any run with nobody to confirm, use `--draft` unless the user set up that exact recurring workflow in advance.
@@ -677,6 +722,6 @@ Use these exact names (uppercase) for platforms:
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`; use the API body directly for those
 - The MCP server has no tools for connect links, account checks, account removal or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
-- Use `--draft` flag when testing to avoid accidental publishing
+- Use `--draft` flag when testing to avoid accidental publishing, or `--dry-run` to check the post without creating anything
 - For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance
 - Analytics refresh every few hours. If the user just published, run `analytics:sync` once, then poll `analytics:status` until `syncInProgress` is false

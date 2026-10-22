@@ -75,6 +75,11 @@ async function request(method, endpoint, body = null) {
 
 function explainDenial(status, data) {
   if (!data || typeof data !== "object") return;
+  if (data.code === "post_validation_failed" && Array.isArray(data.issues)) {
+    error("The post was refused for its content. Fix these and send it again:");
+    for (const issue of data.issues) error(`  ${issueLine(issue)}`);
+    return;
+  }
   if (data.code === "permission_denied") {
     const role = data.role || "unknown";
     error(
@@ -106,6 +111,29 @@ function explainDenial(status, data) {
       "The workspace's plan is not active. Ask the user to renew it; retrying will not help.",
     );
   }
+}
+
+function issueLine(issue) {
+  const where = [issue.platform, issue.connectionId].filter(Boolean).join(" ");
+  return `${issue.severity} ${issue.code}${where ? ` (${where})` : ""}: ${issue.message}`;
+}
+
+function summarizeReport(report) {
+  if (!report || typeof report !== "object") return;
+  if (Array.isArray(report.results)) {
+    info(
+      `Dry run, nothing was created: ${report.totalValid} of ${report.totalValid + report.totalInvalid} posts would go through`,
+    );
+    for (const { index, report: item } of report.results) {
+      if (!item.valid) info(`Post at index ${index} would be refused`);
+    }
+    return;
+  }
+  info(
+    report.valid
+      ? `Dry run, nothing was created: the post would be accepted (${report.outcome})`
+      : "Dry run, nothing was created: the post would be refused",
+  );
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -411,7 +439,7 @@ const COMMANDS = {
     const parsed = parseArgs(args);
     if (!parsed.caption && !parsed.text) {
       error(
-        'Usage: ./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER',
+        'Usage: ./scripts/adaptlypost.js post --caption "..." --accounts id1,id2 --platforms LINKEDIN,TWITTER [--dry-run]',
       );
       process.exit(1);
     }
@@ -502,6 +530,12 @@ const COMMANDS = {
     attachConfigs(body, "youtubeConnectionIds", "youtubeConfigs", "connectionId", buildYouTubeConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
 
+    if (parsed["dry-run"]) {
+      const report = await request("POST", "/api/v1/social-posts/validate", body);
+      summarizeReport(report);
+      output(report);
+      return;
+    }
     const data = await request("POST", "/api/v1/social-posts", body);
     output(data);
   },
@@ -631,7 +665,7 @@ const COMMANDS = {
   "posts:bulk": async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.file) {
-      error("Usage: ./scripts/adaptlypost.js posts:bulk --file posts.json");
+      error("Usage: ./scripts/adaptlypost.js posts:bulk --file posts.json [--dry-run]");
       error(
         "JSON format: { platforms, timezone, posts: [{ text, contentType, scheduledAt }], ...connectionIds }",
       );
@@ -643,6 +677,12 @@ const COMMANDS = {
       process.exit(1);
     }
     const body = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (parsed["dry-run"]) {
+      const report = await request("POST", "/api/v1/social-posts/bulk/validate", body);
+      summarizeReport(report);
+      output(report);
+      return;
+    }
     const data = await request("POST", "/api/v1/social-posts/bulk", body);
     output(data);
   },

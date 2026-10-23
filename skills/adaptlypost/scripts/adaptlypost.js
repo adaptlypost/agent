@@ -250,8 +250,19 @@ function withoutEmpty(config) {
   );
 }
 
+function parseInstagramUserTag(value) {
+  if (!value.trim().startsWith("{")) return { username: value.trim() };
+  try {
+    return JSON.parse(value);
+  } catch {
+    error(`Invalid JSON in --instagram-user-tag: ${value}`);
+    process.exit(1);
+  }
+}
+
 function buildInstagramConfig(args, parsed) {
   const collaborators = parseRepeatedRaw(args, "instagram-collaborator");
+  const userTags = parseRepeatedRaw(args, "instagram-user-tag").map(parseInstagramUserTag);
   const audio = parsed["instagram-audio"]
     ? withoutEmpty({
         audioId: String(parsed["instagram-audio"]),
@@ -265,6 +276,7 @@ function buildInstagramConfig(args, parsed) {
     postType: parsed["instagram-type"] && String(parsed["instagram-type"]).toUpperCase(),
     shareToStory: parsed["instagram-story"] ? true : undefined,
     collaborators: collaborators.length > 0 ? collaborators : undefined,
+    userTags: userTags.length > 0 ? userTags : undefined,
     aiGenerated: parsed["instagram-ai-generated"] ? true : undefined,
     audio,
   });

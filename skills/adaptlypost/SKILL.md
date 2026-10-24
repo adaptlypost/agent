@@ -2,17 +2,17 @@
 name: adaptlypost
 description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
-  Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile via the AdaptlyPost API,
+  Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, and Telegram via the AdaptlyPost API,
   and read how they performed.
   Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-10-22
+last-updated: 2026-10-24
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
 # AdaptlyPost Social Media Skill
 
-Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 11 platforms from a single command, then read the numbers back.
+Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 12 platforms from a single command, then read the numbers back.
 
 > **Freshness check**: If more than 30 days have passed since the `last-updated` date above, inform the user that this skill may be outdated and point them to the update options below.
 
@@ -134,7 +134,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | Flag | Sends |
 |------|-------|
 | `--first-comment PLATFORM=text` (repeatable, also on `posts:update`) | `firstComments`. LINKEDIN, TWITTER, THREADS, BLUESKY, MASTODON and YOUTUBE only, one per platform |
-| `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only |
+| `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only. TELEGRAM takes a URL only |
 | `--aspect-ratio PLATFORM=RATIO[:PAD]` (repeatable) | `platformAspectRatios`, e.g. `INSTAGRAM=PORTRAIT` or `TIKTOK=VERTICAL:PAD`. IMAGE and CAROUSEL posts only |
 | `--twitter-keep-links` (also `posts:update --twitter-keep-links false`) | `twitterKeepLinks` |
 | `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3), `--instagram-user-tag <username or JSON>` (repeatable, up to 20), `--instagram-ai-generated` | `instagramConfigs[].postType`, `shareToStory`, `collaborators`, `userTags`, `aiGenerated`. A tag is a username or `{"username":"...","x":0.5,"y":0.3}` |
@@ -167,7 +167,9 @@ Stop on that response. See [Roles and the 403](#roles-and-the-403).
 GET /api/v1/social-accounts
 ```
 
-Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl`, `status` per account. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. For a Google Business Profile location (`platform: GOOGLE_BUSINESS`) `displayName` is the location title and `username` is empty. Instagram accounts carry `supportsInstagramAudio`, true when the account was connected through Facebook and can add audio to Reels. Telegram chats are not listed: Telegram posts can only be created in the AdaptlyPost app. Store these IDs, you need them for every post.
+Returns `{ accounts: [...] }` with `id`, `platform`, `displayName`, `username`, `avatarUrl`, `status` per account. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. For a Google Business Profile location (`platform: GOOGLE_BUSINESS`) `displayName` is the location title and `username` is empty. Instagram accounts carry `supportsInstagramAudio`, true when the account was connected through Facebook and can add audio to Reels. A Telegram channel or group (`platform: TELEGRAM`) has the chat title as `displayName`, its public @username without the `@` as `username` (empty for a private chat) and an empty `avatarUrl`. Store these IDs, you need them for every post.
+
+The API cannot connect a Telegram chat. The user connects it in the AdaptlyPost app on the Connectors page: add the AdaptlyPost bot to the channel or group, then send it the connect code the page shows.
 
 `status` is `active` or `unauthorized`. An `unauthorized` account is still listed but its platform rejected the stored token; `unauthorizedReason` carries the platform's message. Do not post to it: Create Post refuses it with 400 until the user reconnects it in the dashboard. `POST /api/v1/social-accounts/:id/check` re-probes the platform now and returns the fresh `status` (Facebook pages only; they are also re-checked automatically twice a day).
 
@@ -194,7 +196,7 @@ Body: {
 }
 ```
 
-Each platform takes its connection ids in its own array: `linkedinConnectionIds`, `twitterConnectionIds`, `instagramConnectionIds`, `youtubeConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `pinterestConnectionIds`, `googleBusinessConnectionIds`, and `pageIds` for Facebook. On LinkedIn, `text` and `platformTexts[].text` can mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
+Each platform takes its connection ids in its own array: `linkedinConnectionIds`, `twitterConnectionIds`, `instagramConnectionIds`, `youtubeConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `pinterestConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, and `pageIds` for Facebook. On LinkedIn, `text` and `platformTexts[].text` can mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
 
 **Important**: TikTok requires `tiktokConfigs` with `privacyLevel` for each connection. Options: `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`. For Pinterest, list the account's boards with [Pinterest boards](#pinterest-boards), ask the user which one to use and pass its `id` as `pinterestConfigs[].boardId`, or pass the board's name as `boardName` instead (never both). A `boardName` that no board on the account has, or that several boards share, fails with 400; it never falls back to another board. Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed; leave it out only when the user is happy with that board. Only one account per platform is allowed per post.
 
@@ -208,7 +210,7 @@ A post refused for its content (text too long, a disconnected account, media the
 
 `message` is one string when there is one issue and an array of strings when there are several. Read `issues`: each one names its `platform` and `connectionId` when it belongs to one account. The script prints each issue on its own line. Fix what they name and send the post again; resending it unchanged fails the same way.
 
-`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile and videos ignore it.
+`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
 
 Per-platform configs, each an array with one entry per connection:
 
@@ -264,9 +266,23 @@ Body: {
 }
 ```
 
+**Telegram**: put the channel and group ids in `telegramConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message right after the media. A video takes an image thumbnail through `platformThumbnails` with `thumbnailUrl`. Telegram has no config object, first comments, threads, image shapes or analytics.
+
+```
+POST /api/v1/social-posts
+Body: {
+  "platforms": ["TELEGRAM"],
+  "contentType": "IMAGE",
+  "text": "New release notes are out",
+  "timezone": "UTC",
+  "telegramConnectionIds": ["conn_id"],
+  "mediaUrls": ["https://cdn.adaptlypost.com/.../release.png"]
+}
+```
+
 **First comments**: `firstComments: [{ "platform": "LINKEDIN", "text": "..." }]` posts a comment from the same account right after the post goes out, one entry per platform. Limits: LINKEDIN 1250 characters, TWITTER 280 (as a reply), THREADS 500 (reply), BLUESKY 300 (reply), MASTODON 500 (reply), YOUTUBE 10000. Any other platform, a platform the post does not go to, empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories return 400. The comment goes out about 10 seconds after the post (60 on YouTube) and is retried up to 3 times; X comments are not retried and, on a lifetime-deal account, cost credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry.
 
-**Per-platform thumbnails**: `platformThumbnails: [{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` gives one platform of a `VIDEO` post its own thumbnail. YOUTUBE, FACEBOOK and LINKEDIN take an image (`thumbnailUrl`, an https URL or image data URI); INSTAGRAM and PINTEREST take an image or a frame (`thumbnailTimestampMs`, the image wins when both are sent); TIKTOK takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`; the post-level frame is used by INSTAGRAM, PINTEREST and TIKTOK. Other platforms, non-video posts, Facebook and Instagram stories, duplicates and an entry the platform cannot use return 400.
+**Per-platform thumbnails**: `platformThumbnails: [{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` gives one platform of a `VIDEO` post its own thumbnail. YOUTUBE, FACEBOOK, LINKEDIN and TELEGRAM take an image (`thumbnailUrl`, an https URL or image data URI); INSTAGRAM and PINTEREST take an image or a frame (`thumbnailTimestampMs`, the image wins when both are sent); TIKTOK takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`; the post-level frame is used by INSTAGRAM, PINTEREST and TIKTOK. Other platforms, non-video posts, Facebook and Instagram stories, duplicates and an entry the platform cannot use return 400.
 
 **Image shape per platform**: `platformAspectRatios: [{ "platform": "INSTAGRAM", "aspectRatio": "PORTRAIT", "fit": "CROP" }]` reframes every image of an `IMAGE` or `CAROUSEL` post on one platform. `aspectRatio` is `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes `SQUARE`, `PORTRAIT` and `LANDSCAPE`; TIKTOK takes all four. `fit` is `CROP` (the default, cut from the center) or `PAD` (keep the whole image and fill the rest with a blurred copy). Other platforms, video posts, Instagram stories and duplicates return 400.
 
@@ -289,7 +305,7 @@ Body: {
 
 `linkedinConfigs` is accepted on create and update. Bulk scheduling does not take `DOCUMENT` posts; create them one at a time.
 
-`CAROUSEL` takes 2 or more items: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook and Threads, 20 on LinkedIn and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel.
+`CAROUSEL` takes 2 or more items: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel.
 
 Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. `timezone` is stored for display and does not shift `scheduledAt`.
 
@@ -365,7 +381,7 @@ Report every `BLOCKED` account and every `ERROR` to the user and fix them before
 GET /api/v1/social-posts?limit=20&offset=0&statuses=SCHEDULED&statuses=DRAFT&platforms=LINKEDIN&platforms=TWITTER&sortOrder=NEWEST&startDate=2026-03-01&endDate=2026-03-31
 ```
 
-Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms` (`TELEGRAM` matches posts created in the app), `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`). Any other query parameter returns 400 naming it. `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
+Params: `limit` (1-100, default 20), `offset`, `statuses` (COMPLETED/DRAFT/FAILED/PARTIAL_FAILURE/PENDING/PUBLISHING/SCHEDULED), `platforms`, `sortOrder` (NEWEST, the default, or OLDEST), `startDate`, `endDate`. Repeat the `statuses` and `platforms` keys for multiple values (e.g. `platforms=LINKEDIN&platforms=TWITTER`). Any other query parameter returns 400 naming it. `startDate`/`endDate` bound `scheduledAt`, or `createdAt` for posts that were never scheduled.
 
 Returns `{ posts, total, hasMore }` for every post in the workspace; page with `offset` while `hasMore` is true. Use this to find ids; use Get Post for one record and Post Results for one post's per-platform outcome.
 
@@ -375,7 +391,7 @@ Returns `{ posts, total, hasMore }` for every post in the workspace; page with `
 GET /api/v1/social-posts/<id>
 ```
 
-Returns the full post record with top-level `mediaUrls` and a `platforms` array carrying each target's status, `errorMessage` and, once published, `platformPostId` and a clickable `postUrl` (every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page). Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Platform entries also echo what was set: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`, absent when none), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`; `thumbnailUrl` and `thumbnailTimestampMs` overrides; `mediaAspectRatio` and `mediaAspectRatioFit`; `instagramCollaborators`, `instagramUserTags`, `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`; `facebookTextFormatPresetId`, `facebookImageLayout`, `facebookCarouselCards`; `twitterKeepLinks`; and the `googleBusiness*` fields. Posts created in the app can include `TELEGRAM` entries. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
+Returns the full post record with top-level `mediaUrls` and a `platforms` array carrying each target's status, `errorMessage` and, once published, `platformPostId` and a clickable `postUrl` (every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page). Each platform entry also has `mediaUrls` and `previewUrls`. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`. Platform entries also echo what was set: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`, absent when none), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`; `thumbnailUrl` and `thumbnailTimestampMs` overrides; `mediaAspectRatio` and `mediaAspectRatioFit`; `instagramCollaborators`, `instagramUserTags`, `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`; `facebookTextFormatPresetId`, `facebookImageLayout`, `facebookCarouselCards`; `twitterKeepLinks`; and the `googleBusiness*` fields. Ids outside the workspace return 404 `Post not found or access denied`. Use Post Results instead when you only need outcomes and `platformId`s for a retry.
 
 ### Update Post
 
@@ -443,7 +459,7 @@ Body: {
 }
 ```
 
-Max 100 posts per bulk request. Every item shares `platforms`, `timezone`, the connection-id arrays, and platform configs; each item brings its own `text`, `contentType`, `scheduledAt`, and media. The shared part also takes `googleBusinessConnectionIds` and `googleBusinessConfigs`. An item may carry its own `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `pinterestConfigs` or `googleBusinessConfigs`, which replace the shared ones for that item, plus its own `firstComments`, `platformThumbnails` and `platformAspectRatios`. Bulk takes no `linkedinConfigs`, no `twitterKeepLinks` and no `DOCUMENT` items. The permission check covers the whole batch before anything is created: all items in the future need `posts.schedule`, and any item with a past `scheduledAt` also needs `posts.publish`. Items are processed independently, so one bad item fails alone. Returns `{ totalScheduled, totalFailed, results: [{ postId, success, isScheduled, scheduledAt, errorMessage }] }` in input order; read every row. A past `scheduledAt` publishes that item immediately. There is no draft mode; use Create Post for a draft.
+Max 100 posts per bulk request. Every item shares `platforms`, `timezone`, the connection-id arrays, and platform configs; each item brings its own `text`, `contentType`, `scheduledAt`, and media. The shared part also takes `googleBusinessConnectionIds`, `googleBusinessConfigs` and `telegramConnectionIds`. An item may carry its own `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `pinterestConfigs` or `googleBusinessConfigs`, which replace the shared ones for that item, plus its own `firstComments`, `platformThumbnails` and `platformAspectRatios`. Bulk takes no `linkedinConfigs`, no `twitterKeepLinks` and no `DOCUMENT` items. The permission check covers the whole batch before anything is created: all items in the future need `posts.schedule`, and any item with a past `scheduledAt` also needs `posts.publish`. Items are processed independently, so one bad item fails alone. Returns `{ totalScheduled, totalFailed, results: [{ postId, success, isScheduled, scheduledAt, errorMessage }] }` in input order; read every row. A past `scheduledAt` publishes that item immediately. There is no draft mode; use Create Post for a draft.
 
 ### Recurring Posts
 
@@ -583,7 +599,7 @@ Takes the account `id` or a Facebook `pageId`. Facebook pages only (400 for othe
 DELETE /api/v1/social-accounts/<id>
 ```
 
-Disconnects the account the same way the Connectors page does: the stored tokens are deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. Works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. Takes the account `id` or a Facebook `pageId`; for Facebook only that page goes, other pages from the same login stay connected. Returns `{ id, platform, displayName, pageId, removed: true }`, or 404 when the workspace does not hold the account. Needs `accounts.manage`. It cannot be undone, so confirm with the user before calling it.
+Disconnects the account the same way the Connectors page does: the stored tokens are deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. Works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. Takes the account `id` or a Facebook `pageId`; for Facebook only that page goes, other pages from the same login stay connected. A removed Telegram chat stops getting posts, but the bot stays in the chat until someone removes it in Telegram. Returns `{ id, platform, displayName, pageId, removed: true }`, or 404 when the workspace does not hold the account. Needs `accounts.manage`. It cannot be undone, so confirm with the user before calling it.
 
 ### Webhooks
 
@@ -666,6 +682,8 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `generate_image` | Queue an image and get `{ jobId, sessionId, status }` at once. 2 credits standard, 4 premium, refunded on failure |
 | `get_image_job` | Poll an image job until `completed` (public `imageUrl`, ready for `mediaUrls`) or `failed` (`error`) |
 
+The MCP server does not take Telegram targets yet, so post to Telegram with the CLI or the REST API.
+
 Over MCP with an OAuth sign-in, the user may belong to several workspaces. Call `list_workspaces` when they name a workspace, brand, client or organization, or when accounts or posts they expect are missing, and pass that id as `workspaceId` on every call about it: account, post and upload ids from one workspace do not exist in another, and the role can differ per workspace. A 403 with `code: workspace_access_denied` means the id is not one this sign-in reaches; pick one from `list_workspaces`.
 
 ## Platform Names
@@ -683,8 +701,7 @@ Use these exact names (uppercase) for platforms:
 - `BLUESKY`: Bluesky
 - `MASTODON`: Mastodon
 - `GOOGLE_BUSINESS`: Google Business Profile (updates, events, offers)
-
-`TELEGRAM` shows up on posts created in the AdaptlyPost app and works as a filter, but the API cannot post to Telegram.
+- `TELEGRAM`: Telegram (channels and groups)
 
 ## Content Types
 
@@ -722,7 +739,7 @@ Use these exact names (uppercase) for platforms:
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`; use the API body directly for those
-- The MCP server has no tools for connect links, account checks, account removal or webhooks; use the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
+- The MCP server cannot post to Telegram yet and has no tools for connect links, account checks, account removal or webhooks; use the CLI or the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing, or `--dry-run` to check the post without creating anything
 - For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance

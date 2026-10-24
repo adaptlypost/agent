@@ -2,9 +2,9 @@
 
 [![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
 
-Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile from a single command, and to read how those posts performed.
+Give your AI agent the ability to post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, and Telegram from a single command, and to read how those posts performed.
 
-**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile
+**Supports:** Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram
 
 ## Install
 
@@ -40,7 +40,7 @@ An operation outside the role answers 403 with `code: permission_denied`; the sk
 
 Once installed, your AI agent can:
 
-- **Post** to 11 platforms simultaneously with per-platform caption overrides, first comments, thumbnails and image shapes
+- **Post** to 12 platforms simultaneously with per-platform caption overrides, first comments, thumbnails and image shapes
 - **Schedule** posts for any future time
 - **Bulk schedule** up to 100 posts at once
 - **Check results** per-platform success/failure with error details
@@ -58,7 +58,7 @@ Agent: Done. Post scheduled for tomorrow at 9:00 AM on your LinkedIn account.
 
 ## Alternative: MCP
 
-For deeper integration with Claude Desktop, Cursor, or other MCP-compatible clients, use the AdaptlyPost MCP server:
+For deeper integration with Claude Desktop, Cursor, or other MCP-compatible clients, use the AdaptlyPost MCP server (it cannot post to Telegram yet; use the skill for that):
 
 ```json
 {

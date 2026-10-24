@@ -848,6 +848,7 @@ const CONNECTION_FIELDS = {
   MASTODON: "mastodonConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
+  TELEGRAM: "telegramConnectionIds",
   FACEBOOK: "pageIds",
 };
 

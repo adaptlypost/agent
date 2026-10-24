@@ -1,0 +1,19 @@
+skills/adaptlypost/SKILL.md
+  s_ca778be6fb24e2::t_0dc13cf141b8f2 136,283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ded20088af4abf258f8896da74852930b5a0a4a",
+  "prompts": {},
+  "sessions": {
+    "s_ca778be6fb24e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fea8a942-0662-453f-9838-beab267a608e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

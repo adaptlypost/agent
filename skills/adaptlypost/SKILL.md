@@ -133,7 +133,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 
 | Flag | Sends |
 |------|-------|
-| `--first-comment PLATFORM=text` (repeatable, also on `posts:update`) | `firstComments`. LINKEDIN, TWITTER, THREADS, BLUESKY, MASTODON and YOUTUBE only, one per platform |
+| `--first-comment PLATFORM=text` (repeatable, also on `posts:update`) | `firstComments`. LINKEDIN, TWITTER, THREADS, BLUESKY, MASTODON, YOUTUBE, FACEBOOK and INSTAGRAM only, one per platform |
 | `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only. TELEGRAM takes a URL only |
 | `--aspect-ratio PLATFORM=RATIO[:PAD]` (repeatable) | `platformAspectRatios`, e.g. `INSTAGRAM=PORTRAIT` or `TIKTOK=VERTICAL:PAD`. IMAGE and CAROUSEL posts only |
 | `--twitter-keep-links` (also `posts:update --twitter-keep-links false`) | `twitterKeepLinks` |
@@ -280,7 +280,7 @@ Body: {
 }
 ```
 
-**First comments**: `firstComments: [{ "platform": "LINKEDIN", "text": "..." }]` posts a comment from the same account right after the post goes out, one entry per platform. Limits: LINKEDIN 1250 characters, TWITTER 280 (as a reply), THREADS 500 (reply), BLUESKY 300 (reply), MASTODON 500 (reply), YOUTUBE 10000. Any other platform, a platform the post does not go to, empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories return 400. The comment goes out about 10 seconds after the post (60 on YouTube) and is retried up to 3 times; X comments are not retried and, on a lifetime-deal account, cost credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry.
+**First comments**: `firstComments: [{ "platform": "LINKEDIN", "text": "..." }]` posts a comment from the same account right after the post goes out, one entry per platform. Limits: LINKEDIN 1250 characters, TWITTER 280 (as a reply), THREADS 500 (reply), BLUESKY 300 (reply), MASTODON 500 (reply), YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200. Any other platform, a platform the post does not go to, empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories return 400. The comment goes out about 10 seconds after the post (60 on YouTube) and is retried up to 3 times; X comments are not retried and, on a lifetime-deal account, cost credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect.
 
 **Per-platform thumbnails**: `platformThumbnails: [{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` gives one platform of a `VIDEO` post its own thumbnail. YOUTUBE, FACEBOOK, LINKEDIN and TELEGRAM take an image (`thumbnailUrl`, an https URL or image data URI); INSTAGRAM and PINTEREST take an image or a frame (`thumbnailTimestampMs`, the image wins when both are sent); TIKTOK takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`; the post-level frame is used by INSTAGRAM, PINTEREST and TIKTOK. Other platforms, non-video posts, Facebook and Instagram stories, duplicates and an entry the platform cannot use return 400.
 

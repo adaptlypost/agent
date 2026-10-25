@@ -1,0 +1,26 @@
+mcp-server/src/index.ts
+  s_d4ab7edfd5b24c::t_a86e4afcc5893f 2289-2350
+  s_d4ab7edfd5b24c::t_baae7d747d926a 2435-2444
+  s_d4ab7edfd5b24c::t_54b6e08a2b4b45 8
+mcp-server/src/upload-widget.ts
+  s_d4ab7edfd5b24c::t_e962f2d78e663b 268-270
+  s_d4ab7edfd5b24c::t_a6bfc807ed0aee 142-143
+  s_d4ab7edfd5b24c::t_30b941e29ee259 333-369,371-372,377-378
+  s_d4ab7edfd5b24c::t_9c8f87c22e57bd 123-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "169b9cfb750ab38cd11338b9f794731563cd7311",
+  "prompts": {},
+  "sessions": {
+    "s_d4ab7edfd5b24c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb10d9ea-319b-493c-95d7-6ff90862247b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+mcp-server/src/index.ts
+  s_1af4bb1e80c126::t_a1988c48877e6f 68-70
+  s_1af4bb1e80c126::t_4687b97e386165 1071
+  s_1af4bb1e80c126::t_996fe11379b31d 1044,1047-1050
+  s_1af4bb1e80c126::t_c5fd9c6a860204 2367-2371
+  s_1af4bb1e80c126::t_6745442aceb2af 664,667
+  s_1af4bb1e80c126::t_20dd3fbcc9cea5 2250-2287
+mcp-server/src/upload-widget.ts
+  s_1af4bb1e80c126::t_3566db4d938d9b 74
+  s_1af4bb1e80c126::t_ba7fddfda28591 277-279,282-283,285-286,291-337
+  s_1af4bb1e80c126::t_5ed0f4be933658 137,139
+  s_1af4bb1e80c126::t_e3b20177b7ca6c 365,367
+  s_1af4bb1e80c126::t_17f08483defc76 338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9fe5fdb0521231954a12872aa1838cccf0cf885d",
+  "prompts": {},
+  "sessions": {
+    "s_1af4bb1e80c126": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f197e9f-0630-48d0-93a7-21d682453fb2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

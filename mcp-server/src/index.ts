@@ -6,8 +6,13 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z, type ZodRawShape, type ZodTypeAny } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import {
   DOCUMENT_MIME_TYPES,
@@ -2348,6 +2353,181 @@ function handleFileImportStatus(importId: string, res: ServerResponse): void {
   sendJson(res, 200, state);
 }
 
+const UPLOAD_SESSION_PATH = '/upload-session';
+const UPLOAD_CHUNK_BYTES = 10 * 1024 * 1024;
+const UPLOAD_SESSION_TTL_MS = 60 * 60 * 1000;
+
+type UploadSession = {
+  client: RestClient;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  dir: string;
+  path: string;
+  received: number;
+  nextIndex: number;
+  writing: boolean;
+  startedAt: number;
+  expiry: NodeJS.Timeout;
+};
+
+const uploadSessions = new Map<string, UploadSession>();
+
+function discardUploadSession(id: string): void {
+  const session = uploadSessions.get(id);
+  if (!session) return;
+  uploadSessions.delete(id);
+  clearTimeout(session.expiry);
+  void rm(session.dir, { recursive: true, force: true });
+}
+
+async function handleUploadSessionStart(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const ticket = await openUploadTicket(String(req.headers[UPLOAD_TICKET_HEADER] ?? ''));
+  if (!ticket) {
+    req.resume();
+    sendJson(res, 401, { error: 'This upload box expired. Ask for a new one.' });
+    return;
+  }
+
+  try {
+    const parsed = UploadUrlRequest.safeParse(await readJsonBody(req));
+    if (!parsed.success) throw new Error('The upload request is malformed.');
+    const { fileName, fileSize, head } = parsed.data;
+    const mimeType = requireStreamedMedia(Buffer.from(head, 'base64'), fileName, fileSize);
+    const dir = await mkdtemp(join(tmpdir(), 'upload-'));
+    const path = join(dir, 'file');
+    await writeFile(path, '');
+    const id = randomUUID();
+    uploadSessions.set(id, {
+      client: new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId),
+      fileName,
+      mimeType,
+      size: fileSize,
+      dir,
+      path,
+      received: 0,
+      nextIndex: 0,
+      writing: false,
+      startedAt: Date.now(),
+      expiry: setTimeout(() => discardUploadSession(id), UPLOAD_SESSION_TTL_MS).unref(),
+    });
+    console.error(`upload-session start bytes=${fileSize}`);
+    sendJson(res, 201, { sessionId: id, chunkBytes: UPLOAD_CHUNK_BYTES });
+  } catch (error) {
+    req.resume();
+    sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleUploadChunk(
+  session: UploadSession,
+  index: number,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (index < session.nextIndex) {
+    req.resume();
+    sendJson(res, 200, { received: session.received });
+    return;
+  }
+  if (index > session.nextIndex || session.writing) {
+    req.resume();
+    sendJson(res, 409, { error: 'Upload parts arrived out of order.', nextIndex: session.nextIndex });
+    return;
+  }
+
+  session.writing = true;
+  let count = 0;
+  async function* limited() {
+    for await (const piece of req as AsyncIterable<Buffer>) {
+      count += piece.length;
+      if (count > UPLOAD_CHUNK_BYTES || session.received + count > session.size) {
+        throw new Error('This upload part is larger than announced.');
+      }
+      yield piece;
+    }
+  }
+
+  try {
+    await pipeline(limited(), createWriteStream(session.path, { flags: 'r+', start: session.received }));
+    session.received += count;
+    session.nextIndex += 1;
+    sendJson(res, 200, { received: session.received });
+  } catch (error) {
+    req.resume();
+    sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    session.writing = false;
+  }
+}
+
+async function readFileHead(path: string): Promise<Buffer> {
+  const file = await open(path);
+  try {
+    const head = Buffer.alloc(SNIFF_BYTES);
+    const { bytesRead } = await file.read(head, 0, SNIFF_BYTES, 0);
+    return head.subarray(0, bytesRead);
+  } finally {
+    await file.close();
+  }
+}
+
+async function storeUploadSession(session: UploadSession): Promise<Uploaded> {
+  const mimeType = requireStreamedMedia(await readFileHead(session.path), session.fileName, session.size);
+  if (mimeType !== session.mimeType) throw new Error(`${session.fileName} is not the file that was announced.`);
+  const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+    session.client,
+    fileNameFor(session.fileName, mimeType),
+    mimeType,
+    session.size,
+  );
+  await putStream(uploadUrl, { mimeType, contentLength: session.size, body: createReadStream(session.path) });
+  return { publicUrl, key };
+}
+
+function handleUploadComplete(id: string, session: UploadSession, req: IncomingMessage, res: ServerResponse): void {
+  req.resume();
+  if (session.writing || session.received !== session.size) {
+    sendJson(res, 409, {
+      error: `The upload is incomplete: ${formatBytes(session.received)} of ${formatBytes(session.size)} arrived.`,
+    });
+    return;
+  }
+
+  uploadSessions.delete(id);
+  clearTimeout(session.expiry);
+  const work = storeUploadSession(session);
+  work.then(
+    () => console.error(`upload-session stored bytes=${session.size} ms=${Date.now() - session.startedAt}`),
+    (error) =>
+      console.error(
+        `upload-session failed bytes=${session.size} error=${error instanceof Error ? error.message : String(error)}`,
+      ),
+  );
+  const importId = trackFileImport(work.finally(() => rm(session.dir, { recursive: true, force: true })));
+  sendJson(res, 202, { importId });
+}
+
+async function routeUploadSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const [, , id, action, index] = (req.url ?? '').split('?')[0].split('/');
+  const session = id ? uploadSessions.get(id) : undefined;
+  if (!session) {
+    req.resume();
+    sendJson(res, 404, { error: 'This upload expired. Upload the file again.' });
+    return;
+  }
+  if (action === 'chunks' && /^\d+$/.test(index ?? '')) {
+    await handleUploadChunk(session, Number(index), req, res);
+    return;
+  }
+  if (action === 'complete' && index === undefined) {
+    handleUploadComplete(id, session, req, res);
+    return;
+  }
+  req.resume();
+  sendJson(res, 404, { error: 'Not found' });
+}
+
 // The MCP SDK 406s unless Accept lists both types. `@hono/node-server` v1 rebuilds the
 // request from rawHeaders, so headers.accept alone is not enough.
 const forceStreamableAccept = (req: IncomingMessage) => {
@@ -2439,6 +2619,16 @@ async function main() {
 
       if (req.url?.startsWith(`${FILE_IMPORT_PATH}/`) && req.method === 'GET') {
         handleFileImportStatus(req.url.slice(FILE_IMPORT_PATH.length + 1), res);
+        return;
+      }
+
+      if (req.url === UPLOAD_SESSION_PATH && req.method === 'POST') {
+        await handleUploadSessionStart(req, res);
+        return;
+      }
+
+      if (req.url?.startsWith(`${UPLOAD_SESSION_PATH}/`) && req.method === 'POST') {
+        await routeUploadSession(req, res);
         return;
       }
 

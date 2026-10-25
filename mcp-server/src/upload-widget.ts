@@ -138,7 +138,7 @@ export function uploadWidgetHtml(serverOrigin: string): string {
 (() => {
   const ORIGIN = ${JSON.stringify(serverOrigin)};
   const MAX_BYTES = 250 * 1024 * 1024;
-  const RELAY_MAX_BYTES = 95 * 1024 * 1024;
+  const CHUNK_ATTEMPTS = 3;
   const IMPORT_POLL_MS = 2000;
   const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
   const PROTOCOL_VERSION = '2026-01-26';
@@ -279,17 +279,17 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     return box;
   }
 
-  class TransferBlocked extends Error {}
+  class ConnectionLost extends Error {}
 
-  function transfer(method, url, headers, file, view) {
+  function transfer(url, body, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open(method, url);
-      Object.keys(headers).forEach((name) => xhr.setRequestHeader(name, headers[name]));
-      xhr.upload.onprogress = (event) => { if (event.lengthComputable) view.progress(event.loaded / event.total); };
+      xhr.open('POST', url);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(event.loaded); };
       xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
-      xhr.onerror = () => reject(new TransferBlocked('Upload failed. Check your connection and try again.'));
-      xhr.send(file);
+      xhr.onerror = () => reject(new ConnectionLost('Upload failed. Check your connection and try again.'));
+      xhr.send(body);
     });
   }
 
@@ -297,47 +297,38 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     try { return JSON.parse(text) || {}; } catch { return {}; }
   }
 
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
   async function readHead(file) {
     const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
     return btoa(String.fromCharCode.apply(null, bytes));
   }
 
-  async function uploadTarget(file) {
-    const response = await fetch(ORIGIN + '/upload-url', {
+  async function startSession(file) {
+    const response = await fetch(ORIGIN + '/upload-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Upload-Ticket': await ticket() },
       body: JSON.stringify({ fileName: file.name, fileSize: file.size, head: await readHead(file) }),
     });
     const body = parse(await response.text());
-    if (!response.ok || !body.uploadUrl) throw new Error(body.error || 'Could not start the upload (' + response.status + ')');
+    if (!response.ok || !body.sessionId) throw new Error(body.error || 'Could not start the upload (' + response.status + ')');
     return body;
   }
 
-  async function putToStorage(file, target, view) {
-    const { status } = await transfer('PUT', target.uploadUrl, { 'Content-Type': target.mimeType }, file, view);
-    if (status < 200 || status >= 300) throw new Error('Upload failed (' + status + ')');
-    return target.publicUrl;
+  async function sendChunk(sessionUrl, index, chunk, onProgress) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { status, text } = await transfer(sessionUrl + '/chunks/' + index, chunk, onProgress);
+        if (status >= 200 && status < 300) return;
+        const body = parse(text);
+        if (status < 500 || attempt >= CHUNK_ATTEMPTS) throw new Error(body.error || 'Upload failed (' + status + ')');
+      } catch (error) {
+        if (!(error instanceof ConnectionLost) || attempt >= CHUNK_ATTEMPTS) throw error;
+      }
+      onProgress(0);
+      await wait(attempt * 1000);
+    }
   }
-
-  async function relayThroughServer(file, view) {
-    const { status, text } = await transfer('POST', ORIGIN + '/upload', {
-      'X-Upload-Ticket': await ticket(),
-      'X-File-Name': encodeURIComponent(file.name),
-      'Content-Type': file.type || 'application/octet-stream',
-    }, file, view);
-    const body = parse(text);
-    if (status < 200 || status >= 300 || !body.publicUrl) throw new Error(body.error || 'Upload failed (' + status + ')');
-    return body.publicUrl;
-  }
-
-  function hostFiles() {
-    const openai = window.openai;
-    return openai && typeof openai.uploadFile === 'function' && typeof openai.getFileDownloadUrl === 'function'
-      ? openai
-      : undefined;
-  }
-
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function awaitImport(importId) {
     const deadline = Date.now() + IMPORT_TIMEOUT_MS;
@@ -352,33 +343,21 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     throw new Error('Saving the file took too long. Try again.');
   }
 
-  async function storeThroughHost(host, file, view) {
-    view.busy('Uploading');
-    const { fileId } = await host.uploadFile(file);
-    const { downloadUrl } = await host.getFileDownloadUrl({ fileId });
-    view.busy('Saving to AdaptlyPost');
-    const response = await fetch(ORIGIN + '/import-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Ticket': await ticket() },
-      body: JSON.stringify({ downloadUrl, fileId, fileName: file.name }),
-    });
-    const body = parse(await response.text());
-    if (!response.ok || !body.importId) throw new Error(body.error || 'Could not start the upload (' + response.status + ')');
-    return awaitImport(body.importId);
-  }
-
   async function store(file, view) {
-    const host = hostFiles();
-    if (host) return storeThroughHost(host, file, view);
-    const target = await uploadTarget(file);
-    try {
-      return await putToStorage(file, target, view);
-    } catch (error) {
-      if (!(error instanceof TransferBlocked)) throw error;
-      if (file.size > RELAY_MAX_BYTES) throw new Error('This app blocks direct uploads over 95 MB. Send a public link to the file instead.');
-      view.progress(0);
-      return relayThroughServer(file, view);
+    const { sessionId, chunkBytes } = await startSession(file);
+    const sessionUrl = ORIGIN + '/upload-session/' + encodeURIComponent(sessionId);
+    view.progress(0);
+    for (let index = 0, sent = 0; sent < file.size; index++) {
+      const chunk = file.slice(sent, sent + chunkBytes);
+      const offset = sent;
+      await sendChunk(sessionUrl, index, chunk, (loaded) => view.progress((offset + loaded) / file.size));
+      sent += chunk.size;
     }
+    view.busy('Saving to AdaptlyPost');
+    const response = await fetch(sessionUrl + '/complete', { method: 'POST' });
+    const body = parse(await response.text());
+    if (!response.ok || !body.importId) throw new Error(body.error || 'Upload failed (' + response.status + ')');
+    return awaitImport(body.importId);
   }
 
   async function tell(uploaded) {

@@ -120,6 +120,8 @@ export function uploadWidgetHtml(serverOrigin: string): string {
   .meta.err { color: var(--err); }
   .bar { height: 4px; border-radius: 2px; background: var(--line); margin-top: 4px; overflow: hidden; }
   .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .bar.busy > span { width: 100%; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
   .note { margin: 10px 2px 0; font-size: 12px; color: var(--muted); }
 </style>
 </head>
@@ -137,6 +139,8 @@ export function uploadWidgetHtml(serverOrigin: string): string {
   const ORIGIN = ${JSON.stringify(serverOrigin)};
   const MAX_BYTES = 250 * 1024 * 1024;
   const RELAY_MAX_BYTES = 95 * 1024 * 1024;
+  const IMPORT_POLL_MS = 2000;
+  const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
   const PROTOCOL_VERSION = '2026-01-26';
   const drop = document.getElementById('drop');
   const input = document.getElementById('input');
@@ -261,8 +265,9 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     item.append(thumb, text);
     list.appendChild(item);
     return {
-      progress(fraction) { fill.style.width = Math.round(fraction * 100) + '%'; meta.textContent = 'Uploading ' + Math.round(fraction * 100) + '%'; },
-      done() { fill.style.width = '100%'; meta.className = 'meta ok'; meta.textContent = 'Uploaded'; },
+      progress(fraction) { bar.classList.remove('busy'); fill.style.width = Math.round(fraction * 100) + '%'; meta.textContent = 'Uploading ' + Math.round(fraction * 100) + '%'; },
+      busy(text) { bar.classList.add('busy'); meta.textContent = text; },
+      done() { bar.classList.remove('busy'); fill.style.width = '100%'; meta.className = 'meta ok'; meta.textContent = 'Uploaded'; },
       fail(reason) { bar.remove(); meta.className = 'meta err'; meta.textContent = reason; },
     };
   }
@@ -325,12 +330,52 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     return body.publicUrl;
   }
 
+  function hostFiles() {
+    const openai = window.openai;
+    return openai && typeof openai.uploadFile === 'function' && typeof openai.getFileDownloadUrl === 'function'
+      ? openai
+      : undefined;
+  }
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function awaitImport(importId) {
+    const deadline = Date.now() + IMPORT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await wait(IMPORT_POLL_MS);
+      const response = await fetch(ORIGIN + '/import-file/' + encodeURIComponent(importId));
+      const body = parse(await response.text());
+      if (!response.ok) throw new Error(body.error || 'Upload failed (' + response.status + ')');
+      if (body.status === 'done') return body.publicUrl;
+      if (body.status === 'failed') throw new Error(body.error || 'Upload failed.');
+    }
+    throw new Error('Saving the file took too long. Try again.');
+  }
+
+  async function storeThroughHost(host, file, view) {
+    view.busy('Uploading');
+    const { fileId } = await host.uploadFile(file);
+    const { downloadUrl } = await host.getFileDownloadUrl({ fileId });
+    view.busy('Saving to AdaptlyPost');
+    const response = await fetch(ORIGIN + '/import-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Ticket': await ticket() },
+      body: JSON.stringify({ downloadUrl, fileId, fileName: file.name }),
+    });
+    const body = parse(await response.text());
+    if (!response.ok || !body.importId) throw new Error(body.error || 'Could not start the upload (' + response.status + ')');
+    return awaitImport(body.importId);
+  }
+
   async function store(file, view) {
+    const host = hostFiles();
+    if (host) return storeThroughHost(host, file, view);
     const target = await uploadTarget(file);
     try {
       return await putToStorage(file, target, view);
     } catch (error) {
-      if (!(error instanceof TransferBlocked) || file.size > RELAY_MAX_BYTES) throw error;
+      if (!(error instanceof TransferBlocked)) throw error;
+      if (file.size > RELAY_MAX_BYTES) throw new Error('This app blocks direct uploads over 95 MB. Send a public link to the file instead.');
       view.progress(0);
       return relayThroughServer(file, view);
     }

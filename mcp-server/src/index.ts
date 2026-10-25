@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z, type ZodRawShape, type ZodTypeAny } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
@@ -2285,6 +2286,68 @@ async function handleUploadUrlRequest(req: IncomingMessage, res: ServerResponse)
   }
 }
 
+const FileImportRequest = z.object({
+  downloadUrl: z.string().url(),
+  fileId: z.string().max(200).optional(),
+  fileName: z.string().trim().min(1).max(255),
+});
+
+type FileImport =
+  | { status: 'pending' }
+  | { status: 'done'; publicUrl: string }
+  | { status: 'failed'; error: string };
+
+const FILE_IMPORT_TTL_MS = 30 * 60 * 1000;
+const FILE_IMPORT_PATH = '/import-file';
+const fileImports = new Map<string, FileImport>();
+
+function trackFileImport(work: Promise<Uploaded>): string {
+  const id = randomUUID();
+  fileImports.set(id, { status: 'pending' });
+  setTimeout(() => fileImports.delete(id), FILE_IMPORT_TTL_MS).unref();
+  work.then(
+    ({ publicUrl }) => fileImports.set(id, { status: 'done', publicUrl }),
+    (error) =>
+      fileImports.set(id, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+  );
+  return id;
+}
+
+async function handleFileImportStart(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const ticket = await openUploadTicket(String(req.headers[UPLOAD_TICKET_HEADER] ?? ''));
+  if (!ticket) {
+    req.resume();
+    sendJson(res, 401, { error: 'This upload box expired. Ask for a new one.' });
+    return;
+  }
+
+  try {
+    const parsed = FileImportRequest.safeParse(await readJsonBody(req));
+    if (!parsed.success) throw new Error('The upload request is malformed.');
+    const { downloadUrl, fileId, fileName } = parsed.data;
+    const client = new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId);
+    const importId = trackFileImport(
+      uploadFromAttachment(client, { download_url: downloadUrl, file_id: fileId ?? '', file_name: fileName }),
+    );
+    sendJson(res, 202, { importId });
+  } catch (error) {
+    req.resume();
+    sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function handleFileImportStatus(importId: string, res: ServerResponse): void {
+  const state = fileImports.get(importId);
+  if (!state) {
+    sendJson(res, 404, { error: 'This upload is no longer tracked. Upload the file again.' });
+    return;
+  }
+  sendJson(res, 200, state);
+}
+
 // The MCP SDK 406s unless Accept lists both types. `@hono/node-server` v1 rebuilds the
 // request from rawHeaders, so headers.accept alone is not enough.
 const forceStreamableAccept = (req: IncomingMessage) => {
@@ -2366,6 +2429,16 @@ async function main() {
 
       if (req.url === '/upload-url' && req.method === 'POST') {
         await handleUploadUrlRequest(req, res);
+        return;
+      }
+
+      if (req.url === FILE_IMPORT_PATH && req.method === 'POST') {
+        await handleFileImportStart(req, res);
+        return;
+      }
+
+      if (req.url?.startsWith(`${FILE_IMPORT_PATH}/`) && req.method === 'GET') {
+        handleFileImportStatus(req.url.slice(FILE_IMPORT_PATH.length + 1), res);
         return;
       }
 

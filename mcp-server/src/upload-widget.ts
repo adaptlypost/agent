@@ -71,7 +71,7 @@ const ACCEPT = [
   '.docx',
 ].join(',');
 
-export function uploadWidgetHtml(uploadEndpoint: string): string {
+export function uploadWidgetHtml(serverOrigin: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -134,8 +134,9 @@ export function uploadWidgetHtml(uploadEndpoint: string): string {
   <p class="note">JPEG, PNG, WebP, MP4, MOV, PDF, PowerPoint or Word. Uploaded files are stored at public links so they can be posted.</p>
 <script>
 (() => {
-  const ENDPOINT = ${JSON.stringify(uploadEndpoint)};
+  const ORIGIN = ${JSON.stringify(serverOrigin)};
   const MAX_BYTES = 250 * 1024 * 1024;
+  const RELAY_MAX_BYTES = 95 * 1024 * 1024;
   const PROTOCOL_VERSION = '2026-01-26';
   const drop = document.getElementById('drop');
   const input = document.getElementById('input');
@@ -273,23 +274,66 @@ export function uploadWidgetHtml(uploadEndpoint: string): string {
     return box;
   }
 
-  function put(file, sealed, view) {
+  class TransferBlocked extends Error {}
+
+  function transfer(method, url, headers, file, view) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', ENDPOINT);
-      xhr.setRequestHeader('X-Upload-Ticket', sealed);
-      xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.open(method, url);
+      Object.keys(headers).forEach((name) => xhr.setRequestHeader(name, headers[name]));
       xhr.upload.onprogress = (event) => { if (event.lengthComputable) view.progress(event.loaded / event.total); };
-      xhr.onload = () => {
-        let body = {};
-        try { body = JSON.parse(xhr.responseText); } catch {}
-        if (xhr.status >= 200 && xhr.status < 300 && body.publicUrl) resolve(body);
-        else reject(new Error(body.error || 'Upload failed (' + xhr.status + ')'));
-      };
-      xhr.onerror = () => reject(new Error('Upload failed. Check your connection and try again.'));
+      xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+      xhr.onerror = () => reject(new TransferBlocked('Upload failed. Check your connection and try again.'));
       xhr.send(file);
     });
+  }
+
+  function parse(text) {
+    try { return JSON.parse(text) || {}; } catch { return {}; }
+  }
+
+  async function readHead(file) {
+    const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    return btoa(String.fromCharCode.apply(null, bytes));
+  }
+
+  async function uploadTarget(file) {
+    const response = await fetch(ORIGIN + '/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Ticket': await ticket() },
+      body: JSON.stringify({ fileName: file.name, fileSize: file.size, head: await readHead(file) }),
+    });
+    const body = parse(await response.text());
+    if (!response.ok || !body.uploadUrl) throw new Error(body.error || 'Could not start the upload (' + response.status + ')');
+    return body;
+  }
+
+  async function putToStorage(file, target, view) {
+    const { status } = await transfer('PUT', target.uploadUrl, { 'Content-Type': target.mimeType }, file, view);
+    if (status < 200 || status >= 300) throw new Error('Upload failed (' + status + ')');
+    return target.publicUrl;
+  }
+
+  async function relayThroughServer(file, view) {
+    const { status, text } = await transfer('POST', ORIGIN + '/upload', {
+      'X-Upload-Ticket': await ticket(),
+      'X-File-Name': encodeURIComponent(file.name),
+      'Content-Type': file.type || 'application/octet-stream',
+    }, file, view);
+    const body = parse(text);
+    if (status < 200 || status >= 300 || !body.publicUrl) throw new Error(body.error || 'Upload failed (' + status + ')');
+    return body.publicUrl;
+  }
+
+  async function store(file, view) {
+    const target = await uploadTarget(file);
+    try {
+      return await putToStorage(file, target, view);
+    } catch (error) {
+      if (!(error instanceof TransferBlocked) || file.size > RELAY_MAX_BYTES) throw error;
+      view.progress(0);
+      return relayThroughServer(file, view);
+    }
   }
 
   async function tell(uploaded) {
@@ -318,9 +362,9 @@ export function uploadWidgetHtml(uploadEndpoint: string): string {
       reportSize();
       if (file.size > MAX_BYTES) { view.fail('Over the 250 MB limit'); continue; }
       try {
-        const result = await put(file, await ticket(), view);
+        const publicUrl = await store(file, view);
         view.done();
-        uploaded.push({ fileName: file.name, publicUrl: result.publicUrl });
+        uploaded.push({ fileName: file.name, publicUrl });
       } catch (error) {
         view.fail(error.message);
       }

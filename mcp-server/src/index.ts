@@ -65,6 +65,9 @@ const api = new RestClient(API_BASE_URL, API_TOKEN);
 
 const PUBLIC_ORIGIN = process.env.MCP_PUBLIC_ORIGIN ?? 'https://mcp.adaptlypost.com';
 const UPLOAD_ENDPOINT = `${PUBLIC_ORIGIN}/upload`;
+const STORAGE_UPLOAD_ORIGIN =
+  process.env.MCP_STORAGE_UPLOAD_ORIGIN ??
+  'https://115277785c6cd0d18a87bc78d295c5a5.eu.r2.cloudflarestorage.com';
 
 const oauthConfig = oauthConfigFromEnv({
   resourceUrl: 'https://mcp.adaptlypost.com/mcp',
@@ -658,9 +661,10 @@ async function mintUploadUrl(
   apiClient: RestClient,
   fileName: string,
   mimeType: string,
+  fileSize?: number,
 ): Promise<{ uploadUrl: string } & Uploaded> {
   const { urls } = (await apiClient.post('/upload-urls', {
-    files: [{ fileName, mimeType }],
+    files: [{ fileName, mimeType, fileSize }],
   })) as { urls: ({ uploadUrl: string } & Uploaded)[] };
   return urls[0];
 }
@@ -1037,10 +1041,13 @@ function createMcpServer(apiClient?: RestClient): McpServer {
 
   const uploadWidgetMeta = {
     ui: {
-      csp: { connectDomains: [PUBLIC_ORIGIN], resourceDomains: [] },
+      csp: { connectDomains: [PUBLIC_ORIGIN, STORAGE_UPLOAD_ORIGIN], resourceDomains: [] },
       prefersBorder: true,
     },
-    'openai/widgetCSP': { connect_domains: [PUBLIC_ORIGIN], resource_domains: [] },
+    'openai/widgetCSP': {
+      connect_domains: [PUBLIC_ORIGIN, STORAGE_UPLOAD_ORIGIN],
+      resource_domains: [],
+    },
     'openai/widgetPrefersBorder': true,
     'openai/widgetDomain': 'https://adaptlypost.com',
     'openai/widgetDescription':
@@ -1061,7 +1068,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         {
           uri: UPLOAD_WIDGET_URI,
           mimeType: MCP_APP_MIME_TYPE,
-          text: uploadWidgetHtml(UPLOAD_ENDPOINT),
+          text: uploadWidgetHtml(PUBLIC_ORIGIN),
           _meta: uploadWidgetMeta,
         },
       ],
@@ -2240,6 +2247,44 @@ async function handleWidgetUpload(req: IncomingMessage, res: ServerResponse): Pr
   }
 }
 
+const UploadUrlRequest = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  fileSize: z.number().int().positive(),
+  head: z.string().max(64),
+});
+
+async function handleUploadUrlRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const ticket = await openUploadTicket(String(req.headers[UPLOAD_TICKET_HEADER] ?? ''));
+  if (!ticket) {
+    req.resume();
+    sendJson(res, 401, { error: 'This upload box expired. Ask for a new one.' });
+    return;
+  }
+
+  let fileSize: number | undefined;
+  try {
+    const parsed = UploadUrlRequest.safeParse(await readJsonBody(req));
+    if (!parsed.success) throw new Error('The upload request is malformed.');
+    const { fileName, head } = parsed.data;
+    fileSize = parsed.data.fileSize;
+    const mimeType = requireStreamedMedia(Buffer.from(head, 'base64'), fileName, fileSize);
+    const client = new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId);
+    const { uploadUrl, publicUrl, key } = await mintUploadUrl(
+      client,
+      fileNameFor(fileName, mimeType),
+      mimeType,
+      fileSize,
+    );
+    console.error(`upload-url status=200 bytes=${fileSize}`);
+    sendJson(res, 200, { uploadUrl, publicUrl, key, mimeType });
+  } catch (error) {
+    req.resume();
+    const status = error instanceof ApiError ? error.status : 400;
+    console.error(`upload-url status=${status} bytes=${fileSize ?? '-'}`);
+    sendJson(res, status, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // The MCP SDK 406s unless Accept lists both types. `@hono/node-server` v1 rebuilds the
 // request from rawHeaders, so headers.accept alone is not enough.
 const forceStreamableAccept = (req: IncomingMessage) => {
@@ -2316,6 +2361,11 @@ async function main() {
 
       if (req.url === '/upload' && req.method === 'POST') {
         await handleWidgetUpload(req, res);
+        return;
+      }
+
+      if (req.url === '/upload-url' && req.method === 'POST') {
+        await handleUploadUrlRequest(req, res);
         return;
       }
 

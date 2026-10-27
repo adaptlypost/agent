@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "adaptlypost",
   "version": "1.2.0",
-  "description": "Post and schedule to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile from your agent. Upload media, bulk-schedule, check per-platform results, retry failures, and read post analytics through the AdaptlyPost API.",
+  "description": "Post and schedule to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr and Telegram from your agent. Upload media, bulk-schedule, check per-platform results, retry failures, and read post analytics through the AdaptlyPost API.",
   "author": {
     "name": "AdaptlyPost",
     "email": "contact@adaptlypost.com",

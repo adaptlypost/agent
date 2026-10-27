@@ -341,6 +341,20 @@ function buildGoogleBusinessConfig(parsed) {
   return config;
 }
 
+function buildTumblrConfig(args, parsed) {
+  const tags = parseRepeatedRaw(args, "tumblr-tag");
+  const withComma = tags.find((tag) => tag.includes(","));
+  if (withComma) {
+    error(`Tumblr tags cannot contain commas; repeat --tumblr-tag for each tag, got: ${withComma}`);
+    process.exit(1);
+  }
+  return withoutEmpty({
+    tags: tags.length > 0 ? tags : undefined,
+    title: parsed["tumblr-title"] && String(parsed["tumblr-title"]),
+    sourceUrl: parsed["tumblr-source-url"] && String(parsed["tumblr-source-url"]),
+  });
+}
+
 function attachConfigs(body, idsField, configsField, idKey, config) {
   const ids = body[idsField] || [];
   if (ids.length === 0 || Object.keys(config).length === 0) return;
@@ -541,6 +555,7 @@ const COMMANDS = {
     attachConfigs(body, "pinterestConnectionIds", "pinterestConfigs", "connectionId", buildPinterestConfig(parsed));
     attachConfigs(body, "youtubeConnectionIds", "youtubeConfigs", "connectionId", buildYouTubeConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
+    attachConfigs(body, "tumblrConnectionIds", "tumblrConfigs", "connectionId", buildTumblrConfig(args, parsed));
 
     if (parsed["dry-run"]) {
       const report = await request("POST", "/api/v1/social-posts/validate", body);
@@ -849,6 +864,7 @@ const CONNECTION_FIELDS = {
   PINTEREST: "pinterestConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   TELEGRAM: "telegramConnectionIds",
+  TUMBLR: "tumblrConnectionIds",
   FACEBOOK: "pageIds",
 };
 

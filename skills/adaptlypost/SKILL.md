@@ -2,7 +2,7 @@
 name: adaptlypost
 description: >
   Create, schedule, and manage social media posts across Instagram, TikTok, YouTube, X, LinkedIn,
-  Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, and Telegram via the AdaptlyPost API,
+  Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr and Telegram via the AdaptlyPost API,
   and read how they performed.
   Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
@@ -143,6 +143,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--facebook-layout GRID\|CAROUSEL`, `--facebook-card <url or JSON>` (repeatable, one per image in order) | `facebookConfigs[].imageLayout`, `carouselCards`. A card is a link URL or `{"link":"...","title":"...","description":"..."}`. Cards without `--facebook-layout` set `CAROUSEL` |
 | `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
 | `--youtube-ai-generated` | `youtubeConfigs[].aiGenerated` |
+| `--tumblr-tag <tag>` (repeatable, up to 30, no commas), `--tumblr-title <title>`, `--tumblr-source-url <url>` | `tumblrConfigs[].tags`, `title`, `sourceUrl` |
 | `--google-topic STANDARD\|EVENT\|OFFER`, `--google-cta <type>`, `--google-cta-url`, `--google-event-title`, `--google-event-start`, `--google-event-end`, `--google-offer-code`, `--google-offer-url`, `--google-offer-terms` | `googleBusinessConfigs[]`. The topic defaults to `STANDARD` |
 
 Pinterest titles and links, YouTube settings other than `aiGenerated`, trial reels and TikTok options other than privacy still need a raw API body.
@@ -210,7 +211,7 @@ A post refused for its content (text too long, a disconnected account, media the
 
 `message` is one string when there is one issue and an array of strings when there are several. Read `issues`: each one names its `platform` and `connectionId` when it belongs to one account. The script prints each issue on its own line. Fix what they name and send the post again; resending it unchanged fails the same way.
 
-`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
+`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, Tumblr, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
 
 Per-platform configs, each an array with one entry per connection:
 
@@ -280,6 +281,21 @@ Body: {
 }
 ```
 
+**Tumblr**: put the blog ids in `tumblrConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 32768 characters, up to 30 images (JPEG, PNG or GIF, 10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, threads, thumbnails, image shapes or analytics.
+
+```
+POST /api/v1/social-posts
+Body: {
+  "platforms": ["TUMBLR"],
+  "contentType": "IMAGE",
+  "text": "Our autumn lookbook is live",
+  "timezone": "UTC",
+  "tumblrConnectionIds": ["conn_id"],
+  "tumblrConfigs": [{ "connectionId": "conn_id", "tags": ["lookbook", "autumn"], "title": "Autumn lookbook" }],
+  "mediaUrls": ["https://cdn.adaptlypost.com/.../lookbook.jpg"]
+}
+```
+
 **First comments**: `firstComments: [{ "platform": "LINKEDIN", "text": "..." }]` posts a comment from the same account right after the post goes out, one entry per platform. Limits: LINKEDIN 1250 characters, TWITTER 280 (as a reply), THREADS 500 (reply), BLUESKY 300 (reply), MASTODON 500 (reply), YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200. Any other platform, a platform the post does not go to, empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories return 400. The comment goes out about 10 seconds after the post (60 on YouTube) and is retried up to 3 times; X comments are not retried and, on a lifetime-deal account, cost credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect.
 
 **Per-platform thumbnails**: `platformThumbnails: [{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` gives one platform of a `VIDEO` post its own thumbnail. YOUTUBE, FACEBOOK, LINKEDIN and TELEGRAM take an image (`thumbnailUrl`, an https URL or image data URI); INSTAGRAM and PINTEREST take an image or a frame (`thumbnailTimestampMs`, the image wins when both are sent); TIKTOK takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`; the post-level frame is used by INSTAGRAM, PINTEREST and TIKTOK. Other platforms, non-video posts, Facebook and Instagram stories, duplicates and an entry the platform cannot use return 400.
@@ -305,7 +321,7 @@ Body: {
 
 `linkedinConfigs` is accepted on create and update. Bulk scheduling does not take `DOCUMENT` posts; create them one at a time.
 
-`CAROUSEL` takes 2 or more items: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel.
+`CAROUSEL` takes 2 or more items: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel.
 
 Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. `timezone` is stored for display and does not shift `scheduledAt`.
 
@@ -725,6 +741,7 @@ Use these exact names (uppercase) for platforms:
 - `MASTODON`: Mastodon
 - `GOOGLE_BUSINESS`: Google Business Profile (updates, events, offers)
 - `TELEGRAM`: Telegram (channels and groups)
+- `TUMBLR`: Tumblr (blogs)
 
 ## Content Types
 

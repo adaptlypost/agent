@@ -1,0 +1,14 @@
+skills/adaptlypost/SKILL.md
+  h_d76ceef5a88fa0 284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e31962e0f2047fe10a8ead1e4badfb66f6f9abb8",
+  "prompts": {},
+  "humans": {
+    "h_d76ceef5a88fa0": {
+      "author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

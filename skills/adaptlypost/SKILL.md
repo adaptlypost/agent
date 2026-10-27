@@ -281,7 +281,7 @@ Body: {
 }
 ```
 
-**Tumblr**: put the blog ids in `tumblrConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 32768 characters, up to 30 images (JPEG, PNG or GIF, 10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, threads, thumbnails, image shapes or analytics.
+**Tumblr**: put the blog ids in `tumblrConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 32768 characters, up to 30 JPEG or PNG images (10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, threads, thumbnails, image shapes or analytics.
 
 ```
 POST /api/v1/social-posts

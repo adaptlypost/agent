@@ -6,7 +6,7 @@ description: >
   and read how they performed.
   Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-10-24
+last-updated: 2026-10-27
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -125,7 +125,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js analytics --from 2026-08-01 --to 2026-08-31 [--platforms A,B]` | Views, likes, comments, shares, followers, posts and engagement rate for the window, each with the change against the previous window of the same length |
 | `./scripts/adaptlypost.js analytics:posts --from ... --to ... [--sort VIEWS] [--limit n] [--page n] [--platforms A,B]` | Per-post metrics for posts published in the window. `--sort VIEWS --limit 5` is a top-posts list; the default sort is `PUBLISHED_AT` |
 | `./scripts/adaptlypost.js analytics:status` | When each account last synced and whether one needs reconnecting for analytics |
-| `./scripts/adaptlypost.js analytics:sync` | Refresh analytics now. Once per 10 minutes per workspace; inside the cooldown it returns `queued: false`, not an error |
+| `./scripts/adaptlypost.js analytics:sync` | Refresh analytics now. Once per 4 hours per workspace; inside the cooldown it returns `queued: false`, not an error |
 
 ### Post options in the CLI
 
@@ -650,13 +650,19 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | Tool | Description |
 |------|-------------|
 | `list_workspaces` | Workspaces an OAuth sign-in can act in, with the role held in each. Every other tool takes an optional `workspaceId` from this list; without it tools act in the workspace marked `current` |
+| `get_me` | What this connection may do in a workspace: role, permission keys and `can { draft, schedule, publish }` |
 | `list_accounts` | List connected accounts with ids, platforms and `status` (`active` or `unauthorized`). Call first; posts take these ids, never usernames |
 | `search_instagram_audio` | Search Instagram music or original sounds for a Reel; pass the `audioId` in `instagramConfigs[].audio` |
 | `list_pinterest_boards` | List the boards a Pinterest account can pin to; pass the chosen `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) |
+| `check_account` | Re-check a Facebook page with Facebook and get its fresh `status` |
+| `remove_account` | Disconnect an account from the workspace; it comes off pending and recurring posts |
+| `create_connect_link` | Create a link a client opens to connect their accounts, optionally private, limited to some platforms, capped or never expiring |
+| `revoke_connect_link` | Revoke a connect link |
 | `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
 | `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
 | `open_upload_widget` | Show an upload box in the chat so the user can add files from their device; it sends back the `mediaUrls` |
 | `create_post` | Create one post: publish now, schedule, or draft. `recurrence` repeats it. Async per platform; check `list_post_results` |
+| `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |
 | `list_posts` | List posts in the workspace with filters and pagination; find ids and see what is queued |
 | `get_post` | One post's full record with per-platform status; 404 outside the workspace |
 | `update_post` | Partial update of a DRAFT or SCHEDULED post; sending `platforms` rebuilds all targets |
@@ -666,23 +672,40 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `list_post_results` | Per-platform outcomes for one post; source of `platformId` for retry |
 | `retry_failed_platforms` | Re-queue only FAILED platforms by `platformId`, after fixing the cause |
 | `bulk_schedule_posts` | Schedule up to 100 posts, each processed independently; an item can override the shared platform configs. No draft mode |
+| `validate_bulk_posts` | Dry-run `bulk_schedule_posts`: one validation report per item |
 | `list_recurring_posts` | List recurring posts by status with their schedule and next occurrence |
 | `get_recurring_post` | One recurring post, including why it paused |
 | `pause_recurring_post` | Pause a series and delete its upcoming scheduled post |
 | `resume_recurring_post` | Resume a series from the next occurrence after now |
 | `delete_recurring_post` | Stop a series for good; published posts are kept |
+| `list_rss_feeds` | List the RSS and Atom feeds that turn new items into posts, with why a paused one stopped |
+| `get_rss_feed` | One RSS feed with its settings and status |
+| `preview_rss_feed` | Fetch a feed without saving it and show the 5 newest items as posts |
+| `create_rss_feed` | Connect a feed: each new item becomes a draft, a scheduled post or a published post on the target accounts |
+| `update_rss_feed` | Change a feed's targets, mode, template, keywords or interval |
+| `delete_rss_feed` | Stop a feed for good; its posts stay |
+| `list_rss_feed_items` | What a feed did with each item: posted, filtered, skipped or failed |
+| `pause_rss_feed` | Pause a feed |
+| `resume_rss_feed` | Resume a paused feed |
+| `check_rss_feed` | Check a feed now instead of waiting for its interval |
 | `get_analytics_overview` | Views, likes, comments, shares, followers, posts and engagement rate for a window, with the change against the previous window |
 | `get_analytics_timeseries` | The same metrics bucketed by day, week or month |
 | `get_platform_breakdown` | The same metrics per platform, with the metrics each platform reports |
 | `list_post_analytics` | Per-post metrics sorted by any metric; top posts and "how did this post do" |
+| `list_top_posts` | The best posts in a window by one metric, in one call |
+| `list_discovered_posts` | Posts found on the connected accounts that were not published through AdaptlyPost |
 | `get_analytics_sync_status` | Freshness per account and whether one needs reconnecting for analytics |
-| `trigger_analytics_sync` | Refresh analytics now, once per 10 minutes per workspace |
+| `trigger_analytics_sync` | Refresh analytics now, once per 4 hours per workspace |
+| `list_webhooks` | List webhook endpoints and their delivery state |
+| `get_webhook` | One webhook endpoint |
+| `create_webhook` | Register an endpoint for every event; the signing secret is shown only in this response |
+| `update_webhook` | Change an endpoint's URL or turn it off and on |
+| `delete_webhook` | Delete an endpoint |
+| `test_webhook` | Send a signed `webhook.test` event and see how the endpoint answered |
 | `generate_caption` | Write a caption from a prompt, held to a platform's length. Returns `{ caption }`; nothing is posted. 2 AI credits |
 | `refine_caption` | Rewrite `originalText` from an instruction, or continue `partialText`. 2 AI credits |
 | `generate_image` | Queue an image and get `{ jobId, sessionId, status }` at once. 2 credits standard, 4 premium, refunded on failure |
 | `get_image_job` | Poll an image job until `completed` (public `imageUrl`, ready for `mediaUrls`) or `failed` (`error`) |
-
-The MCP server does not take Telegram targets yet, so post to Telegram with the CLI or the REST API.
 
 Over MCP with an OAuth sign-in, the user may belong to several workspaces. Call `list_workspaces` when they name a workspace, brand, client or organization, or when accounts or posts they expect are missing, and pass that id as `workspaceId` on every call about it: account, post and upload ids from one workspace do not exist in another, and the role can differ per workspace. A 403 with `code: workspace_access_denied` means the id is not one this sign-in reaches; pick one from `list_workspaces`.
 
@@ -739,7 +762,7 @@ Use these exact names (uppercase) for platforms:
 - `posts:update` changes caption, schedule, and timezone only. To change accounts or media, call `PATCH` directly with `platforms`, the connection-id arrays, and `mediaUrls` together
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`; use the API body directly for those
-- The MCP server cannot post to Telegram yet and has no tools for connect links, account checks, account removal or webhooks; use the CLI or the REST endpoints above for those. AI captions and images are covered by `generate_caption`, `refine_caption`, `generate_image` and `get_image_job`
+- The MCP server covers the whole REST API: posts (Telegram and Tumblr included), dry runs, recurring posts, RSS feeds, connect links, account checks and removal, webhooks, analytics, and AI captions and images
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)
 - Use `--draft` flag when testing to avoid accidental publishing, or `--dry-run` to check the post without creating anything
 - For "how did we do" questions use `analytics` with an explicit window; for "best posts" use `analytics:posts --sort VIEWS --limit 5`. `results` is publishing status, not performance

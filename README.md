@@ -58,7 +58,7 @@ Agent: Done. Post scheduled for tomorrow at 9:00 AM on your LinkedIn account.
 
 ## Alternative: MCP
 
-For deeper integration with Claude Desktop, Cursor, or other MCP-compatible clients, use the AdaptlyPost MCP server (it cannot post to Telegram yet; use the skill for that):
+For deeper integration with Claude Desktop, Cursor, or other MCP-compatible clients, use the AdaptlyPost MCP server:
 
 ```json
 {

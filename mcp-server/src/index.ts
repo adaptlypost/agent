@@ -84,7 +84,7 @@ const oauthConfig = oauthConfigFromEnv({
 // Shared enums
 // ---------------------------------------------------------------------------
 
-const PlatformType = z.enum([
+const CaptionPlatform = z.enum([
   'LINKEDIN',
   'YOUTUBE',
   'INSTAGRAM',
@@ -96,13 +96,41 @@ const PlatformType = z.enum([
   'TWITTER',
   'MASTODON',
   'GOOGLE_BUSINESS',
+  'TUMBLR',
 ]);
 
-const PostFilterPlatform = z.enum([...PlatformType.options, 'TELEGRAM']);
+const PlatformType = z.enum([...CaptionPlatform.options, 'TELEGRAM']);
 
-const FirstCommentPlatform = z.enum(['LINKEDIN', 'TWITTER', 'THREADS', 'BLUESKY', 'MASTODON', 'YOUTUBE']);
+const FirstCommentPlatform = z.enum([
+  'LINKEDIN',
+  'TWITTER',
+  'THREADS',
+  'BLUESKY',
+  'MASTODON',
+  'YOUTUBE',
+  'FACEBOOK',
+  'INSTAGRAM',
+]);
 
-const ThumbnailPlatform = z.enum(['YOUTUBE', 'FACEBOOK', 'LINKEDIN', 'INSTAGRAM', 'PINTEREST', 'TIKTOK']);
+const ThreadReplyPlatform = z.enum(['TWITTER', 'THREADS', 'BLUESKY', 'MASTODON']);
+
+const ThumbnailPlatform = z.enum(['YOUTUBE', 'FACEBOOK', 'LINKEDIN', 'TELEGRAM', 'INSTAGRAM', 'PINTEREST', 'TIKTOK']);
+
+const RssFeedPlatform = z.enum([
+  'FACEBOOK',
+  'INSTAGRAM',
+  'THREADS',
+  'TWITTER',
+  'BLUESKY',
+  'LINKEDIN',
+  'MASTODON',
+  'TELEGRAM',
+  'GOOGLE_BUSINESS',
+]);
+
+const RssFeedPostMode = z.enum(['DRAFT', 'SCHEDULE', 'PUBLISH']);
+
+const RssFeedContentMode = z.enum(['TEMPLATE', 'AI']);
 
 const AspectRatioPlatform = z.enum(['INSTAGRAM', 'TIKTOK']);
 
@@ -139,16 +167,19 @@ const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
 const CAROUSEL_RULE =
-  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK and THREADS, 20 on LINKEDIN and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel';
+  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK, THREADS and TELEGRAM, 20 on LINKEDIN, 30 on TUMBLR and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel';
 
 const GOOGLE_BUSINESS_RULE =
   'GOOGLE_BUSINESS takes TEXT or IMAGE with one JPEG or PNG image up to 5 MB, and text up to 1500 characters';
+
+const TELEGRAM_RULE =
+  'TELEGRAM takes text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB); a caption over 1024 characters goes out as its own message after the media';
 
 const LINKEDIN_MENTION_RULE =
   'On LinkedIn, mention a company page with @[Page Name](urn:li:organization:<id>), using the page name exactly as LinkedIn shows it';
 
 const ALT_TEXT_RULE =
-  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
+  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
 
 const PostStatus = z.enum([
   'COMPLETED',
@@ -262,6 +293,12 @@ const YouTubeConfigSchema = z.object({
   madeForKids: z.boolean().optional().describe('Mark the video as made for kids (COPPA)'),
   categoryId: z.string().optional().describe('YouTube category ID'),
   playlistId: z.string().optional().describe('Add video to this playlist'),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Omit it or send false for no label',
+    ),
 });
 
 const InstagramAudioSchema = z.object({
@@ -316,6 +353,38 @@ const InstagramConfigSchema = z.object({
     .describe(
       "Publish a video reel as a trial reel: Instagram shows it to non-followers first and keeps it off followers' feeds and the profile grid until it is shared. MANUAL means the account owner shares it from the Instagram app; SS_PERFORMANCE means Instagram shares it if it performs well. Only for a single video posted as a reel or feed video, never a story, image or carousel (400 otherwise). Needs a professional account Instagram has enabled for trial reels; otherwise that platform fails with a message saying so",
     ),
+  userTags: z
+    .array(
+      z.object({
+        username: z
+          .string()
+          .regex(/^@?[A-Za-z0-9._]{1,30}$/)
+          .describe('The public Instagram username to tag'),
+        x: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('Horizontal position of the tag on the image, from 0 (left edge) to 1 (right edge)'),
+        y: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('Vertical position of the tag on the image, from 0 (top edge) to 1 (bottom edge)'),
+      }),
+    )
+    .max(20)
+    .optional()
+    .describe(
+      'Public Instagram accounts tagged in the media, up to 20. Works on a single image, a single video (published as a Reel) or a single story; a carousel or several stories with tags is refused with 400. On a feed image every tag needs x and y; on a story they are optional, and on a video they are ignored because the person is tagged on the video as a whole. A leading @ is stripped and a repeated username keeps its first entry. If Instagram refuses a tag because the account is private or does not exist, the post goes out without its tags and instagramUntaggedUsernames in get_post lists the refused usernames',
+    ),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with shareToStory carries the label too. Omit it or send false for no label',
+    ),
 });
 
 const FacebookConfigSchema = z.object({
@@ -344,6 +413,33 @@ const FacebookConfigSchema = z.object({
     .describe(
       "Facebook's id for a colored text background (for example 106018623298955 is solid purple, 249307305544279 is a red to blue gradient). Only for contentType TEXT posts with no media and text up to 130 characters; anything else is refused with 400. Links in the text show without a preview. If Facebook refuses the background, the post goes out as plain text",
     ),
+  imageLayout: z
+    .enum(['GRID', 'CAROUSEL'])
+    .optional()
+    .describe(
+      'How a post with several images shows on Facebook. GRID is a photo grid. CAROUSEL is a swipeable carousel where each image is a card with its own link, and needs 2 to 5 images, no videos, postType FEED and one carouselCards entry per image; anything else is refused with 400',
+    ),
+  carouselCards: z
+    .array(
+      z.object({
+        link: z.string().max(2048).describe('The http or https URL the card opens'),
+        title: z
+          .string()
+          .max(100)
+          .optional()
+          .describe("The card's headline. Without it Facebook uses the linked page's title"),
+        description: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('The line under the headline, such as a price or the domain. Without it Facebook uses the linked page'),
+      }),
+    )
+    .max(5)
+    .optional()
+    .describe(
+      'One card per image, in the same order as the media, used when imageLayout is CAROUSEL. Facebook only shows your image, title and description on a card whose link points to a website the Page owns; for any other link the post fails with the error Facebook returns',
+    ),
 });
 
 const LinkedInConfigSchema = z.object({
@@ -355,6 +451,24 @@ const LinkedInConfigSchema = z.object({
     .describe(
       'Title LinkedIn shows on a DOCUMENT post (max 100 chars). Defaults to the file name; ignored for other content types',
     ),
+  reshareOf: z
+    .string()
+    .max(500)
+    .optional()
+    .describe(
+      'Reshare this LinkedIn post from the account, with the post text as the commentary. Takes a urn:li:share: or urn:li:ugcPost: URN, such as the platformPostId from list_post_results, or a LinkedIn post link of the form https://www.linkedin.com/feed/update/<urn>, which is also the link inside a post\'s Embed code. urn:li:activity: links are refused because LinkedIn cannot reshare them through its API. Media on the post is not attached on this account',
+    ),
+});
+
+const TumblrConfigSchema = z.object({
+  connectionId: z.string().describe('Tumblr blog account id from list_accounts'),
+  tags: z
+    .array(z.string())
+    .max(30)
+    .optional()
+    .describe('Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case'),
+  title: z.string().max(4096).optional().describe('Shown as a heading above the media and the text'),
+  sourceUrl: z.string().max(2048).optional().describe('Shown as the source link of the post'),
 });
 
 const PinterestConfigSchema = z.object({
@@ -456,6 +570,11 @@ const connectionIdFields = {
   blueskyConnectionIds: z.array(z.string()).optional().describe('Bluesky account connection IDs to post from'),
   mastodonConnectionIds: z.array(z.string()).optional().describe('Mastodon account connection IDs to post from'),
   pinterestConnectionIds: z.array(z.string()).optional().describe('Pinterest account connection IDs to post from'),
+  tumblrConnectionIds: z.array(z.string()).optional().describe('Tumblr blog account ids from list_accounts to post to'),
+  telegramConnectionIds: z
+    .array(z.string())
+    .optional()
+    .describe(`Telegram channels and groups to post to, by the account id from list_accounts. ${TELEGRAM_RULE}`),
   googleBusinessConnectionIds: z
     .array(z.string())
     .optional()
@@ -487,13 +606,13 @@ const platformConfigFields = {
     .array(InstagramConfigSchema)
     .optional()
     .describe(
-      'Instagram per-connection config: post type (FEED, REEL, STORY), shareToStory, collaborators, Reel audio, and trial reels',
+      'Instagram per-connection config: post type (FEED, REEL, STORY), shareToStory, collaborators, user tags, the AI info label, Reel audio, and trial reels',
     ),
   facebookConfigs: z
     .array(FacebookConfigSchema)
     .optional()
     .describe(
-      'Facebook per-page config: post type, shareToStory, video title and text background. pageId must match an entry in pageIds',
+      'Facebook per-page config: post type, shareToStory, video title, text background, and a grid or link carousel for several images. pageId must match an entry in pageIds',
     ),
   pinterestConfigs: z
     .array(PinterestConfigSchema)
@@ -507,6 +626,10 @@ const platformConfigFields = {
     .describe(
       `Google Business Profile per-location config: update, event or offer, plus a button. connectionId must match an entry in googleBusinessConnectionIds. ${GOOGLE_BUSINESS_RULE}`,
     ),
+  tumblrConfigs: z
+    .array(TumblrConfigSchema)
+    .optional()
+    .describe('Tumblr per-blog config: tags, a title and a source link. connectionId must match an entry in tumblrConnectionIds'),
 };
 
 const postThumbnailFields = {
@@ -547,7 +670,21 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply) and YOUTUBE (10000). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
+      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
+    ),
+  threadReplies: z
+    .array(
+      z.object({
+        platform: ThreadReplyPlatform,
+        texts: z
+          .array(z.string())
+          .max(25)
+          .describe('The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies'),
+      }),
+    )
+    .optional()
+    .describe(
+      "Turns the post into a thread: the post opens it and each text is published as a reply to the one before, from the same account, one entry per platform. Available on TWITTER (280 characters per reply, or the account's own limit on X Premium), THREADS (500), BLUESKY (300) and MASTODON (500, or the instance's limit), up to 25 replies. A platform the post does not go to, an empty or too long reply, more than 25 replies, a second entry for one platform and a platform that also has a first comment are refused with 400. An entry with an empty texts array removes the thread. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out; on X it is not retried, and a lifetime-deal account pays for each reply like any X post. A thread that fails never fails the post: read threadStatus, threadReplyIds and threadError on the platform in get_post. On an update, sending the array replaces every thread and omitting it keeps the stored ones",
     ),
   platformThumbnails: z
     .array(
@@ -567,7 +704,7 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      'A different thumbnail for one platform of a VIDEO post, one entry per platform. A platform without an entry uses the post-level thumbnailUrl and thumbnailTimestampMs. YOUTUBE, FACEBOOK and LINKEDIN take an image (thumbnailUrl); INSTAGRAM and PINTEREST take an image or a frame (thumbnailTimestampMs), the image winning when both are sent; TIKTOK takes only a frame. Posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use are refused with 400. On an update, sending the array replaces every override and omitting it keeps the stored ones',
+      'A different thumbnail for one platform of a VIDEO post, one entry per platform. A platform without an entry uses the post-level thumbnailUrl and thumbnailTimestampMs. YOUTUBE, FACEBOOK, LINKEDIN and TELEGRAM take an image (thumbnailUrl); INSTAGRAM and PINTEREST take an image or a frame (thumbnailTimestampMs), the image winning when both are sent; TIKTOK takes only a frame. Posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use are refused with 400. On an update, sending the array replaces every override and omitting it keeps the stored ones',
     ),
   platformAspectRatios: z
     .array(
@@ -601,8 +738,138 @@ const linkedinConfigsField = {
     .array(LinkedInConfigSchema)
     .optional()
     .describe(
-      'LinkedIn per-connection config: documentTitle names a DOCUMENT post. connectionId must match an entry in linkedinConnectionIds',
+      'LinkedIn per-connection config: documentTitle names a DOCUMENT post, reshareOf reshares another LinkedIn post with the text as commentary. connectionId must match an entry in linkedinConnectionIds',
     ),
+};
+
+const createPostShape = {
+  text: z
+    .string()
+    .optional()
+    .describe(`Default post text shared across platforms. ${LINKEDIN_MENTION_RULE}`),
+  accountIds: z
+    .array(z.string())
+    .min(1)
+    .optional()
+    .describe(
+      "Account ids (or Facebook pageIds) from list_accounts to post to. AdaptlyPost adds each account's platform to platforms and its id to the matching connection-id array, so you can send these instead of platforms and the per-platform arrays, or alongside them. An id not connected to the workspace fails with 400",
+    ),
+  platforms: z
+    .array(PlatformType)
+    .min(1)
+    .optional()
+    .describe(
+      'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS) filled with ids from list_accounts. Optional when accountIds is sent',
+    ),
+  contentType: ContentType.describe(
+    `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${DOCUMENT_POST_RULE}`,
+  ),
+  scheduledAt: z
+    .string()
+    .optional()
+    .describe(
+      'Absolute ISO 8601 instant to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately; a past time also posts immediately',
+    ),
+  timezone: z
+    .string()
+    .default('UTC')
+    .describe(
+      'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt',
+    ),
+  saveAsDraft: z
+    .boolean()
+    .optional()
+    .describe(
+      'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
+    ),
+  recurrence: RecurrenceSchema.optional().describe(
+    'Repeat the post on a schedule the user asked for, and confirm that schedule with them first. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. The user can pause or stop the series at any time with pause_recurring_post or delete_recurring_post; list_recurring_posts shows it',
+  ),
+  mediaUrls: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Media URLs to attach. Use publicUrl values from upload_media or get_upload_urls; the same publicUrl may be reused across posts. Do not reuse mediaUrls read back from a published post, which may be expiring platform links',
+    ),
+  mediaAltTexts: z
+    .array(z.string().max(1000))
+    .optional()
+    .describe(ALT_TEXT_RULE),
+  ...postThumbnailFields,
+  platformTexts: platformTextsField.describe('Per-platform caption overrides'),
+  ...postExtrasFields,
+  ...twitterKeepLinksField,
+  ...connectionIdFields,
+  ...platformConfigFields,
+  ...linkedinConfigsField,
+};
+
+const bulkPostsShape = {
+  platforms: z
+    .array(PlatformType)
+    .describe(
+      'Target platforms shared by every item. Each needs its connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS)',
+    ),
+  timezone: z
+    .string()
+    .default('UTC')
+    .describe('IANA timezone stored with every post for display; does not shift scheduledAt'),
+  posts: z
+    .array(
+      z.object({
+        text: z.string().optional().describe(`Post text/caption. ${LINKEDIN_MENTION_RULE}`),
+        contentType: BulkContentType.describe(
+          `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}`,
+        ),
+        scheduledAt: z
+          .string()
+          .describe('Absolute ISO 8601 instant; a past time publishes immediately'),
+        mediaUrls: z
+          .array(z.string())
+          .optional()
+          .describe('publicUrl values from upload_media; unstored URLs fail this item'),
+        mediaAltTexts: z
+          .array(z.string().max(1000))
+          .optional()
+          .describe(ALT_TEXT_RULE),
+        ...postThumbnailFields,
+        platformTexts: platformTextsField.describe('Per-platform caption overrides for this item'),
+        ...postExtrasFields,
+        tiktokConfigs: z
+          .array(TikTokConfigSchema)
+          .optional()
+          .describe('TikTok config for this item only; replaces the batch-level tiktokConfigs'),
+        youtubeConfigs: z
+          .array(YouTubeConfigSchema)
+          .optional()
+          .describe('YouTube config for this item only, such as its own videoTitle; replaces the batch-level youtubeConfigs'),
+        instagramConfigs: z
+          .array(InstagramConfigSchema)
+          .optional()
+          .describe('Instagram config for this item only; replaces the batch-level instagramConfigs'),
+        facebookConfigs: z
+          .array(FacebookConfigSchema)
+          .optional()
+          .describe('Facebook config for this item only; replaces the batch-level facebookConfigs'),
+        pinterestConfigs: z
+          .array(PinterestConfigSchema)
+          .optional()
+          .describe('Pinterest config for this item only, such as its own board, title or link; replaces the batch-level pinterestConfigs'),
+        googleBusinessConfigs: z
+          .array(GoogleBusinessConfigSchema)
+          .optional()
+          .describe('Google Business Profile config for this item only, such as its own event or offer; replaces the batch-level googleBusinessConfigs'),
+        tumblrConfigs: z
+          .array(TumblrConfigSchema)
+          .optional()
+          .describe('Tumblr config for this item only, such as its own tags; replaces the batch-level tumblrConfigs'),
+      }),
+    )
+    .min(1)
+    .max(100)
+    .describe('1 to 100 posts to schedule; each is created independently'),
+  ...connectionIdFields,
+  ...platformConfigFields,
 };
 
 // ---------------------------------------------------------------------------
@@ -619,15 +886,19 @@ const analyticsRangeFields = {
     .string()
     .describe('End of the reporting window (ISO 8601). Must not be earlier than from'),
   platforms: z
-    .array(PostFilterPlatform)
+    .array(PlatformType)
     .optional()
     .describe(
-      'Restrict to these platforms; omit for every platform with analytics. MASTODON and TELEGRAM have no analytics and are ignored. GOOGLE_BUSINESS reports location impressions only, with no per-post numbers',
+      'Restrict to these platforms; omit for every platform with analytics. MASTODON, TELEGRAM and TUMBLR have no analytics and are ignored. GOOGLE_BUSINESS reports location impressions only, with no per-post numbers',
     ),
+  connectionIds: z
+    .array(z.string())
+    .optional()
+    .describe('Restrict to these accounts, by the account id from list_accounts; omit for every account'),
 };
 
 const ANALYTICS_COVERAGE =
-  'Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile (location impressions only, no per-post numbers); Mastodon and Telegram have none. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected, so any date range in that history can be queried.';
+  'Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile (location impressions only, no per-post numbers); Mastodon, Telegram and Tumblr have none. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected, so any date range in that history can be queried.';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -754,13 +1025,14 @@ const SERVER_INSTRUCTIONS = [
   'Every tool acts as the signed-in member, or the member who created the API key, under that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
   'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the workspace list_workspaces marks current. The role, and so what a tool may do, can differ per workspace.',
   'A 403 with code workspace_access_denied means the workspaceId is not one this sign-in can reach. Call list_workspaces and pick an id from it.',
-  'A Contributor can create and edit their own drafts, upload media, generate captions and images, and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts, trigger an analytics sync or touch other members\' posts. A Viewer only reads.',
+  'A Contributor can create and edit their own drafts, upload media, generate captions and images, and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts, trigger an analytics sync, manage webhooks or touch other members\' posts. Only an Admin can remove accounts or create connect links. A Viewer only reads. get_me says what this connection may do in a workspace.',
   'A 403 with code permission_denied means the member\'s role does not allow this action. Tell the user and do not retry. For a schedule or publish, offer to save the post as a draft for an Admin or Editor to publish, and only do that if the user agrees.',
   'A 401 with code token_issuer_lost_access means this connection lost access to the workspace. Tell the user to reconnect AdaptlyPost, or to have a workspace member create a new API key in AdaptlyPost settings.',
   'A 403 with code subscription_required means the organization\'s current AdaptlyPost plan does not include this. Tell the user and stop; do not retry.',
   'A 401 with code oauth_account_not_found means the user signed in with an email that has no AdaptlyPost account. Relay the message, which names that email, and ask them to disconnect and reconnect with the email they use on AdaptlyPost.',
   'A 429 means the rate limit was hit. Wait for the Retry-After time before the next call and do not loop.',
   'generate_caption, refine_caption and generate_image spend AI credits on every call, so generate only what the user asked for. generate_image returns a jobId, not an image: poll get_image_job until status is completed or failed.',
+  'validate_post and validate_bulk_posts take the same input as create_post and bulk_schedule_posts and report every problem without creating anything. Use them before a large or unusual post.',
 ].join('\n');
 
 function createMcpServer(apiClient?: RestClient): McpServer {
@@ -768,7 +1040,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
   const server = new McpServer(
     {
       name: 'adaptlypost',
-      version: '1.1.0',
+      version: '1.2.0',
     },
     { instructions: SERVER_INSTRUCTIONS },
   );
@@ -824,6 +1096,32 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
+  tool(
+    'get_me',
+    {
+      title: 'Get My Access',
+      description:
+        "Describe this connection in the workspace (the current one unless workspaceId names another): whether it is an API key or a sign-in, its role, the permission keys it holds, can { draft, schedule, publish } and a one-sentence summary of what it may do. An API key never holds more than the member who created it (issuerRole). Call this before an action the role may not allow, instead of trying and reading a 403. Takes only the optional workspaceId.",
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with tokenType (api_token or oauth), tokenId, tokenName, workspace { id }, organizationId, role { key, name }, issuerRole, permissions, can { draft, schedule, publish }, summary and expiresAt (null for a key that never expires).',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (_args, client) => {
+      try {
+        const data = await client.get('/me');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
   // ── Account Tools ──────────────────────────────────────────────────────
 
   tool(
@@ -831,7 +1129,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all eleven platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
+        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all thirteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized, pageId for Facebook pages and supportsInstagramAudio for Instagram. Use id as the connection id (or in pageIds for Facebook).',
@@ -918,6 +1216,140 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         const data = await client.get(
           `/social-accounts/${encodeURIComponent(accountId)}/pinterest-boards`,
         );
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'check_account',
+    {
+      title: 'Check Account',
+      description:
+        "Re-check a Facebook page with Facebook now, using its stored token, and return its fresh status. A rejected token marks the page unauthorized (unauthorizedReason carries Facebook's message); a working token clears an earlier unauthorized mark. Facebook pages only: any other account fails with 400. Pages are also checked automatically twice a day. Use it after the user reconnects or fixes a page, or when a Facebook post failed with a token error. Needs the accounts.manage permission, which Admin holds. Nothing is posted.",
+      inputSchema: {
+        accountId: z.string().describe('The Facebook account id from list_accounts, or its pageId'),
+      },
+      outputSchema: resultSchema(
+        'An object with id, platform, displayName, pageId, status (active or unauthorized), unauthorizedReason when unauthorized, and checkedAt.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ accountId }, client) => {
+      try {
+        const data = await client.post(`/social-accounts/${encodeURIComponent(accountId)}/check`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'remove_account',
+    {
+      title: 'Remove Account',
+      description:
+        'Disconnect a social account from the workspace, the same way the Connectors page does: its stored tokens are deleted, it is taken off every pending and recurring post, and it stops counting toward the plan. Works for accounts in any status, so an unauthorized account can be cleaned up without reconnecting it. For Facebook only the named page goes; the other pages of the same login stay connected. Posts already published stay on the network. Confirm with the user first, naming the account. Bringing it back means connecting it again in AdaptlyPost (create_connect_link can send a link). Needs the accounts.manage permission, which Admin holds.',
+      inputSchema: {
+        accountId: z.string().describe('The account id from list_accounts, or the Facebook pageId'),
+      },
+      outputSchema: resultSchema('An object with id, platform, displayName, pageId for Facebook, and removed: true.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+      },
+    },
+    async ({ accountId }, client) => {
+      try {
+        const data = await client.delete(`/social-accounts/${encodeURIComponent(accountId)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'create_connect_link',
+    {
+      title: 'Create Connect Link',
+      description:
+        "Create a link someone else, such as a client, opens to connect their social accounts to this workspace without an AdaptlyPost login. With no options it is a quick link: it lasts 7 days, offers every platform, shows the client every account in the workspace and connects any number of accounts. visibility PRIVATE shows the client only the accounts they connected through the link; allowedPlatforms limits the platforms offered; maxAccounts makes the link stop working once that many accounts are connected through it; expiresAt or neverExpires changes when it stops working. Returns the url to send. Connected accounts then show up in list_accounts. Revoke it with revoke_connect_link. Needs the accounts.manage permission, which Admin holds.",
+      inputSchema: {
+        name: z.string().max(80).optional().describe('Label shown in the dashboard list of links (max 80 characters)'),
+        visibility: z
+          .enum(['PUBLIC', 'PRIVATE'])
+          .optional()
+          .describe('PRIVATE shows the client only the accounts they connected through this link. Defaults to PUBLIC'),
+        allowedPlatforms: z
+          .array(PlatformType)
+          .optional()
+          .describe('Platforms the client can pick. Omit or send [] for every platform'),
+        maxAccounts: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Accounts the link can connect in total. Reconnecting an account it already connected does not count again'),
+        expiresAt: z
+          .string()
+          .optional()
+          .describe(
+            'When the link stops working, as an ISO 8601 date-time with a Z or ±hh:mm offset (e.g. "2026-11-30T23:59:59Z"). At least 1 hour and at most 365 days from now. Defaults to 7 days from now. Leave it out when neverExpires is true',
+          ),
+        neverExpires: z
+          .boolean()
+          .optional()
+          .describe('true keeps the link working until it is revoked or reaches maxAccounts. Cannot be combined with expiresAt'),
+      },
+      outputSchema: resultSchema(
+        'An object with url (the link to send), token (pass it to revoke_connect_link), expiresAt (null when it never expires), name, visibility, allowedPlatforms and maxAccounts.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/connect-links', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'revoke_connect_link',
+    {
+      title: 'Revoke Connect Link',
+      description:
+        'Revoke a connect link so it stops working at once. Accounts already connected through it stay connected; remove them with remove_account. Needs the accounts.manage permission, which Admin holds. Returns { success: true }.',
+      inputSchema: {
+        token: z.string().describe('The token returned by create_connect_link'),
+      },
+      outputSchema: resultSchema('An object with success: true once the link is revoked.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ token }, client) => {
+      try {
+        const data = await client.delete(`/connect-links/${encodeURIComponent(token)}`);
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -1164,59 +1596,8 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a future scheduledAt schedules it; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document, Google Business event or offer, first comments, recurrence) are described on each field. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
-      inputSchema: {
-        text: z
-          .string()
-          .optional()
-          .describe(`Default post text shared across platforms. ${LINKEDIN_MENTION_RULE}`),
-        platforms: z
-          .array(PlatformType)
-          .describe(
-            'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS) filled with ids from list_accounts',
-          ),
-        contentType: ContentType.describe(
-          `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${DOCUMENT_POST_RULE}`,
-        ),
-        scheduledAt: z
-          .string()
-          .optional()
-          .describe(
-            'Absolute ISO 8601 instant to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately; a past time also posts immediately',
-          ),
-        timezone: z
-          .string()
-          .default('UTC')
-          .describe(
-            'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt',
-          ),
-        saveAsDraft: z
-          .boolean()
-          .optional()
-          .describe(
-            'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
-          ),
-        recurrence: RecurrenceSchema.optional().describe(
-          'Repeat the post on a schedule the user asked for, and confirm that schedule with them first. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. The user can pause or stop the series at any time with pause_recurring_post or delete_recurring_post; list_recurring_posts shows it',
-        ),
-        mediaUrls: z
-          .array(z.string())
-          .optional()
-          .describe(
-            'Media URLs to attach. Use publicUrl values from upload_media or get_upload_urls; the same publicUrl may be reused across posts. Do not reuse mediaUrls read back from a published post, which may be expiring platform links',
-          ),
-        mediaAltTexts: z
-          .array(z.string().max(1000))
-          .optional()
-          .describe(ALT_TEXT_RULE),
-        ...postThumbnailFields,
-        platformTexts: platformTextsField.describe('Per-platform caption overrides'),
-        ...postExtrasFields,
-        ...twitterKeepLinksField,
-        ...connectionIdFields,
-        ...platformConfigFields,
-        ...linkedinConfigsField,
-      },
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a future scheduledAt schedules it; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, Instagram user tags, Facebook link carousel, first comments, threads of replies, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
+      inputSchema: createPostShape,
       outputSchema: resultSchema(
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt, plus recurringPostId when recurrence was sent. Publishing is asynchronous: check list_post_results for outcomes.',
       ),
@@ -1237,6 +1618,32 @@ function createMcpServer(apiClient?: RestClient): McpServer {
   );
 
   tool(
+    'validate_post',
+    {
+      title: 'Validate Post',
+      description:
+        'Dry-run create_post: takes exactly the same input and runs every check creating the post would run, plus the ones that usually fail only at publish time (TikTok creator limits, YouTube upload quota, expired tokens, Pinterest boards, X credits), without creating a post, uploading media or writing anything. Nothing is published, so no confirmation is needed. Always returns a report: valid is false when any issue has severity ERROR. Issues tied to one account are listed under that account in accounts (status READY, WARNING or BLOCKED); the rest are in issues, each with a stable code, severity and message. outcome says what creating the post would do (DRAFT, SCHEDULED or PUBLISH_NOW), and requiredPermissions names the permissions it would need; a missing one shows up as a PERMISSION_DENIED issue. notChecked lists what only the platform decides at publish time, so valid: true is not a guarantee. Fix every ERROR, then call create_post with the same input. Needs the posts.draft permission.',
+      inputSchema: createPostShape,
+      outputSchema: resultSchema(
+        'A validation report: valid, outcome (DRAFT, SCHEDULED or PUBLISH_NOW), scheduledAt, requiredPermissions, issues (each { code, severity ERROR or WARNING, message, platform, connectionId }), accounts (each { platform, connectionId, accountName, status READY, WARNING or BLOCKED, issues }), and notChecked (each { code, message }).',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/social-posts/validate', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
     'get_post',
     {
       title: 'Get Post',
@@ -1248,7 +1655,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId; twitterKeepLinks; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. Posts created in the AdaptlyPost app can also target TELEGRAM, which this server cannot post to. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout and facebookCarouselCards; youtubeAiGenerated; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1278,10 +1685,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .optional()
           .describe('Filter by status (e.g. ["SCHEDULED", "DRAFT"]); omit for all statuses'),
         platforms: z
-          .array(PostFilterPlatform)
+          .array(PlatformType)
           .optional()
           .describe(
-            'Filter to posts targeting any of these platforms. TELEGRAM matches posts created in the AdaptlyPost app',
+            'Filter to posts targeting any of these platforms',
           ),
         startDate: z
           .string()
@@ -1566,70 +1973,8 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs or googleBusinessConfigs to replace the shared ones, plus its own firstComments, platformThumbnails and platformAspectRatios. twitterKeepLinks is not available in bulk. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
-      inputSchema: {
-        platforms: z
-          .array(PlatformType)
-          .describe(
-            'Target platforms shared by every item. Each needs its connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS)',
-          ),
-        timezone: z
-          .string()
-          .default('UTC')
-          .describe('IANA timezone stored with every post for display; does not shift scheduledAt'),
-        posts: z
-          .array(
-            z.object({
-              text: z.string().optional().describe(`Post text/caption. ${LINKEDIN_MENTION_RULE}`),
-              contentType: BulkContentType.describe(
-                `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}`,
-              ),
-              scheduledAt: z
-                .string()
-                .describe('Absolute ISO 8601 instant; a past time publishes immediately'),
-              mediaUrls: z
-                .array(z.string())
-                .optional()
-                .describe('publicUrl values from upload_media; unstored URLs fail this item'),
-              mediaAltTexts: z
-                .array(z.string().max(1000))
-                .optional()
-                .describe(ALT_TEXT_RULE),
-              ...postThumbnailFields,
-              platformTexts: platformTextsField.describe('Per-platform caption overrides for this item'),
-              ...postExtrasFields,
-              tiktokConfigs: z
-                .array(TikTokConfigSchema)
-                .optional()
-                .describe('TikTok config for this item only; replaces the batch-level tiktokConfigs'),
-              youtubeConfigs: z
-                .array(YouTubeConfigSchema)
-                .optional()
-                .describe('YouTube config for this item only, such as its own videoTitle; replaces the batch-level youtubeConfigs'),
-              instagramConfigs: z
-                .array(InstagramConfigSchema)
-                .optional()
-                .describe('Instagram config for this item only; replaces the batch-level instagramConfigs'),
-              facebookConfigs: z
-                .array(FacebookConfigSchema)
-                .optional()
-                .describe('Facebook config for this item only; replaces the batch-level facebookConfigs'),
-              pinterestConfigs: z
-                .array(PinterestConfigSchema)
-                .optional()
-                .describe('Pinterest config for this item only, such as its own board, title or link; replaces the batch-level pinterestConfigs'),
-              googleBusinessConfigs: z
-                .array(GoogleBusinessConfigSchema)
-                .optional()
-                .describe('Google Business Profile config for this item only, such as its own event or offer; replaces the batch-level googleBusinessConfigs'),
-            }),
-          )
-          .min(1)
-          .max(100)
-          .describe('1 to 100 posts to schedule; each is created independently'),
-        ...connectionIdFields,
-        ...platformConfigFields,
-      },
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs or tumblrConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails and platformAspectRatios. twitterKeepLinks and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+      inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
         'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',
       ),
@@ -1642,6 +1987,32 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (input, client) => {
       try {
         const data = await client.post('/social-posts/bulk', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'validate_bulk_posts',
+    {
+      title: 'Validate Bulk Posts',
+      description:
+        'Dry-run bulk_schedule_posts: takes exactly the same input and returns one validation report per item, in input order, without creating, uploading or writing anything. Nothing is published, so no confirmation is needed. Each report has valid, outcome, requiredPermissions, issues, accounts and notChecked, as in validate_post. Fix the items with ERROR issues, then call bulk_schedule_posts. Needs the posts.draft permission.',
+      inputSchema: bulkPostsShape,
+      outputSchema: resultSchema(
+        'An object with valid (true when every item is valid), totalValid, totalInvalid, and results: one { index, report } per item, where report has the validate_post shape.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/social-posts/bulk/validate', input);
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -1805,6 +2176,355 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
+  // ── RSS Feeds ──────────────────────────────────────────────────────────
+
+  const rssFeedIdField = { id: z.string().describe('RSS feed id from list_rss_feeds or create_rss_feed') };
+
+  const rssFeedTarget = z.object({
+    platform: RssFeedPlatform,
+    connectionId: z.string().describe('Account id from list_accounts'),
+    pageId: z.string().optional().describe('Facebook page id from list_accounts. Required for FACEBOOK'),
+  });
+
+  const rssFeedSettingsFields = {
+    name: z.string().max(120).optional().describe("Name of the feed (max 120 characters). Defaults to the feed's title"),
+    targets: z
+      .array(rssFeedTarget)
+      .min(1)
+      .max(20)
+      .describe(
+        'Accounts every new item is posted to, 1 to 20. Feeds post to FACEBOOK, INSTAGRAM, THREADS, TWITTER, BLUESKY, LINKEDIN, MASTODON, TELEGRAM and GOOGLE_BUSINESS',
+      ),
+    postMode: RssFeedPostMode.describe(
+      'DRAFT creates a draft and needs posts.draft; SCHEDULE schedules the post publishDelayMinutes after the item is found and needs posts.schedule; PUBLISH publishes it right away and needs posts.publish',
+    ),
+    publishDelayMinutes: z
+      .number()
+      .int()
+      .min(5)
+      .max(10080)
+      .optional()
+      .describe('Minutes between finding an item and its post going out, 5 to 10080. Required when postMode is SCHEDULE'),
+    contentMode: RssFeedContentMode.describe(
+      'TEMPLATE fills template; AI writes one caption per platform from the article, appends the link, spends 1 AI credit per platform per item and needs ai.generate',
+    ),
+    template: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe(
+        'Post text with {title}, {link}, {description}, {author} and {feed} (max 2000 characters, default "{title}\\n\\n{link}"). The description, then the title, is shortened to fit each platform; the link is never cut',
+      ),
+    aiInstructions: z.string().max(1000).optional().describe('Extra instructions for AI captions (max 1000 characters)'),
+    includeImage: z
+      .boolean()
+      .optional()
+      .describe("Attach the item's image, or the article's preview image (default true)"),
+    twitterKeepLinks: z
+      .boolean()
+      .optional()
+      .describe(
+        'Keep links in X posts clickable (default false). Lifetime-deal plans only; each X post with a link then costs more credits. Without it, links on X go out as plain text',
+      ),
+    includeKeywords: z
+      .array(z.string())
+      .max(50)
+      .optional()
+      .describe('Post only items whose title or summary contains one of these (up to 50)'),
+    excludeKeywords: z
+      .array(z.string())
+      .max(50)
+      .optional()
+      .describe('Skip items whose title or summary contains one of these (up to 50)'),
+    maxPostsPerCheck: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .optional()
+      .describe('New items posted per check, 1 to 10 (default 3). New items are posted oldest first; the rest wait for the next check'),
+    checkIntervalMinutes: z
+      .union([
+        z.literal(15),
+        z.literal(30),
+        z.literal(60),
+        z.literal(180),
+        z.literal(360),
+        z.literal(720),
+        z.literal(1440),
+      ])
+      .optional()
+      .describe('Minutes between checks: 15, 30, 60 (default), 180, 360, 720 or 1440'),
+  };
+
+  const RSS_FEED_RECORD =
+    'The RSS feed: id, userId (the member it posts as, whoever last saved it), name, url, siteUrl, status (ACTIVE or PAUSED), pauseReason, lastError, postMode, publishDelayMinutes, contentMode, template, aiInstructions, includeImage, twitterKeepLinks, includeKeywords, excludeKeywords, maxPostsPerCheck, checkIntervalMinutes, targets, nextCheckAt, lastCheckedAt, lastPostedAt, createdAt and updatedAt.';
+
+  tool(
+    'list_rss_feeds',
+    {
+      title: 'List RSS Feeds',
+      description:
+        'List the RSS and Atom feeds connected to the workspace (the current one unless workspaceId names another), newest first; a workspace holds at most 20. Each new item of a feed becomes a post on its targets. A feed pauses itself after 5 failed fetches in a row (FETCH_FAILURES), 3 items in a row that failed to post (CONSECUTIVE_FAILURES), when its owner loses the permission its post mode needs (ACCESS_LOST), when the plan no longer covers publishing (SUBSCRIPTION_INACTIVE) or when every target account was disconnected (CONNECTION_REMOVED); pauseReason and lastError say which. Needs the posts.read permission. Takes only the optional workspaceId.',
+      inputSchema: {},
+      outputSchema: resultSchema(`An object with rssFeeds: one record per feed. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (_args, client) => {
+      try {
+        const data = await client.get('/rss-feeds');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'get_rss_feed',
+    {
+      title: 'Get RSS Feed',
+      description:
+        'Get one RSS feed by id: its settings, targets, status, pauseReason and lastError, and when it was last checked and last posted. Use list_rss_feed_items to see what it did with each item. Ids outside the workspace return 404. Needs the posts.read permission.',
+      inputSchema: rssFeedIdField,
+      outputSchema: resultSchema(RSS_FEED_RECORD),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.get(`/rss-feeds/${encodeURIComponent(id)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'preview_rss_feed',
+    {
+      title: 'Preview RSS Feed',
+      description:
+        'Fetch an RSS or Atom feed without saving it and return its 5 newest items, each with text rendered from template, so the user can see what the posts would say before create_rss_feed. Fails with 400 when the URL is not a feed and 503 when it cannot be reached. Nothing is saved or posted. Needs the posts.draft permission.',
+      inputSchema: {
+        url: z.string().url().describe('Public http(s) URL of an RSS or Atom feed'),
+        template: rssFeedSettingsFields.template,
+      },
+      outputSchema: resultSchema(
+        'An object with url, title, siteUrl and items: one { title, link, summary, publishedAt, imageUrl, text } per item, where text is the item rendered with template.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/rss-feeds/preview', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'create_rss_feed',
+    {
+      title: 'Create RSS Feed',
+      description:
+        "Connect an RSS or Atom feed so each new item becomes a post on the target accounts. The feed is fetched and every item already in it is recorded, so only items that appear later are posted; postLatestItem also posts the newest one on the first check. The feed is then checked every checkIntervalMinutes and posts as the member who saved it, as a draft, a scheduled post or straight away (postMode). With postMode SCHEDULE or PUBLISH, posts go out on the user's accounts without further confirmation, so confirm the feed, the accounts, the mode and the text with the user first. Try preview_rss_feed first to show what the posts will say. Fails with 400 for invalid settings, a URL that is not a feed, a feed already connected or the 20-feed workspace limit, and 503 when the feed cannot be reached. Needs posts.draft, plus the permission of the post mode.",
+      inputSchema: {
+        url: z.string().url().describe('Public http(s) URL of an RSS or Atom feed'),
+        postLatestItem: z
+          .boolean()
+          .optional()
+          .describe('Also post the newest item on the first check (default false)'),
+        ...rssFeedSettingsFields,
+      },
+      outputSchema: resultSchema(`The new feed. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/rss-feeds', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'update_rss_feed',
+    {
+      title: 'Update RSS Feed',
+      description:
+        "Change an RSS feed's settings; only the fields sent change, and the URL cannot change. The feed then posts as the member making the change, so they need the permission of the resulting post mode, plus posts.others when someone else set the feed up. Switching postMode to SCHEDULE or PUBLISH means later items go out without further confirmation, so confirm with the user first. Ids outside the workspace return 404. Needs the posts.draft permission.",
+      inputSchema: {
+        ...rssFeedIdField,
+        ...rssFeedSettingsFields,
+        targets: rssFeedSettingsFields.targets.optional(),
+        postMode: rssFeedSettingsFields.postMode.optional(),
+        contentMode: rssFeedSettingsFields.contentMode.optional(),
+      },
+      outputSchema: resultSchema(`The updated feed. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async ({ id, ...body }, client) => {
+      try {
+        const data = await client.patch(`/rss-feeds/${encodeURIComponent(id)}`, body);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'delete_rss_feed',
+    {
+      title: 'Delete RSS Feed',
+      description:
+        'Delete an RSS feed: it stops being checked for good. Posts it already created stay. Prefer pause_rss_feed when the user may want it back. Ids outside the workspace return 404. Needs the posts.draft permission. Returns { deleted: true }. Irreversible.',
+      inputSchema: rssFeedIdField,
+      outputSchema: resultSchema('An object with deleted: true once the feed is removed.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.delete(`/rss-feeds/${encodeURIComponent(id)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_rss_feed_items',
+    {
+      title: 'List RSS Feed Items',
+      description:
+        "List the items an RSS feed has seen, newest first, leaving out the ones already in the feed when it was added. Each item has a status: PROCESSING, POSTED (postId links it to its post, for get_post), FILTERED (keyword rules), SKIPPED (published more than 14 days before the feed was added) or FAILED (error says why). Use it to answer why an article was or was not posted. Needs the posts.read permission.",
+      inputSchema: {
+        ...rssFeedIdField,
+        limit: z.number().int().min(1).max(100).optional().describe('Max items, 1 to 100 (default 20)'),
+      },
+      outputSchema: resultSchema(
+        'An object with items: one { id, createdAt, title, link, publishedAt, status, postId, error } per item.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id, ...query }, client) => {
+      try {
+        const data = await client.get(`/rss-feeds/${encodeURIComponent(id)}/items`, query);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'pause_rss_feed',
+    {
+      title: 'Pause RSS Feed',
+      description:
+        'Pause an RSS feed: it stops being checked until resume_rss_feed. Posts it already created stay, scheduled ones included; cancel those with delete_post. Ids outside the workspace return 404. Needs the posts.draft permission. Returns the feed with status PAUSED and pauseReason USER.',
+      inputSchema: rssFeedIdField,
+      outputSchema: resultSchema(`The paused feed. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.post(`/rss-feeds/${encodeURIComponent(id)}/pause`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'resume_rss_feed',
+    {
+      title: 'Resume RSS Feed',
+      description:
+        "Resume a paused RSS feed: the pause reason is cleared and the feed is checked within a minute, posting new items according to its post mode, so confirm with the user first. It then posts as the member resuming it, who needs the permission of its post mode. When pauseReason is ACCESS_LOST, SUBSCRIPTION_INACTIVE or CONNECTION_REMOVED, fix the cause first or the feed pauses again. Ids outside the workspace return 404. Needs the posts.draft permission.",
+      inputSchema: rssFeedIdField,
+      outputSchema: resultSchema(`The resumed feed. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.post(`/rss-feeds/${encodeURIComponent(id)}/resume`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'check_rss_feed',
+    {
+      title: 'Check RSS Feed Now',
+      description:
+        "Move an RSS feed's next check to now; the feed is fetched within a minute and any new items are posted according to its post mode. Use it when the user just published an article and does not want to wait for the interval. Read list_rss_feed_items a minute later to see the result. Ids outside the workspace return 404. Needs the posts.draft permission.",
+      inputSchema: rssFeedIdField,
+      outputSchema: resultSchema(`The feed with its new nextCheckAt. ${RSS_FEED_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.post(`/rss-feeds/${encodeURIComponent(id)}/check`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
   // ── Analytics ──────────────────────────────────────────────────────────
 
   tool(
@@ -1869,10 +2589,11 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Platform Breakdown',
       description:
-        'The overview metrics split per platform for a date window, for "which platform performs best" comparisons. Returns { platforms }: one row per platform with analytics data, carrying followers, views, likes, comments, shares, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }) plus supportedMetrics, the metrics that platform actually reports; compare only metrics both platforms list there. Google Business Profile reports location impressions only. Takes no platform filter. Use get_analytics_overview for the combined total.',
+        'The overview metrics split per platform for a date window, for "which platform performs best" comparisons. Returns { platforms }: one row per platform with analytics data, carrying followers, views, likes, comments, shares, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }) plus supportedMetrics, the metrics that platform actually reports; compare only metrics both platforms list there. Google Business Profile reports location impressions only. Takes no platform filter; connectionIds narrows it to some accounts. Use get_analytics_overview for the combined total.',
       inputSchema: {
         from: analyticsRangeFields.from,
         to: analyticsRangeFields.to,
+        connectionIds: analyticsRangeFields.connectionIds,
       },
       outputSchema: resultSchema(
         'An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics } per platform.',
@@ -1898,7 +2619,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Post Analytics',
       description:
-        'Per-post metrics for posts published inside the window, sorted by a metric or by publish date, paginated. Use it for "top posts", "which post got the most comments" and "how did post X do". Covers posts published through AdaptlyPost and posts discovered on the connected accounts; Google Business Profile posts are listed with null metrics, since that platform reports only location impressions; discovered posts have postId and postPlatformId set to null, while AdaptlyPost posts carry the postId used by get_post. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, thumbnailUrl, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review. Not for publishing status: use list_post_results for that.',
+        'Per-post metrics for posts published inside the window, sorted by a metric or by publish date, paginated. Use it for "top posts", "which post got the most comments" and "how did post X do". Covers posts published through AdaptlyPost and posts discovered on the connected accounts; Google Business Profile posts are listed with null metrics, since that platform reports only location impressions; discovered posts have postId and postPlatformId set to null, while AdaptlyPost posts carry the postId used by get_post. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, thumbnailUrl, permalink, connectionId, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate, plus engagedViews, averageViewDurationSeconds and averageViewPercentage on YouTube }, with null for metrics the platform does not report. Sort by a metric for a ranked list (list_top_posts returns the top few in one call); PUBLISHED_AT (default) for a chronological review. Not for publishing status: use list_post_results for that.',
       inputSchema: {
         ...analyticsRangeFields,
         sortBy: AnalyticsSortMetric.optional().describe(
@@ -1915,7 +2636,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Posts per page, 1 to 100'),
       },
       outputSchema: resultSchema(
-        'An object with posts (each { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, accountName, metrics }), total, page, limit, and hasMore.',
+        'An object with posts (each { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, connectionId, accountName, metrics }), total, page, limit, and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1926,6 +2647,65 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (input, client) => {
       try {
         const data = await client.get('/analytics/posts', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_top_posts',
+    {
+      title: 'List Top Posts',
+      description:
+        'The best-performing posts published inside the window, ranked by one metric (VIEWS by default), in one call: the same rows as list_post_analytics without pagination. Use it for "what were our top 5 posts this month". Covers posts published through AdaptlyPost and posts discovered on the connected accounts (postId null). connectionIds narrows it to some accounts. Needs the analytics.read permission.',
+      inputSchema: {
+        ...analyticsRangeFields,
+        sortBy: AnalyticsSortMetric.optional().describe('Metric to rank by, descending (default VIEWS)'),
+        limit: z.number().int().min(1).max(50).optional().describe('Posts to return, 1 to 50 (default 10)'),
+      },
+      outputSchema: resultSchema(
+        'An object with posts: one { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, connectionId, accountName, metrics } per post, best first.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.get('/analytics/top-posts', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_discovered_posts',
+    {
+      title: 'List Discovered Posts',
+      description:
+        "Posts found on the connected accounts that were not published through AdaptlyPost (published natively or with another tool), inside the window: text, thumbnail, permalink, account and publish time. They are read-only; their metrics are in list_post_analytics. Use it to show what an account posted outside AdaptlyPost or to fill in the calendar. Needs the analytics.read permission.",
+      inputSchema: {
+        ...analyticsRangeFields,
+        limit: z.number().int().min(1).max(1000).optional().describe('Posts to return, 1 to 1000 (default 200)'),
+      },
+      outputSchema: resultSchema(
+        'An object with posts: one { id, platform, publishedAt, text, thumbnailUrl, permalink, connectionId, accountName } per post.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.get('/analytics/discovered-posts', input);
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -1964,7 +2744,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Trigger Analytics Sync',
       description:
-        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 10 minutes; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
+        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 4 hours; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with queued (true when a sync was started), message, and cooldownSecondsRemaining (seconds until the next allowed sync, null when queued).',
@@ -1979,6 +2759,166 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     async (_args, client) => {
       try {
         const data = await client.post('/analytics/sync');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // ── Webhooks ───────────────────────────────────────────────────────────
+
+  const webhookIdField = { id: z.string().describe('Webhook id from list_webhooks or create_webhook') };
+
+  const WEBHOOK_RECORD =
+    'The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row).';
+
+  tool(
+    'list_webhooks',
+    {
+      title: 'List Webhooks',
+      description:
+        'List the webhook endpoints registered for the workspace (the current one unless workspaceId names another), with whether each is active and when it last succeeded or failed. Needs the webhooks.read permission, which Admin, Editor and Viewer hold. Takes only the optional workspaceId.',
+      inputSchema: {},
+      outputSchema: resultSchema(`An object with webhooks: one record per endpoint. ${WEBHOOK_RECORD}`),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (_args, client) => {
+      try {
+        const data = await client.get('/webhooks');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'get_webhook',
+    {
+      title: 'Get Webhook',
+      description:
+        'Get one webhook endpoint by id. Ids outside the workspace return 404. Needs the webhooks.read permission.',
+      inputSchema: webhookIdField,
+      outputSchema: resultSchema(WEBHOOK_RECORD),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.get(`/webhooks/${encodeURIComponent(id)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'create_webhook',
+    {
+      title: 'Create Webhook',
+      description:
+        "Register a URL that receives every workspace event as an HTTP POST: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+      inputSchema: {
+        url: z.string().url().describe('Publicly reachable http(s) endpoint that receives every event'),
+      },
+      outputSchema: resultSchema(`The new webhook plus secret, the signing secret shown only this once. ${WEBHOOK_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/webhooks', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'update_webhook',
+    {
+      title: 'Update Webhook',
+      description:
+        'Change a webhook endpoint\'s URL, or turn it off or back on with active. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.',
+      inputSchema: {
+        ...webhookIdField,
+        url: z.string().url().optional().describe('New http(s) endpoint URL'),
+        active: z.boolean().optional().describe('false stops deliveries, true resumes them'),
+      },
+      outputSchema: resultSchema(`The updated webhook. ${WEBHOOK_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id, ...body }, client) => {
+      try {
+        const data = await client.patch(`/webhooks/${encodeURIComponent(id)}`, body);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'delete_webhook',
+    {
+      title: 'Delete Webhook',
+      description:
+        'Delete a webhook endpoint; it receives nothing more. Use update_webhook with active: false to pause it instead. Needs the webhooks.manage permission. Returns { deleted: true }. Irreversible.',
+      inputSchema: webhookIdField,
+      outputSchema: resultSchema('An object with deleted: true once the webhook is removed.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.delete(`/webhooks/${encodeURIComponent(id)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'test_webhook',
+    {
+      title: 'Test Webhook',
+      description:
+        'Send one signed webhook.test event to the endpoint now and report how it answered, to check the URL and the signature check work. Needs the webhooks.manage permission.',
+      inputSchema: webhookIdField,
+      outputSchema: resultSchema(
+        'An object with success, statusCode (the HTTP status the endpoint answered) and error when the delivery failed.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.post(`/webhooks/${encodeURIComponent(id)}/test`);
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -2002,7 +2942,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe(
             'What the caption should say or be about, including tone, audience, hashtags or a call to action (max 2000 characters)',
           ),
-        platform: PlatformType.optional().describe(
+        platform: CaptionPlatform.optional().describe(
           "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting. Omit for a general caption",
         ),
       },
@@ -2046,7 +2986,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .max(10000)
           .optional()
           .describe('A partly written caption to continue from (max 10000 characters)'),
-        platform: PlatformType.optional().describe(
+        platform: CaptionPlatform.optional().describe(
           "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting",
         ),
       },

@@ -23,6 +23,7 @@ export const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
+  'image/gif': '.gif',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
   'application/pdf': '.pdf',
@@ -68,6 +69,7 @@ function sniffMimeType(bytes: Uint8Array, name: string): string | undefined {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   if (ascii(bytes, 0, 8) === '\x89PNG\r\n\x1a\n') return 'image/png';
   if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 12) === 'WEBP') return 'image/webp';
+  if (ascii(bytes, 0, 6) === 'GIF87a' || ascii(bytes, 0, 6) === 'GIF89a') return 'image/gif';
   const box = ascii(bytes, 4, 8);
   if (box === 'ftyp') return ascii(bytes, 8, 12) === 'qt  ' ? 'video/quicktime' : 'video/mp4';
   if (QUICKTIME_ATOMS.has(box)) return 'video/quicktime';
@@ -82,7 +84,7 @@ function requireMediaType(head: Uint8Array, source: string, name: string): strin
   const mimeType = sniffMimeType(head, name);
   if (!mimeType) {
     throw new Error(
-      `${source} is not a JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
+      `${source} is not a JPEG, PNG, WebP, GIF, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
     );
   }
   return mimeType;

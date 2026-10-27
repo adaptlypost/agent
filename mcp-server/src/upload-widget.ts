@@ -62,6 +62,7 @@ const ACCEPT = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/gif',
   'video/mp4',
   'video/quicktime',
   'application/pdf',
@@ -133,7 +134,7 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     <input type="file" id="input" multiple accept="${ACCEPT}" hidden>
   </div>
   <ul id="list"></ul>
-  <p class="note">JPEG, PNG, WebP, MP4, MOV, PDF, PowerPoint or Word. Uploaded files are stored at public links so they can be posted.</p>
+  <p class="note">JPEG, PNG, WebP, GIF, MP4, MOV, PDF, PowerPoint or Word. Uploaded files are stored at public links so they can be posted.</p>
 <script>
 (() => {
   const ORIGIN = ${JSON.stringify(serverOrigin)};

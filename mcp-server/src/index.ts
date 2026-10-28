@@ -774,7 +774,7 @@ const createPostShape = {
     .string()
     .optional()
     .describe(
-      'Absolute ISO 8601 instant to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately; a past time also posts immediately',
+      'Absolute ISO 8601 instant to schedule (e.g. "2026-03-15T10:00:00Z"). Omit to post immediately; a past time also posts immediately. With saveAsDraft it is the draft\'s planned date instead: nothing is scheduled, and publish_draft without a date later schedules the draft for it',
     ),
   timezone: z
     .string()
@@ -786,7 +786,7 @@ const createPostShape = {
     .boolean()
     .optional()
     .describe(
-      'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft',
+      'Save as DRAFT instead of publishing or scheduling; publish later with publish_draft. A scheduledAt sent with it is stored as the draft\'s planned date, and publish_draft schedules the draft for that date',
     ),
   recurrence: RecurrenceSchema.optional().describe(
     'Repeat the post on a schedule the user asked for, and confirm that schedule with them first. Needs a future scheduledAt, which becomes the first post and sets the time of day in timezone. Cannot be combined with saveAsDraft or TIKTOK. Missed slots, for example while paused, are skipped and never published late. The user can pause or stop the series at any time with pause_recurring_post or delete_recurring_post; list_recurring_posts shows it',
@@ -1602,7 +1602,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a future scheduledAt schedules it; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, Instagram user tags, Facebook link carousel, first comments, threads of replies, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, Instagram user tags, Facebook link carousel, first comments, threads of replies, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt, plus recurringPostId when recurrence was sent. Publishing is asynchronous: check list_post_results for outcomes.',
@@ -1762,7 +1762,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .string()
           .optional()
           .describe(
-            'New schedule time as an absolute ISO 8601 instant; omit to keep. Moving a SCHEDULED post more than a minute into the past fails with 400; use publish_draft to publish now',
+            'New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft. Moving a SCHEDULED post more than a minute into the past fails with 400; use publish_draft to publish now',
           ),
         timezone: z
           .string()
@@ -1840,7 +1840,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Unschedule Post',
       description:
-        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; reschedule it later with update_post or publish_draft, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the workspace (the current one unless workspaceId names another) return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
+        'Take a DRAFT or SCHEDULED post off the calendar without deleting it: the post becomes an undated DRAFT (status DRAFT, scheduledAt null) and nothing publishes. Use it when the user wants to hold a scheduled post back; schedule it again later with publish_draft and a scheduledAt, and use delete_post only to drop it entirely. Any other status (PENDING, PUBLISHING, COMPLETED, FAILED, PARTIAL_FAILURE) fails with 400 because the post is already going out or out. Ids outside the workspace (the current one unless workspaceId names another) return 404. Safe to repeat on a post that is already an undated draft. Returns the post record.',
       inputSchema: {
         id: z.string().describe('Post ID with status DRAFT or SCHEDULED, from list_posts or create_post'),
       },
@@ -1871,14 +1871,20 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Publish Draft',
       description:
-        'Publish a DRAFT post now or schedule it; SCHEDULED posts are accepted too, to reschedule or push live. Other statuses fail with "Post is not a draft". Without scheduledAt (or with a past one) the post moves to PENDING and a publishing job is queued per platform: content reaches the networks within moments and cannot be recalled. A future scheduledAt sets SCHEDULED and queues nothing yet. Fails if an account was disconnected or a TikTok entry lacks privacyLevel; fix with update_post first. Not for new content, use create_post. Check list_post_results afterwards for per-platform outcomes.',
+        'Publish a DRAFT post now or schedule it; SCHEDULED posts are accepted too, to reschedule or push live. Other statuses fail with "Post is not a draft". A future scheduledAt sets SCHEDULED for that time and queues nothing yet; a past one publishes now. Without scheduledAt, a draft whose planned date (the scheduledAt it was saved with) is still in the future is SCHEDULED for that date, and any other post (an undated draft, a planned date already past, a SCHEDULED post) publishes now. publishNow: true publishes now even when the draft has a planned date; sending it with scheduledAt fails with 400. Read the draft with get_post first and tell the user which of these will happen. Publishing now clears the stored scheduledAt, moves the post to PENDING and queues a publishing job per platform: content reaches the networks within moments and cannot be recalled. Fails if an account was disconnected or a TikTok entry lacks privacyLevel; fix with update_post first. Not for new content, use create_post. Check list_post_results afterwards for per-platform outcomes.',
       inputSchema: {
         id: z.string().describe('Post ID with status DRAFT (or SCHEDULED)'),
         scheduledAt: z
           .string()
           .optional()
           .describe(
-            'Absolute ISO 8601 instant (e.g. "2026-03-15T10:00:00Z"). Omit, or pass a past time, to publish now',
+            'Absolute ISO 8601 instant (e.g. "2026-03-15T10:00:00Z"). A future time schedules for that time instead of the draft\'s planned date; a past time publishes now. Omit to schedule for the planned date when it is still in the future, and to publish now otherwise',
+          ),
+        publishNow: z
+          .boolean()
+          .optional()
+          .describe(
+            'Publish now even when the draft has a planned date in the future. Sending it with scheduledAt fails with 400',
           ),
         timezone: z
           .string()

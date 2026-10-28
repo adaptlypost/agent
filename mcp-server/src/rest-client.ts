@@ -50,7 +50,7 @@ function describe(
       body.requiredPermission === 'posts.schedule' ||
       body.requiredPermission === 'posts.publish'
     ) {
-      return `${denied} This key is ${roleName(body.role)}; save with saveAsDraft: true and ask a workspace member to publish. ${FINAL}`;
+      return `${denied} This key is ${roleName(body.role)}; save with saveAsDraft: true (a scheduledAt is kept as the draft's planned date) and ask a workspace member to publish. ${FINAL}`;
     }
     return `${denied} ${sentence(apiMessage)} ${FINAL}`;
   }

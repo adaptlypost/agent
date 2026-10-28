@@ -651,6 +651,7 @@ const COMMANDS = {
     }
     const body = { timezone: parsed.timezone || "UTC" };
     if (parsed.schedule) body.scheduledAt = parsed.schedule;
+    if (parsed.now) body.publishNow = true;
 
     const data = await request(
       "POST",

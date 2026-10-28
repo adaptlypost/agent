@@ -24,7 +24,9 @@ configured by hand, and no API token is stored in this extension.
   upload media but cannot schedule or publish; a Viewer only reads.
 - A 403 with `code: permission_denied` is final. Do not retry it and do not look for
   another key. For scheduling or publishing, save the post as a draft
-  (`saveAsDraft: true`) and tell the user a workspace member has to publish it.
+  (`saveAsDraft: true`, keeping `scheduledAt` as its planned date) and tell the user a
+  workspace member has to publish it. `publish_draft` without a date schedules such a
+  draft for its planned date when that is still in the future.
 - Ask before anything that writes. Deletes cannot be undone.
 - Read the tool descriptions for the filters each one accepts rather than guessing
   parameter names.

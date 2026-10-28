@@ -102,14 +102,14 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, Linked
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
 | `open_upload_widget` | Show an upload box in ChatGPT or Claude so the user can add files from their device; the box sends back the `mediaUrls` |
 | `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |
-| `create_post` | Create a post: publish immediately, schedule, or save as draft. Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, threads of replies, Tumblr tags and Google Business Profile events and offers |
+| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, threads of replies, Tumblr tags and Google Business Profile events and offers |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |
 | `update_post` | Update a scheduled or draft post |
 | `delete_post` | Delete a post record; cancels a draft or scheduled post, never removes content already live |
 | `unschedule_post` | Turn a scheduled post back into an undated draft without deleting it |
-| `publish_draft` | Publish a draft post immediately or schedule it |
+| `publish_draft` | Publish a draft post immediately or schedule it. Without a date, a draft with a future planned date is scheduled for it and any other draft publishes now; `publishNow: true` publishes now regardless |
 | `list_post_results` | Check per-platform posting results, success or failure with error details |
 | `retry_failed_platforms` | Retry publishing on platforms that failed |
 | `bulk_schedule_posts` | Schedule up to 100 posts at once |

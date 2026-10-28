@@ -1,0 +1,44 @@
+mcp-server/src/rest-client.ts
+  s_89ee2060c970ff::t_a1a67e8b99cae2 53
+GEMINI.md
+  s_89ee2060c970ff::t_393f29d3fb0896 27-29
+skills/adaptlypost/scripts/adaptlypost.js
+  s_89ee2060c970ff::t_27cdd04d0b7883 654
+mcp-server/README.md
+  s_89ee2060c970ff::t_d9ac4052498ff4 105
+  s_89ee2060c970ff::t_f3a1a278c5308b 112
+mcp-server/src/index.ts
+  s_89ee2060c970ff::t_f3104abe6a5a7c 1874,1881-1887
+  s_89ee2060c970ff::t_b431b21fcabba3 1765
+  s_89ee2060c970ff::t_5b7e9b624f6139 789
+  s_89ee2060c970ff::t_23071665ebfc2a 1843
+  s_89ee2060c970ff::t_5efa29ebf9770e 1605
+  s_89ee2060c970ff::t_6a3fe77939d2d7 777
+skills/adaptlypost/SKILL.md
+  s_89ee2060c970ff::t_e4bff89d5e6b1e 85
+  s_89ee2060c970ff::t_ad85cb8b748acc 767
+  s_89ee2060c970ff::t_bfdd886b900adf 688
+  s_89ee2060c970ff::t_4f39083b8a1bd3 107
+  s_89ee2060c970ff::t_13af7812a73c96 419
+  s_89ee2060c970ff::t_9157c9535b2202 114-115
+  s_89ee2060c970ff::t_ab78d21c6e70e6 435
+  s_89ee2060c970ff::t_87d7d700b53f96 442,445
+  s_89ee2060c970ff::t_f2bbbbaee2e01e 326
+  s_89ee2060c970ff::t_3ba2b86607dd2b 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7231c7423b2520df8ba0fc7504ca71860b9de66f",
+  "prompts": {},
+  "sessions": {
+    "s_89ee2060c970ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "020354a8-1a25-4dc9-89f3-fec2061bac32",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

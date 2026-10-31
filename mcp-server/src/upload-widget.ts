@@ -72,7 +72,7 @@ const ACCEPT = [
   '.docx',
 ].join(',');
 
-export function uploadWidgetHtml(serverOrigin: string): string {
+export function uploadWidgetHtml(serverOrigin: string, linkId?: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -124,9 +124,15 @@ export function uploadWidgetHtml(serverOrigin: string): string {
   .bar.busy > span { width: 100%; animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   .note { margin: 10px 2px 0; font-size: 12px; color: var(--muted); }
+  body.page { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+  .page h1 { font-size: 18px; margin: 0 0 14px; }
+  .finished { display: none; margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); }
+  .finished strong { display: block; margin-bottom: 4px; }
+  .finished p { margin: 0 0 10px; color: var(--muted); }
 </style>
 </head>
-<body>
+<body${linkId ? ' class="page"' : ''}>
+  ${linkId ? '<h1>Upload to AdaptlyPost</h1>' : ''}
   <div class="drop" id="drop">
     <strong>Add photos, videos or documents</strong>
     <p>Drop files here or choose them from your device.</p>
@@ -134,10 +140,15 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     <input type="file" id="input" multiple accept="${ACCEPT}" hidden>
   </div>
   <ul id="list"></ul>
+  <div class="finished" id="finished">
+    <strong id="finished-title"></strong>
+    <p>Go back to your chat and say you're done. The assistant picks up the files from here. You can still add more.</p>
+  </div>
   <p class="note">JPEG, PNG, WebP, GIF, MP4, MOV, PDF, PowerPoint or Word. Uploaded files are stored at public links so they can be posted.</p>
 <script>
 (() => {
   const ORIGIN = ${JSON.stringify(serverOrigin)};
+  const LINK_ID = ${JSON.stringify(linkId ?? null)};
   const MAX_BYTES = 250 * 1024 * 1024;
   const CHUNK_ATTEMPTS = 3;
   const IMPORT_POLL_MS = 2000;
@@ -214,6 +225,7 @@ export function uploadWidgetHtml(serverOrigin: string): string {
   }
 
   function reportSize() {
+    if (LINK_ID) return;
     notify('ui/notifications/size-changed', {
       width: document.documentElement.scrollWidth,
       height: document.documentElement.scrollHeight,
@@ -308,7 +320,10 @@ export function uploadWidgetHtml(serverOrigin: string): string {
   async function startSession(file) {
     const response = await fetch(ORIGIN + '/upload-session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Ticket': await ticket() },
+      headers: Object.assign(
+        { 'Content-Type': 'application/json' },
+        LINK_ID ? { 'X-Upload-Link': LINK_ID } : { 'X-Upload-Ticket': await ticket() },
+      ),
       body: JSON.stringify({ fileName: file.name, fileSize: file.size, head: await readHead(file) }),
     });
     const body = parse(await response.text());
@@ -357,11 +372,23 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     view.busy('Saving to AdaptlyPost');
     const response = await fetch(sessionUrl + '/complete', { method: 'POST' });
     const body = parse(await response.text());
+    if (response.ok && body.held) return null;
     if (!response.ok || !body.importId) throw new Error(body.error || 'Upload failed (' + response.status + ')');
     return awaitImport(body.importId);
   }
 
+  let uploadedCount = 0;
+
+  function showFinished(count) {
+    uploadedCount += count;
+    document.getElementById('finished-title').textContent = uploadedCount === 1
+      ? '1 file uploaded'
+      : uploadedCount + ' files uploaded';
+    document.getElementById('finished').style.display = 'block';
+  }
+
   async function tell(uploaded) {
+    if (LINK_ID) { showFinished(uploaded.length); return; }
     const lines = uploaded.map((u) => '- ' + u.fileName + ': ' + u.publicUrl);
     const text = 'I uploaded ' + (uploaded.length === 1 ? 'a file' : uploaded.length + ' files') +
       ' to AdaptlyPost. Use these media URLs:\\n' + lines.join('\\n');
@@ -409,10 +436,37 @@ export function uploadWidgetHtml(serverOrigin: string): string {
     upload(Array.from((event.dataTransfer && event.dataTransfer.files) || []));
   });
 
-  if (window.ResizeObserver) new ResizeObserver(reportSize).observe(document.body);
-  connect().then(reportSize);
+  if (LINK_ID) {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme({ theme: 'dark' });
+  } else {
+    if (window.ResizeObserver) new ResizeObserver(reportSize).observe(document.body);
+    connect().then(reportSize);
+  }
 })();
 </script>
+</body>
+</html>`;
+}
+
+export function uploadLinkExpiredHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload link expired</title>
+<style>
+  body {
+    max-width: 560px; margin: 0 auto; padding: 32px 16px; color: #111827; background: #ffffff;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  p { margin: 0; color: #6b7280; }
+</style>
+</head>
+<body>
+  <h1>This upload link expired</h1>
+  <p>Ask the assistant in your chat for a new upload link.</p>
 </body>
 </html>`;
 }

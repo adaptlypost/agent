@@ -100,7 +100,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, Linked
 | `revoke_connect_link` | Revoke a connect link |
 | `upload_media` | Upload images, videos or documents from ChatGPT attachments, public URLs or base64 and get `mediaUrls` for a post |
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
-| `open_upload_widget` | Show an upload box in ChatGPT or Claude so the user can add files from their device; the box sends back the `mediaUrls` |
+| `open_upload_widget` | Show an upload box in ChatGPT or Claude chat so the user can add files from their device; the box sends back the `mediaUrls`. Where the box can't show (Claude Cowork, Claude Code), it returns an upload link instead; call it again with `uploadId` to get the `mediaUrls` |
 | `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |
 | `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, threads of replies, Tumblr tags and Google Business Profile events and offers |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |

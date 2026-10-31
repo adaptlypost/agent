@@ -677,7 +677,7 @@ AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or 
 | `revoke_connect_link` | Revoke a connect link |
 | `upload_media` | Upload media (URLs or base64, combinable) and get `mediaUrls` for a post. Prefer over `get_upload_urls` |
 | `get_upload_urls` | Mint presigned upload URLs only; you must PUT the file yourself before using `publicUrl` |
-| `open_upload_widget` | Show an upload box in the chat so the user can add files from their device; it sends back the `mediaUrls` |
+| `open_upload_widget` | Show an upload box in the chat so the user can add files from their device; it sends back the `mediaUrls`. Where the box can't show, it returns an upload link for the user; call it again with `uploadId` once they finish |
 | `create_post` | Create one post: publish now, schedule, or draft. `recurrence` repeats it. Async per platform; check `list_post_results` |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |
 | `list_posts` | List posts in the workspace with filters and pagination; find ids and see what is queued |

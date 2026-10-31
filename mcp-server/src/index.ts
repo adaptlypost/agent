@@ -36,9 +36,21 @@ import {
   UPLOAD_FILE_NAME_HEADER,
   UPLOAD_TICKET_HEADER,
   UPLOAD_WIDGET_URI,
+  uploadLinkExpiredHtml,
   uploadTicketsEnabled,
   uploadWidgetHtml,
 } from './upload-widget.js';
+import {
+  claimUploadLink,
+  createUploadLink,
+  parkLinkUpload,
+  reserveLinkUpload,
+  UPLOAD_LINK_HEADER,
+  UPLOAD_LINK_PATH,
+  uploadLinkOpen,
+  uploadLinkUrl,
+  type ParkedFile,
+} from './upload-links.js';
 import { withoutSchemaDialect } from './schema-dialect.js';
 import {
   oauthConfigFromEnv,
@@ -1041,6 +1053,40 @@ const SERVER_INSTRUCTIONS = [
   'validate_post and validate_bulk_posts take the same input as create_post and bulk_schedule_posts and report every problem without creating anything. Use them before a large or unusual post.',
 ].join('\n');
 
+const LINK_CLAIM_WAIT_MS = 25_000;
+
+async function uploadLinkResult(uploadId: string, client: RestClient) {
+  const state = await claimUploadLink(uploadId, (file) => storeFile(client, file), LINK_CLAIM_WAIT_MS);
+  if (!state) {
+    return toolError(
+      new Error('This upload link is no longer tracked. Call open_upload_widget without uploadId for a new link.'),
+    );
+  }
+  const advice = {
+    waiting: 'Nothing has been uploaded through this link yet. Ask the user whether they finished uploading.',
+    saving: `${state.savingCount} file(s) are still being saved. Call again in a few seconds.`,
+    ready: 'Pass mediaUrls to create_post, update_post or bulk_schedule_posts. Tell the user about any file listed in failed.',
+    failed: 'No file could be saved. Tell the user the reason listed in failed for each file.',
+    expired: 'The link expired before anything was uploaded. Call open_upload_widget without uploadId for a new link.',
+  }[state.status];
+  return {
+    content: [{ type: 'text' as const, text: `${advice}\n${JSON.stringify(state, null, 2)}` }],
+    structuredContent: { result: state },
+  };
+}
+
+type Caller = { uploadSurface: 'widget' | 'link' | 'widget_or_link' };
+
+// Cowork and Claude Code never render MCP Apps: anthropics/claude-code#103924
+const ANTHROPIC_CLIENTS_WITH_MCP_APPS = new Set(['ClaudeAI']);
+
+function callerOf(headers: Record<string, string | string[] | undefined> | undefined): Caller {
+  const raw = headers?.['x-anthropic-client'];
+  const anthropicClient = Array.isArray(raw) ? raw[0] : raw;
+  if (!anthropicClient) return { uploadSurface: 'widget_or_link' };
+  return { uploadSurface: ANTHROPIC_CLIENTS_WITH_MCP_APPS.has(anthropicClient) ? 'widget' : 'link' };
+}
+
 function createMcpServer(apiClient?: RestClient): McpServer {
   const baseClient = apiClient ?? api;
   const server = new McpServer(
@@ -1064,14 +1110,16 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     handler: (
       args: z.objectOutputType<Args, ZodTypeAny>,
       client: RestClient,
+      caller: Caller,
     ) => Promise<CallToolResult>,
   ) => {
     const inputSchema: ZodRawShape = { ...config.inputSchema, ...workspaceIdField };
-    return server.registerTool(name, { ...config, inputSchema }, async (args) => {
+    return server.registerTool(name, { ...config, inputSchema }, async (args, extra) => {
       const { workspaceId, ...rest } = args as { workspaceId?: string };
       return handler(
         rest as z.objectOutputType<Args, ZodTypeAny>,
         baseClient.forWorkspace(workspaceId),
+        callerOf(extra.requestInfo?.headers),
       );
     });
   };
@@ -1451,7 +1499,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it and do not stop: hand the files to the user as downloads, call open_upload_widget, and ask the user to add them in the upload box, which returns the mediaUrls. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, image/gif (Facebook, X, Bluesky, Mastodon, LinkedIn and Tumblr only), video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it, do not stop, and never put the files in a public repo or file-sharing link: call open_upload_widget and have the user add the files through the upload box or upload link it returns. If the files are ones you made, hand them to the user as downloads first. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, image/gif (Facebook, X, Bluesky, Mastodon, LinkedIn and Tumblr only), video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
@@ -1524,10 +1572,18 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Upload From Device',
       description:
-        "Show an upload box in the chat so the user can add photos, videos or documents from their phone or computer. Use it when the user wants to post a file that has no public URL, such as a photo on their phone, a file attached in the chat that upload_media cannot read (in ChatGPT, pass attached files to upload_media as attachments instead), or a file you built in a sandbox whose network blocks the get_upload_urls uploadUrl. Nothing is uploaded until the user picks files in the box. When the upload finishes, the box sends a message listing the public media URLs; pass them as mediaUrls to create_post, update_post or bulk_schedule_posts. Accepts JPEG, PNG, WebP, GIF, MP4, QuickTime, PDF, PPT, PPTX, DOC and DOCX, up to 250 MB per file, 50 MB per image and 100 MB per document. Uploaded files are stored at public URLs. The box only appears in apps that show MCP Apps widgets, such as ChatGPT and Claude; elsewhere ask the user for a public URL and use upload_media.",
-      inputSchema: {},
+        "Let the user add photos, videos or documents from their phone or computer. Use it when the user wants to post a file that has no public URL, such as a photo on their phone, a file attached in the chat that upload_media cannot read (in ChatGPT, pass attached files to upload_media as attachments instead), or a file you built in a sandbox whose network blocks the get_upload_urls uploadUrl. Never suggest putting the files in a public GitHub repo or a file-sharing link instead. In apps that show MCP Apps widgets, such as ChatGPT and Claude chat, it shows an upload box in the chat, and when the upload finishes the box sends a message listing the public media URLs. In apps that cannot show the box, such as Claude Cowork and Claude Code, it returns status upload_link with uploadUrl, a page the user opens in their browser to upload, and uploadId: give the user the link, wait until they say they finished, then call this tool again with that uploadId to get the media URLs. Pass the media URLs as mediaUrls to create_post, update_post or bulk_schedule_posts. Nothing is uploaded until the user picks files. Accepts JPEG, PNG, WebP, GIF, MP4, QuickTime, PDF, PPT, PPTX, DOC and DOCX, up to 250 MB per file, 50 MB per image and 100 MB per document. Uploaded files are stored at public URLs.",
+      inputSchema: {
+        uploadId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            'uploadId from an earlier call that returned an upload link. Returns the files the user uploaded through that link instead of opening a new upload.',
+          ),
+      },
       outputSchema: resultSchema(
-        'An object with status waiting_for_upload. The media URLs arrive later, in a message the upload box sends when the user finishes.',
+        'Without uploadId: status waiting_for_upload when the upload box is shown (the media URLs arrive later in a message from the box), or status upload_link with uploadUrl, uploadId and acceptsUntil. With uploadId: status (waiting, saving, ready, failed or expired), files ({ fileName, publicUrl } each), mediaUrls, failed ({ fileName, error } each), savingCount and acceptsUntil.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -1542,22 +1598,36 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         'openai/toolInvocation/invoked': 'Upload box ready',
       },
     },
-    async () => {
-      if (!uploadTicketsEnabled()) {
+    async ({ uploadId }, client, caller) => {
+      if (!uploadTicketsEnabled() || !isHttpMode) {
         return toolError(
           new Error(
             'Uploading from a device is not available on this server. Ask the user for a public URL and use upload_media.',
           ),
         );
       }
+      if (uploadId) return uploadLinkResult(uploadId, client);
+      if (caller.uploadSurface === 'widget') {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'The upload box is showing. Wait for the user to upload; the box sends the media URLs in a message when it finishes.',
+            },
+          ],
+          structuredContent: { result: { status: 'waiting_for_upload' } },
+        };
+      }
+      const link = createUploadLink();
+      const uploadUrl = uploadLinkUrl(PUBLIC_ORIGIN, link.id);
+      const text = caller.uploadSurface === 'link'
+        ? `This app cannot show an upload box. Give the user this link to upload their files from their browser: ${uploadUrl} It accepts files until ${link.acceptsUntil}. When the user says they finished, call open_upload_widget with uploadId "${link.id}" to get the media URLs.`
+        : `The upload box is showing if this app supports it, and it sends the media URLs in a message when the user finishes. If the user cannot see the box, give them this link instead: ${uploadUrl} When they say they finished, call open_upload_widget with uploadId "${link.id}" to get the media URLs.`;
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'The upload box is showing. Wait for the user to upload; the box sends the media URLs in a message when it finishes.',
-          },
-        ],
-        structuredContent: { result: { status: 'waiting_for_upload' } },
+        content: [{ type: 'text' as const, text }],
+        structuredContent: {
+          result: { status: 'upload_link', uploadUrl, uploadId: link.id, acceptsUntil: link.acceptsUntil },
+        },
       };
     },
   );
@@ -3310,7 +3380,8 @@ const UPLOAD_CHUNK_BYTES = 10 * 1024 * 1024;
 const UPLOAD_SESSION_TTL_MS = 60 * 60 * 1000;
 
 type UploadSession = {
-  client: RestClient;
+  client?: RestClient;
+  linkId?: string;
   fileName: string;
   mimeType: string;
   size: number;
@@ -3333,11 +3404,14 @@ function discardUploadSession(id: string): void {
   void rm(session.dir, { recursive: true, force: true });
 }
 
+const LINK_EXPIRED_MESSAGE = 'This upload link expired. Ask the assistant for a new one.';
+
 async function handleUploadSessionStart(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const ticket = await openUploadTicket(String(req.headers[UPLOAD_TICKET_HEADER] ?? ''));
-  if (!ticket) {
+  const linkId = ticket ? undefined : String(req.headers[UPLOAD_LINK_HEADER] ?? '') || undefined;
+  if (!ticket && !(linkId && uploadLinkOpen(linkId))) {
     req.resume();
-    sendJson(res, 401, { error: 'This upload box expired. Ask for a new one.' });
+    sendJson(res, 401, { error: linkId ? LINK_EXPIRED_MESSAGE : 'This upload box expired. Ask for a new one.' });
     return;
   }
 
@@ -3346,12 +3420,14 @@ async function handleUploadSessionStart(req: IncomingMessage, res: ServerRespons
     if (!parsed.success) throw new Error('The upload request is malformed.');
     const { fileName, fileSize, head } = parsed.data;
     const mimeType = requireStreamedMedia(Buffer.from(head, 'base64'), fileName, fileSize);
+    if (linkId) reserveLinkUpload(linkId, fileSize);
     const dir = await mkdtemp(join(tmpdir(), 'upload-'));
     const path = join(dir, 'file');
     await writeFile(path, '');
     const id = randomUUID();
     uploadSessions.set(id, {
-      client: new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId),
+      client: ticket ? new RestClient(API_BASE_URL, ticket.token).forWorkspace(ticket.workspaceId) : undefined,
+      linkId,
       fileName,
       mimeType,
       size: fileSize,
@@ -3424,16 +3500,16 @@ async function readFileHead(path: string): Promise<Buffer> {
   }
 }
 
-async function storeUploadSession(session: UploadSession): Promise<Uploaded> {
-  const mimeType = requireStreamedMedia(await readFileHead(session.path), session.fileName, session.size);
-  if (mimeType !== session.mimeType) throw new Error(`${session.fileName} is not the file that was announced.`);
+async function storeFile(client: RestClient, file: Omit<ParkedFile, 'dir'>): Promise<Uploaded> {
+  const mimeType = requireStreamedMedia(await readFileHead(file.path), file.fileName, file.size);
+  if (mimeType !== file.mimeType) throw new Error(`${file.fileName} is not the file that was announced.`);
   const { uploadUrl, publicUrl, key } = await mintUploadUrl(
-    session.client,
-    fileNameFor(session.fileName, mimeType),
+    client,
+    fileNameFor(file.fileName, mimeType),
     mimeType,
-    session.size,
+    file.size,
   );
-  await putStream(uploadUrl, { mimeType, contentLength: session.size, body: createReadStream(session.path) });
+  await putStream(uploadUrl, { mimeType, contentLength: file.size, body: createReadStream(file.path) });
   return { publicUrl, key };
 }
 
@@ -3448,7 +3524,18 @@ function handleUploadComplete(id: string, session: UploadSession, req: IncomingM
 
   uploadSessions.delete(id);
   clearTimeout(session.expiry);
-  const work = storeUploadSession(session);
+  if (!session.client) {
+    const { fileName, mimeType, size, dir, path } = session;
+    if (session.linkId && parkLinkUpload(session.linkId, { fileName, mimeType, size, dir, path })) {
+      console.error(`upload-link parked bytes=${size}`);
+      sendJson(res, 200, { held: true });
+    } else {
+      void rm(dir, { recursive: true, force: true });
+      sendJson(res, 410, { error: LINK_EXPIRED_MESSAGE });
+    }
+    return;
+  }
+  const work = storeFile(session.client, session);
   work.then(
     () => console.error(`upload-session stored bytes=${session.size} ms=${Date.now() - session.startedAt}`),
     (error) =>
@@ -3458,6 +3545,28 @@ function handleUploadComplete(id: string, session: UploadSession, req: IncomingM
   );
   const importId = trackFileImport(work.finally(() => rm(session.dir, { recursive: true, force: true })));
   sendJson(res, 202, { importId });
+}
+
+function sendHtml(res: ServerResponse, status: number, html: string): void {
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+    'X-Robots-Tag': 'noindex',
+    'X-Frame-Options': 'DENY',
+  });
+  res.end(html);
+}
+
+function routeUploadLink(req: IncomingMessage, res: ServerResponse): void {
+  const [, , id = '', extra] = (req.url ?? '').split('?')[0].split('/');
+  req.resume();
+  if (req.method !== 'GET' || extra !== undefined) {
+    sendJson(res, 404, { error: 'Not found' });
+    return;
+  }
+  if (uploadLinkOpen(id)) sendHtml(res, 200, uploadWidgetHtml(PUBLIC_ORIGIN, id));
+  else sendHtml(res, 410, uploadLinkExpiredHtml());
 }
 
 async function routeUploadSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -3519,7 +3628,7 @@ async function main() {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, mcp-session-id, X-Upload-Ticket, X-File-Name',
+            'Content-Type, Authorization, mcp-session-id, X-Upload-Ticket, X-Upload-Link, X-File-Name',
         });
         res.end();
         return;
@@ -3581,6 +3690,11 @@ async function main() {
 
       if (req.url?.startsWith(`${UPLOAD_SESSION_PATH}/`) && req.method === 'POST') {
         await routeUploadSession(req, res);
+        return;
+      }
+
+      if (req.url?.startsWith(`${UPLOAD_LINK_PATH}/`)) {
+        routeUploadLink(req, res);
         return;
       }
 

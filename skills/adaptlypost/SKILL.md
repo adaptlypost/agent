@@ -6,7 +6,7 @@ description: >
   and read how they performed.
   Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-10-28
+last-updated: 2026-10-31
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
@@ -522,6 +522,8 @@ Body: { "files": [{ "fileName": "photo.jpg", "mimeType": "image/jpeg" }] }
 Returns presigned upload URLs. This endpoint only mints a URL — it does **not** store the file. You must then PUT the file bytes to `uploadUrl` and wait for a `2xx` response before using `publicUrl` in `mediaUrls`. Requesting the URL without completing the PUT leaves `publicUrl` pointing at nothing.
 
 > **Always finish the upload before creating the post.** When you create or bulk-schedule a post, the API verifies every `publicUrl` actually exists in storage. If the PUT never ran, failed, or the upload URL expired (1 hour) before it completed, the request is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. If you hit that error, re-run the PUT and confirm it returns `2xx`, then retry the post.
+
+> **When the PUT is blocked, use the upload box.** If a sandbox proxy refuses the PUT (a 403, or the storage host is not on its allowlist), do not retry it, and never move the files through a public GitHub repo, a gist or a file-sharing link. Over MCP, call `open_upload_widget`: Claude chat shows an upload box that sends back the media URLs, and clients that can't show it (Cowork, Claude Code) get an upload link for the user plus an `uploadId`. When the user says they finished, call `open_upload_widget` with that `uploadId` to get `mediaUrls`.
 
 > **Reuse uploads, do not re-upload.** One `publicUrl` can go into as many posts as you like (bulk items included); the file is kept until the last post referencing it has published. Reuse the `publicUrl` you uploaded, not a `mediaUrls` value read back from a published post, since those may be the platform's own expiring links.
 

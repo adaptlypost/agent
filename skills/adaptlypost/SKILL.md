@@ -135,7 +135,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | Flag | Sends |
 |------|-------|
 | `--first-comment PLATFORM=text` (repeatable, also on `posts:update`) | `firstComments`. LINKEDIN, TWITTER, THREADS, BLUESKY, MASTODON, YOUTUBE, FACEBOOK and INSTAGRAM only, one per platform |
-| `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only. TELEGRAM takes a URL only |
+| `--platform-thumbnail PLATFORM=<url or ms>` (repeatable, also on `posts:update`) | `platformThumbnails`. A number becomes `thumbnailTimestampMs`, anything else `thumbnailUrl`. VIDEO posts only |
 | `--aspect-ratio PLATFORM=RATIO[:PAD]` (repeatable) | `platformAspectRatios`, e.g. `INSTAGRAM=PORTRAIT` or `TIKTOK=VERTICAL:PAD`. IMAGE and CAROUSEL posts only |
 | `--twitter-keep-links` (also `posts:update --twitter-keep-links false`) | `twitterKeepLinks` |
 | `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3), `--instagram-user-tag <username or JSON>` (repeatable, up to 20), `--instagram-ai-generated` | `instagramConfigs[].postType`, `shareToStory`, `collaborators`, `userTags`, `aiGenerated`. A tag is a username or `{"username":"...","x":0.5,"y":0.3}` |
@@ -271,7 +271,7 @@ Body: {
 }
 ```
 
-**Telegram**: put the channel and group ids in `telegramConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message right after the media. A video takes an image thumbnail through `platformThumbnails` with `thumbnailUrl`. Telegram has no config object, first comments, threads, image shapes or analytics.
+**Telegram**: put the channel and group ids in `telegramConnectionIds`. A post takes `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message right after the media. A video takes an image or a video frame as its thumbnail through `platformThumbnails` (`thumbnailUrl` or `thumbnailTimestampMs`). Telegram has no config object, first comments, threads, image shapes or analytics.
 
 ```
 POST /api/v1/social-posts

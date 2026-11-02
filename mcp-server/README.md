@@ -1,10 +1,10 @@
 # @adaptlypost/mcp-server
 
-MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics generate captions and images, and manage RSS feeds, connect links and webhooks across 13 platforms. The server exposes 58 tools.
+MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics generate captions and images, and manage RSS feeds, connect links and webhooks across 14 platforms. The server exposes 59 tools.
 
 ## Supported Platforms
 
-Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile
+Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram, WordPress
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ An OAuth sign-in can reach several workspaces, each with its own accounts, posts
 
 ## Available Tools
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram and Tumblr have no analytics. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected.
 
 | Tool | Description |
 |---|---|
@@ -94,6 +94,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, Linked
 | `list_accounts` | List all connected social media accounts with IDs, platforms and `status` (`active` or `unauthorized`) |
 | `search_instagram_audio` | Search Instagram music and original sounds to add to a Reel |
 | `list_pinterest_boards` | List the boards of a Pinterest account; pass a board `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) |
+| `list_wordpress_categories` | List the categories of a WordPress site; pass their `id`s as `wordpressConfigs[].categoryIds` |
 | `check_account` | Re-check a Facebook page with Facebook and get its fresh `status` |
 | `remove_account` | Disconnect an account from the workspace; it comes off pending and recurring posts |
 | `create_connect_link` | Create a link a client opens to connect their accounts, optionally private, limited to some platforms, capped or never expiring |
@@ -102,7 +103,7 @@ Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, Linked
 | `get_upload_urls` | Mint presigned upload URLs for larger files; PUT the bytes, then use `publicUrl` |
 | `open_upload_widget` | Show an upload box in ChatGPT or Claude chat so the user can add files from their device; the box sends back the `mediaUrls`. Where the box can't show (Claude Cowork, Claude Code), it returns an upload link instead; call it again with `uploadId` to get the `mediaUrls` |
 | `get_upload_ticket` | Called by the upload box, once per file; hidden from the model |
-| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, threads of replies, Tumblr tags and Google Business Profile events and offers |
+| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, threads of replies, Tumblr tags, WordPress titles, categories and tags, the YouTube audio language and Google Business Profile events and offers |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |
 | `get_post` | Get full details of a single post by ID |
 | `list_posts` | List posts with filters by status, platform, date range |

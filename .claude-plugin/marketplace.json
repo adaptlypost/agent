@@ -5,14 +5,14 @@
     "email": "contact@adaptlypost.com"
   },
   "metadata": {
-    "description": "Give your AI agent social media posting, scheduling, and management across 13 platforms",
+    "description": "Give your AI agent social media posting, scheduling, and management across 14 platforms",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "adaptlypost",
       "source": "./",
-      "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, and Google Business Profile via AdaptlyPost API",
+      "description": "Post to Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress via AdaptlyPost API",
       "version": "1.4.0",
       "author": {
         "name": "AdaptlyPost"

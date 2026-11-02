@@ -320,8 +320,13 @@ function buildPinterestConfig(parsed) {
 }
 
 function buildYouTubeConfig(parsed) {
+  if (parsed["youtube-audio-language"] === true) {
+    error("--youtube-audio-language needs a language tag such as en or pt-BR");
+    process.exit(1);
+  }
   return withoutEmpty({
     aiGenerated: parsed["youtube-ai-generated"] ? true : undefined,
+    defaultAudioLanguage: parsed["youtube-audio-language"] && String(parsed["youtube-audio-language"]),
   });
 }
 
@@ -352,6 +357,24 @@ function buildTumblrConfig(args, parsed) {
     tags: tags.length > 0 ? tags : undefined,
     title: parsed["tumblr-title"] && String(parsed["tumblr-title"]),
     sourceUrl: parsed["tumblr-source-url"] && String(parsed["tumblr-source-url"]),
+  });
+}
+
+function buildWordPressConfig(args, parsed) {
+  const categoryIds = parseRepeatedRaw(args, "wordpress-category").map((value) => {
+    const id = Number(value);
+    if (!Number.isInteger(id) || id < 1) {
+      error(`--wordpress-category takes a category id from wordpress:categories, got: ${value}`);
+      process.exit(1);
+    }
+    return id;
+  });
+  const tags = parseRepeatedRaw(args, "wordpress-tag");
+  return withoutEmpty({
+    title: parsed["wordpress-title"] && String(parsed["wordpress-title"]),
+    excerpt: parsed["wordpress-excerpt"] && String(parsed["wordpress-excerpt"]),
+    categoryIds: categoryIds.length > 0 ? categoryIds : undefined,
+    tags: tags.length > 0 ? tags : undefined,
   });
 }
 
@@ -461,6 +484,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "wordpress:categories": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js wordpress:categories --id <wordpress_account_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "GET",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/wordpress-categories`,
+    );
+    output(data);
+  },
+
   post: async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.caption && !parsed.text) {
@@ -556,6 +592,7 @@ const COMMANDS = {
     attachConfigs(body, "youtubeConnectionIds", "youtubeConfigs", "connectionId", buildYouTubeConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
     attachConfigs(body, "tumblrConnectionIds", "tumblrConfigs", "connectionId", buildTumblrConfig(args, parsed));
+    attachConfigs(body, "wordpressConnectionIds", "wordpressConfigs", "connectionId", buildWordPressConfig(args, parsed));
 
     if (parsed["dry-run"]) {
       const report = await request("POST", "/api/v1/social-posts/validate", body);
@@ -866,6 +903,7 @@ const CONNECTION_FIELDS = {
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   TELEGRAM: "telegramConnectionIds",
   TUMBLR: "tumblrConnectionIds",
+  WORDPRESS: "wordpressConnectionIds",
   FACEBOOK: "pageIds",
 };
 

@@ -109,6 +109,7 @@ const CaptionPlatform = z.enum([
   'MASTODON',
   'GOOGLE_BUSINESS',
   'TUMBLR',
+  'WORDPRESS',
 ]);
 
 const PlatformType = z.enum([...CaptionPlatform.options, 'TELEGRAM']);
@@ -180,7 +181,7 @@ const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
 const CAROUSEL_RULE =
-  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK, THREADS and TELEGRAM, 20 on LINKEDIN, 30 on TUMBLR and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel';
+  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK, THREADS and TELEGRAM, 20 on LINKEDIN and WORDPRESS, 30 on TUMBLR and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel';
 
 const GOOGLE_BUSINESS_RULE =
   'GOOGLE_BUSINESS takes TEXT or IMAGE with one JPEG or PNG image up to 5 MB, and text up to 1500 characters';
@@ -188,11 +189,14 @@ const GOOGLE_BUSINESS_RULE =
 const TELEGRAM_RULE =
   'TELEGRAM takes text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB); a caption over 1024 characters goes out as its own message after the media';
 
+const WORDPRESS_RULE =
+  'WORDPRESS publishes the text as the body of a blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable. It takes up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text';
+
 const LINKEDIN_MENTION_RULE =
   'On LinkedIn, mention a company page with @[Page Name](urn:li:organization:<id>), using the page name exactly as LinkedIn shows it';
 
 const ALT_TEXT_RULE =
-  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
+  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
 
 const PostStatus = z.enum([
   'COMPLETED',
@@ -243,9 +247,9 @@ const TikTokConfigSchema = z.object({
   title: z.string().max(90).optional().describe('Video title (max 90 chars)'),
   caption: z
     .string()
-    .max(2200)
+    .max(4000)
     .optional()
-    .describe('TikTok-specific caption (max 2200 chars)'),
+    .describe('TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post'),
   privacyLevel: z
     .enum([
       'PUBLIC_TO_EVERYONE',
@@ -306,6 +310,15 @@ const YouTubeConfigSchema = z.object({
   madeForKids: z.boolean().optional().describe('Mark the video as made for kids (COPPA)'),
   categoryId: z.string().optional().describe('YouTube category ID'),
   playlistId: z.string().optional().describe('Add video to this playlist'),
+  defaultAudioLanguage: z
+    .string()
+    .max(35)
+    .regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)
+    .nullable()
+    .optional()
+    .describe(
+      'Language spoken in the video\'s original audio, as a BCP-47 tag such as en, pt-BR or es-419, so YouTube does not treat it as another language. null clears a saved value. It does not turn off YouTube\'s automatic dubbing',
+    ),
   aiGenerated: z
     .boolean()
     .optional()
@@ -484,6 +497,30 @@ const TumblrConfigSchema = z.object({
   sourceUrl: z.string().max(2048).optional().describe('Shown as the source link of the post'),
 });
 
+const WordPressConfigSchema = z.object({
+  connectionId: z.string().describe('WordPress site account id from list_accounts'),
+  title: z
+    .string()
+    .max(300)
+    .optional()
+    .describe('Post title. Defaults to the first line of the text, cut to 100 characters'),
+  excerpt: z.string().max(1000).optional().describe('Summary WordPress shows in post lists and feeds'),
+  categoryIds: z
+    .array(z.number().int().min(1))
+    .max(50)
+    .optional()
+    .describe(
+      "Category ids from list_wordpress_categories for this site. Omitted, WordPress files the post under the site's default category",
+    ),
+  tags: z
+    .array(z.string().max(100))
+    .max(50)
+    .optional()
+    .describe(
+      'Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise',
+    ),
+});
+
 const PinterestConfigSchema = z.object({
   connectionId: z
     .string()
@@ -593,6 +630,12 @@ const connectionIdFields = {
     .array(z.string())
     .optional()
     .describe(`Telegram channels and groups to post to, by the account id from list_accounts. ${TELEGRAM_RULE}`),
+  wordpressConnectionIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      `WordPress sites to post to, by the account id from list_accounts. ${WORDPRESS_RULE}. A site without an entry in wordpressConfigs uses the first line of the text as the title. WordPress has no first comments, threads, thumbnails, image shapes or analytics`,
+    ),
   googleBusinessConnectionIds: z
     .array(z.string())
     .optional()
@@ -648,6 +691,12 @@ const platformConfigFields = {
     .array(TumblrConfigSchema)
     .optional()
     .describe('Tumblr per-blog config: tags, a title and a source link. connectionId must match an entry in tumblrConnectionIds'),
+  wordpressConfigs: z
+    .array(WordPressConfigSchema)
+    .optional()
+    .describe(
+      'WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds',
+    ),
 };
 
 const postThumbnailFields = {
@@ -661,7 +710,7 @@ const postThumbnailFields = {
     .number()
     .optional()
     .describe(
-      'Video frame timestamp (ms) to use as the thumbnail, used by INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it',
+      'Video frame timestamp (ms) to use as the thumbnail on every platform that takes one: YOUTUBE, FACEBOOK, INSTAGRAM, LINKEDIN, PINTEREST, TELEGRAM and TIKTOK. A thumbnailUrl sent with it wins everywhere except TIKTOK, which takes only a frame, and platformThumbnails overrides both',
     ),
 };
 
@@ -722,7 +771,7 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      'A different thumbnail for one platform of a VIDEO post, one entry per platform. A platform without an entry uses the post-level thumbnailUrl and thumbnailTimestampMs. YOUTUBE, FACEBOOK, LINKEDIN and TELEGRAM take an image (thumbnailUrl); INSTAGRAM and PINTEREST take an image or a frame (thumbnailTimestampMs), the image winning when both are sent; TIKTOK takes only a frame. Posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use are refused with 400. On an update, sending the array replaces every override and omitting it keeps the stored ones',
+      'A different thumbnail for one platform of a VIDEO post, one entry per platform. A platform without an entry uses the post-level thumbnailUrl and thumbnailTimestampMs. YOUTUBE, FACEBOOK, INSTAGRAM, LINKEDIN, PINTEREST and TELEGRAM take an image (thumbnailUrl) or a frame (thumbnailTimestampMs), the image winning when both are sent; TIKTOK takes only a frame. Posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use are refused with 400. On an update, sending the array replaces every override and omitting it keeps the stored ones',
     ),
   platformAspectRatios: z
     .array(
@@ -780,7 +829,7 @@ const createPostShape = {
       'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS) filled with ids from list_accounts. Optional when accountIds is sent',
     ),
   contentType: ContentType.describe(
-    `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${DOCUMENT_POST_RULE}`,
+    `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}. ${DOCUMENT_POST_RULE}`,
   ),
   scheduledAt: z
     .string()
@@ -837,7 +886,7 @@ const bulkPostsShape = {
       z.object({
         text: z.string().optional().describe(`Post text/caption. ${LINKEDIN_MENTION_RULE}`),
         contentType: BulkContentType.describe(
-          `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}`,
+          `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -881,6 +930,10 @@ const bulkPostsShape = {
           .array(TumblrConfigSchema)
           .optional()
           .describe('Tumblr config for this item only, such as its own tags; replaces the batch-level tumblrConfigs'),
+        wordpressConfigs: z
+          .array(WordPressConfigSchema)
+          .optional()
+          .describe('WordPress config for this item only, such as its own title or categories; replaces the batch-level wordpressConfigs'),
       }),
     )
     .min(1)
@@ -907,7 +960,7 @@ const analyticsRangeFields = {
     .array(PlatformType)
     .optional()
     .describe(
-      'Restrict to these platforms; omit for every platform with analytics. MASTODON, TELEGRAM and TUMBLR have no analytics and are ignored. GOOGLE_BUSINESS reports location impressions only, with no per-post numbers',
+      'Restrict to these platforms; omit for every platform with analytics. MASTODON, TELEGRAM, TUMBLR and WORDPRESS have no analytics and are ignored. GOOGLE_BUSINESS reports location impressions only, with no per-post numbers',
     ),
   connectionIds: z
     .array(z.string())
@@ -916,7 +969,7 @@ const analyticsRangeFields = {
 };
 
 const ANALYTICS_COVERAGE =
-  'Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile (location impressions only, no per-post numbers); Mastodon, Telegram and Tumblr have none. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected, so any date range in that history can be queried.';
+  'Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile (location impressions only, no per-post numbers); Mastodon, Telegram, Tumblr and WordPress have none. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while the account stays connected, so any date range in that history can be queried.';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1183,7 +1236,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all thirteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
+        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized, pageId for Facebook pages and supportsInstagramAudio for Instagram. Use id as the connection id (or in pageIds for Facebook).',
@@ -1269,6 +1322,38 @@ function createMcpServer(apiClient?: RestClient): McpServer {
       try {
         const data = await client.get(
           `/social-accounts/${encodeURIComponent(accountId)}/pinterest-boards`,
+        );
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_wordpress_categories',
+    {
+      title: 'List WordPress Categories',
+      description:
+        "List the categories of a connected WordPress site, sorted by name. Returns { categories } with id, name and parentId (null for a top-level category). Call it when the user names categories for a WordPress post, match the names to ids, and pass those ids as wordpressConfigs[].categoryIds in create_post, update_post or bulk_schedule_posts. Categories belong to one site, so call it once per WordPress account. A post sent without categoryIds goes to the site's default category. Fails with 404 when accountId is not a WordPress account in the workspace, and with an error carrying the reason when the site refuses the request or cannot be reached, which may mean the user must reconnect the site in AdaptlyPost. Nothing is posted.",
+      inputSchema: {
+        accountId: z
+          .string()
+          .describe('The WordPress account id from list_accounts'),
+      },
+      outputSchema: resultSchema(
+        'An object with categories: one { id, name, parentId } per category. Pass id in wordpressConfigs[].categoryIds.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async ({ accountId }, client) => {
+      try {
+        const data = await client.get(
+          `/social-accounts/${encodeURIComponent(accountId)}/wordpress-categories`,
         );
         return toolResult(data);
       } catch (error) {
@@ -1499,7 +1584,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it, do not stop, and never put the files in a public repo or file-sharing link: call open_upload_widget and have the user add the files through the upload box or upload link it returns. If the files are ones you made, hand them to the user as downloads first. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, image/gif (Facebook, X, Bluesky, Mastodon, LinkedIn and Tumblr only), video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it, do not stop, and never put the files in a public repo or file-sharing link: call open_upload_widget and have the user add the files through the upload box or upload link it returns. If the files are ones you made, hand them to the user as downloads first. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, image/gif (Facebook, X, Bluesky, Mastodon, LinkedIn, Tumblr and WordPress only), video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
@@ -1672,7 +1757,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, Instagram user tags, Facebook link carousel, first comments, threads of replies, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories and tags, YouTube audio language, Instagram user tags, Facebook link carousel, first comments, threads of replies, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt, plus recurringPostId when recurrence was sent. Publishing is asynchronous: check list_post_results for outcomes.',
@@ -1731,7 +1816,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout and facebookCarouselCards; youtubeAiGenerated; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout and facebookCarouselCards; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2055,7 +2140,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs or tumblrConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails and platformAspectRatios. twitterKeepLinks and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails and platformAspectRatios. twitterKeepLinks and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
         'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',

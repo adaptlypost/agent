@@ -117,7 +117,6 @@ const PlatformType = z.enum([...CaptionPlatform.options, 'TELEGRAM']);
 const FirstCommentPlatform = z.enum([
   'LINKEDIN',
   'TWITTER',
-  'THREADS',
   'BLUESKY',
   'MASTODON',
   'YOUTUBE',
@@ -125,7 +124,7 @@ const FirstCommentPlatform = z.enum([
   'INSTAGRAM',
 ]);
 
-const ThreadReplyPlatform = z.enum(['TWITTER', 'THREADS', 'BLUESKY', 'MASTODON']);
+const ThreadReplyPlatform = z.enum(['TWITTER', 'BLUESKY', 'MASTODON']);
 
 const ThumbnailPlatform = z.enum(['YOUTUBE', 'FACEBOOK', 'LINKEDIN', 'TELEGRAM', 'INSTAGRAM', 'PINTEREST', 'TIKTOK']);
 
@@ -737,7 +736,7 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
+      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
     ),
   threadReplies: z
     .array(
@@ -751,7 +750,7 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      "Turns the post into a thread: the post opens it and each text is published as a reply to the one before, from the same account, one entry per platform. Available on TWITTER (280 characters per reply, or the account's own limit on X Premium), THREADS (500), BLUESKY (300) and MASTODON (500, or the instance's limit), up to 25 replies. A platform the post does not go to, an empty or too long reply, more than 25 replies, a second entry for one platform and a platform that also has a first comment are refused with 400. An entry with an empty texts array removes the thread. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out; on X it is not retried, and a lifetime-deal account pays for each reply like any X post. A thread that fails never fails the post: read threadStatus, threadReplyIds and threadError on the platform in get_post. On an update, sending the array replaces every thread and omitting it keeps the stored ones",
+      "Turns the post into a thread: the post opens it and each text is published as a reply to the one before, from the same account, one entry per platform. Available on TWITTER (280 characters per reply, or the account's own limit on X Premium), BLUESKY (300) and MASTODON (500, or the instance's limit), up to 25 replies. A platform the post does not go to, an empty or too long reply, more than 25 replies, a second entry for one platform and a platform that also has a first comment are refused with 400. An entry with an empty texts array removes the thread. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out; on X it is not retried, and a lifetime-deal account pays for each reply like any X post. A thread that fails never fails the post: read threadStatus, threadReplyIds and threadError on the platform in get_post. On an update, sending the array replaces every thread and omitting it keeps the stored ones",
     ),
   platformThumbnails: z
     .array(

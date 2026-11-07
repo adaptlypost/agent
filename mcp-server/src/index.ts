@@ -1914,9 +1914,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         ),
         scheduledAt: z
           .string()
+          .nullable()
           .optional()
           .describe(
-            'New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft. Moving a SCHEDULED post more than a minute into the past fails with 400; use publish_draft to publish now',
+            'New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft; null takes the planned date off a DRAFT and moves it off the calendar. On a SCHEDULED post null fails with 400 (use unschedule_post), and moving it more than a minute into the past fails with 400; use publish_draft to publish now',
           ),
         timezone: z
           .string()

@@ -465,6 +465,12 @@ const FacebookConfigSchema = z.object({
     .describe(
       'One card per image, in the same order as the media, used when imageLayout is CAROUSEL. Facebook only shows your image, title and description on a card whose link points to a website the Page owns; for any other link the post fails with the error Facebook returns',
     ),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the post was made or edited with AI. Facebook shows its "AI info" label on the post. Works on a contentType VIDEO post with postType REEL or STORY, and a story made with shareToStory from a video reel carries the label too. Facebook takes the label on nothing else, so any other combination is rejected with a 400. Omit it or send false for no label',
+    ),
 });
 
 const LinkedInConfigSchema = z.object({
@@ -672,7 +678,7 @@ const platformConfigFields = {
     .array(FacebookConfigSchema)
     .optional()
     .describe(
-      'Facebook per-page config: post type, shareToStory, video title, text background, and a grid or link carousel for several images. pageId must match an entry in pageIds',
+      'Facebook per-page config: post type, shareToStory, video title, text background, a grid or link carousel for several images, and the AI info label. pageId must match an entry in pageIds',
     ),
   pinterestConfigs: z
     .array(PinterestConfigSchema)
@@ -1815,7 +1821,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout and facebookCarouselCards; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,

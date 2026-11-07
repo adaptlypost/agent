@@ -301,6 +301,7 @@ function buildFacebookConfig(args, parsed) {
     textFormatPresetId: parsed["facebook-background"] && String(parsed["facebook-background"]),
     imageLayout: layout || (carouselCards.length > 0 ? "CAROUSEL" : undefined),
     carouselCards: carouselCards.length > 0 ? carouselCards : undefined,
+    aiGenerated: parsed["facebook-ai-generated"] ? true : undefined,
   });
 }
 

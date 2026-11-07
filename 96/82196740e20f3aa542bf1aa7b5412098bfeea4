@@ -1,0 +1,21 @@
+mcp-server/src/index.ts
+  s_3ada2f2595c5eb::t_719ba93cac6049 1917,1920
+skills/adaptlypost/SKILL.md
+  s_3ada2f2595c5eb::t_cea0c31a0cbcdf 438
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9682196740e20f3aa542bf1aa7b5412098bfeea4",
+  "prompts": {},
+  "sessions": {
+    "s_3ada2f2595c5eb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93b43d2f-a7ed-4bed-a1f0-15991caeccf9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

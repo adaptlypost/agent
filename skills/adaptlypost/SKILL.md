@@ -241,7 +241,7 @@ Instagram `aiGenerated: true` discloses that the post was made or edited with AI
 
 YouTube `aiGenerated: true` discloses altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. It works on videos and Shorts. Omit it or send `false` for no label. The post reads it back as `youtubeAiGenerated`.
 
-Facebook `aiGenerated: true` discloses that the post was made or edited with AI. Facebook shows its "AI info" label on the post. It works on a `contentType: VIDEO` post with `postType` `REEL` or `STORY`, and a story made with `shareToStory` from a video reel carries the label too. Facebook takes the label on nothing else, so any other combination returns 400 with the issue code `FACEBOOK_AI_LABEL_REEL_OR_STORY_VIDEO`. Omit it or send `false` for no label. The post reads it back as `facebookAiGenerated`.
+Facebook `aiGenerated: true` discloses that the post was made or edited with AI. Facebook shows its "AI info" label on the post. It works on every `contentType: VIDEO` post, whatever its `postType`: Facebook publishes every video as a reel, and a video story carries the label too. Photos, carousels and text posts return 400 with the issue code `FACEBOOK_AI_LABEL_VIDEO_ONLY`. Omit it or send `false` for no label. The post reads it back as `facebookAiGenerated`.
 
 Instagram `audio` adds music or an original sound to a Reel. It needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account with `supportsInstagramAudio: true`. Find the `audioId` with [Instagram audio search](#instagram-audio-search).
 

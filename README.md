@@ -14,6 +14,7 @@ This repo holds every AdaptlyPost agent integration except the Claude Code and H
 | [`mcp-server/`](./mcp-server) | Source of the MCP server that runs at `https://mcp.adaptlypost.com/mcp`. A push to `main` that touches it builds a new image. |
 | `gemini-extension.json`, `GEMINI.md` | The Gemini CLI extension. It connects to the hosted MCP server and signs in with OAuth. |
 | `Dockerfile`, `glama.json` | Runs the MCP server over stdio, for Glama and anyone who wants it in a container. |
+| `lhm.plugin.json` | The LobeHub marketplace listing for the hosted MCP server. |
 
 The Claude Code and Hermes Agent plugin lives in [adaptlypost/claude-plugin](https://github.com/adaptlypost/claude-plugin). It signs in with OAuth and never asks for an API key, which the Claude plugin directory and the Hermes catalog both require, so it ships its own MCP-only skill instead of the script skill here.
 

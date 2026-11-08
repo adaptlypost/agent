@@ -181,7 +181,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 
 | Tool | What it does | Changes data |
 | --- | --- | --- |
-| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, X quotes of the account's own posts, threads of replies, Tumblr tags, WordPress titles, categories and tags, the YouTube audio language and Google Business Profile events and offers | Yes |
+| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, X quotes of the account's own posts, threads of replies with images, Tumblr tags, WordPress titles, categories and tags, the YouTube audio language and Google Business Profile events and offers | Yes |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything | No |
 | `get_post` | Get full details of a single post by ID | No |
 | `list_posts` | List posts with filters by status, platform, date range | No |

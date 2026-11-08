@@ -110,8 +110,23 @@ function explainDenial(status, data) {
     error(
       "The workspace's plan is not active. Ask the user to renew it; retrying will not help.",
     );
+    return;
   }
+  if (INBOX_ADVICE[data.code]) error(INBOX_ADVICE[data.code]);
 }
+
+const INBOX_ADVICE = {
+  inbox_reconnect_required:
+    "The account lacks the platform permission for this inbox channel or action, or its token expired. Tell the user to reconnect it in AdaptlyPost; do not retry.",
+  inbox_item_not_found: "No inbox item with this id in the workspace. Stop.",
+  inbox_action_unsupported:
+    "The platform does not allow this on this item (see its capabilities). Stop.",
+  inbox_reply_invalid: "The text is empty or over the limit the message names. Fix the text.",
+  inbox_messaging_window_closed:
+    "The 24-hour Facebook or Instagram reply window has passed. Stop and tell the user.",
+  inbox_rate_limited: "The platform rate limited the call. Wait a while before trying again.",
+  inbox_platform_error: "The platform failed. Try again later.",
+};
 
 function issueLine(issue) {
   const where = [issue.platform, issue.connectionId].filter(Boolean).join(" ");
@@ -897,6 +912,116 @@ const COMMANDS = {
     output(data);
   },
 
+  inbox: async () => {
+    output(await request("GET", "/api/v1/inbox/summary"));
+  },
+
+  "inbox:refresh": async () => {
+    output(await request("POST", "/api/v1/inbox/refresh"));
+  },
+
+  "inbox:comments": async (args) => {
+    const parsed = parseArgs(args);
+    const params = inboxQuery(parsed);
+    if (parsed["post-id"]) params.set("postId", parsed["post-id"]);
+    if (parsed["platform-post-id"]) params.set("platformPostId", parsed["platform-post-id"]);
+    output(await request("GET", `/api/v1/inbox/comments?${params}`));
+  },
+
+  "inbox:comment": async (args) => {
+    const id = requireId(args, "inbox:comment");
+    output(await request("GET", inboxPath("comments", id)));
+  },
+
+  "inbox:comments:reply": async (args) => {
+    const { id, text } = requireIdAndText(args, "inbox:comments:reply");
+    output(await request("POST", inboxPath("comments", id, "/reply"), { text }));
+  },
+
+  "inbox:comments:hide": async (args) => {
+    const id = requireId(args, "inbox:comments:hide");
+    output(await request("POST", inboxPath("comments", id, "/hide")));
+  },
+
+  "inbox:comments:unhide": async (args) => {
+    const id = requireId(args, "inbox:comments:unhide");
+    output(await request("POST", inboxPath("comments", id, "/unhide")));
+  },
+
+  "inbox:comments:like": async (args) => {
+    const id = requireId(args, "inbox:comments:like");
+    output(await request("POST", inboxPath("comments", id, "/like")));
+  },
+
+  "inbox:comments:unlike": async (args) => {
+    const id = requireId(args, "inbox:comments:unlike");
+    output(await request("DELETE", inboxPath("comments", id, "/like")));
+  },
+
+  "inbox:comments:delete": async (args) => {
+    const id = requireId(args, "inbox:comments:delete");
+    output(await request("DELETE", inboxPath("comments", id)));
+  },
+
+  "inbox:comments:status": async (args) => {
+    output(await request("POST", "/api/v1/inbox/comments/status", inboxStatusBody(args, "inbox:comments:status")));
+  },
+
+  "inbox:mentions": async (args) => {
+    output(await request("GET", `/api/v1/inbox/mentions?${inboxQuery(parseArgs(args))}`));
+  },
+
+  "inbox:mentions:reply": async (args) => {
+    const { id, text } = requireIdAndText(args, "inbox:mentions:reply");
+    output(await request("POST", inboxPath("mentions", id, "/reply"), { text }));
+  },
+
+  "inbox:mentions:status": async (args) => {
+    output(await request("POST", "/api/v1/inbox/mentions/status", inboxStatusBody(args, "inbox:mentions:status")));
+  },
+
+  "inbox:conversations": async (args) => {
+    output(await request("GET", `/api/v1/inbox/conversations?${inboxQuery(parseArgs(args))}`));
+  },
+
+  "inbox:conversation": async (args) => {
+    const id = requireId(args, "inbox:conversation");
+    output(await request("GET", inboxPath("conversations", id)));
+  },
+
+  "inbox:conversations:send": async (args) => {
+    const { id, text } = requireIdAndText(args, "inbox:conversations:send");
+    output(await request("POST", inboxPath("conversations", id, "/messages"), { text }));
+  },
+
+  "inbox:conversations:status": async (args) => {
+    output(
+      await request("POST", "/api/v1/inbox/conversations/status", inboxStatusBody(args, "inbox:conversations:status")),
+    );
+  },
+
+  "inbox:reviews": async (args) => {
+    const parsed = parseArgs(args);
+    const params = inboxQuery(parsed);
+    for (const rating of splitList(parsed.ratings)) params.append("ratings", rating);
+    if (parsed.replied !== undefined) params.set("replied", String(parseBoolean(parsed.replied)));
+    output(await request("GET", `/api/v1/inbox/reviews?${params}`));
+  },
+
+  "inbox:reviews:reply": async (args) => {
+    const { id, text } = requireIdAndText(args, "inbox:reviews:reply");
+    output(await request("PUT", inboxPath("reviews", id, "/reply"), { text }));
+  },
+
+  "inbox:reviews:delete-reply": async (args) => {
+    const id = requireId(args, "inbox:reviews:delete-reply");
+    output(await request("DELETE", inboxPath("reviews", id, "/reply")));
+  },
+
+  "inbox:reviews:status": async (args) => {
+    output(await request("POST", "/api/v1/inbox/reviews/status", inboxStatusBody(args, "inbox:reviews:status")));
+  },
+
   help: async () => {
     output({
       name: "AdaptlyPost Agent Skill",
@@ -919,6 +1044,52 @@ function analyticsQuery(parsed, extra = {}) {
     if (value !== undefined && value !== true) params.set(key, String(value));
   }
   return params.toString();
+}
+
+const INBOX_STATUSES = ["UNREAD", "READ", "DONE"];
+
+function inboxPath(collection, id, suffix = "") {
+  return `/api/v1/inbox/${collection}/${encodeURIComponent(id)}${suffix}`;
+}
+
+function inboxQuery(parsed) {
+  const params = new URLSearchParams();
+  for (const id of splitList(parsed.accounts)) params.append("accountIds", id);
+  for (const platform of splitList(parsed.platforms)) params.append("platforms", platform.toUpperCase());
+  for (const status of splitList(parsed.status)) params.append("statuses", status.toUpperCase());
+  for (const key of ["since", "search", "limit", "cursor"]) {
+    if (parsed[key] !== undefined && parsed[key] !== true) params.set(key, String(parsed[key]));
+  }
+  return params;
+}
+
+function requireId(args, command) {
+  const parsed = parseArgs(args);
+  if (!parsed.id || parsed.id === true) {
+    error(`Usage: ./scripts/adaptlypost.js ${command} --id <id>`);
+    process.exit(1);
+  }
+  return String(parsed.id);
+}
+
+function requireIdAndText(args, command) {
+  const parsed = parseArgs(args);
+  if (!parsed.id || parsed.id === true || !parsed.text || parsed.text === true) {
+    error(`Usage: ./scripts/adaptlypost.js ${command} --id <id> --text "..."`);
+    process.exit(1);
+  }
+  return { id: String(parsed.id), text: String(parsed.text) };
+}
+
+function inboxStatusBody(args, command) {
+  const parsed = parseArgs(args);
+  const ids = splitList(parsed.ids);
+  const status = typeof parsed.status === "string" ? parsed.status.toUpperCase() : "";
+  if (ids.length === 0 || !INBOX_STATUSES.includes(status)) {
+    error(`Usage: ./scripts/adaptlypost.js ${command} --ids id1,id2 --status UNREAD|READ|DONE`);
+    process.exit(1);
+  }
+  return { ids, status };
 }
 
 const DOCUMENT_EXTENSIONS = [".pdf", ".ppt", ".pptx", ".doc", ".docx"];

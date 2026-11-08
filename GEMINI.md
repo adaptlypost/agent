@@ -15,6 +15,7 @@ configured by hand, and no API token is stored in this extension.
 - "list the accounts I have connected"
 - "draft a post for LinkedIn and X about our new release, schedule it for tomorrow 09:00"
 - "how did last month compare to the one before on engagement?"
+- "show the unread comments and messages in my inbox"
 
 ## Notes
 
@@ -28,6 +29,10 @@ configured by hand, and no API token is stored in this extension.
   workspace member has to publish it. `publish_draft` without a date schedules such a
   draft for its planned date when that is still in the future.
 - Ask before anything that writes. Deletes cannot be undone.
+- Inbox replies, direct messages and review replies reach real people. Show the exact text and
+  the item it answers, and wait for a yes before sending. A 403 with
+  `code: inbox_reconnect_required` means the account must be reconnected in AdaptlyPost;
+  do not retry it.
 - Read the tool descriptions for the filters each one accepts rather than guessing
   parameter names.
 

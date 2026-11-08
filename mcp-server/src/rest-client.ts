@@ -3,6 +3,7 @@ export const SUBSCRIPTION_REQUIRED = 'subscription_required';
 export const TOKEN_ISSUER_LOST_ACCESS = 'token_issuer_lost_access';
 export const OAUTH_ACCOUNT_NOT_FOUND = 'oauth_account_not_found';
 export const WORKSPACE_ACCESS_DENIED = 'workspace_access_denied';
+export const INBOX_RECONNECT_REQUIRED = 'inbox_reconnect_required';
 
 const PAYMENT_REQUIRED = 402;
 const TOO_MANY_REQUESTS = 429;
@@ -65,6 +66,10 @@ function describe(
 
   if (body.code === WORKSPACE_ACCESS_DENIED) {
     return `Workspace not available (${status}, ${WORKSPACE_ACCESS_DENIED}): ${sentence(apiMessage)} Call list_workspaces and pass one of the returned ids as workspaceId, or leave workspaceId out to act in the workspace list_workspaces marks current.`;
+  }
+
+  if (body.code === INBOX_RECONNECT_REQUIRED) {
+    return `Reconnect needed (${status}, ${INBOX_RECONNECT_REQUIRED}): ${sentence(apiMessage)} Tell the user to reconnect this account in AdaptlyPost, on the Connectors page. ${FINAL}`;
   }
 
   if (body.code === SUBSCRIPTION_REQUIRED) {
@@ -186,6 +191,10 @@ export class RestClient {
 
   async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PATCH', path, body);
+  }
+
+  async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', path, body);
   }
 
   async delete<T = unknown>(path: string): Promise<T> {

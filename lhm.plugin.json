@@ -1,8 +1,8 @@
 {
   "identifier": "adaptlypost-agent",
   "name": "AdaptlyPost",
-  "version": "1.13.0",
-  "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, and post analytics. Sign in with OAuth or an API key.",
+  "version": "1.14.0",
+  "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, and an inbox to answer comments, mentions, direct messages and Google reviews. Sign in with OAuth or an API key.",
   "author": "AdaptlyPost",
   "authorUrl": "https://adaptlypost.com",
   "homepage": "https://adaptlypost.com/features/agents",
@@ -894,6 +894,7 @@
                   "enum": [
                     "LINKEDIN",
                     "TWITTER",
+                    "THREADS",
                     "BLUESKY",
                     "MASTODON",
                     "YOUTUBE",
@@ -914,7 +915,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -933,7 +934,8 @@
                 "texts": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 25000
                   },
                   "maxItems": 25,
                   "description": "The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies"
@@ -1146,12 +1148,12 @@
                 "title": {
                   "type": "string",
                   "maxLength": 90,
-                  "description": "Video title (max 90 chars)"
+                  "description": "Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty"
                 },
                 "caption": {
                   "type": "string",
                   "maxLength": 4000,
-                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post"
+                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption"
                 },
                 "privacyLevel": {
                   "type": "string",
@@ -1615,10 +1617,12 @@
                 "tags": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 140,
+                    "pattern": "^[^,]+$"
                   },
                   "maxItems": 30,
-                  "description": "Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case"
+                  "description": "Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case"
                 },
                 "title": {
                   "type": "string",
@@ -1934,6 +1938,7 @@
                   "enum": [
                     "LINKEDIN",
                     "TWITTER",
+                    "THREADS",
                     "BLUESKY",
                     "MASTODON",
                     "YOUTUBE",
@@ -1954,7 +1959,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -1973,7 +1978,8 @@
                 "texts": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 25000
                   },
                   "maxItems": 25,
                   "description": "The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies"
@@ -2186,12 +2192,12 @@
                 "title": {
                   "type": "string",
                   "maxLength": 90,
-                  "description": "Video title (max 90 chars)"
+                  "description": "Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty"
                 },
                 "caption": {
                   "type": "string",
                   "maxLength": 4000,
-                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post"
+                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption"
                 },
                 "privacyLevel": {
                   "type": "string",
@@ -2655,10 +2661,12 @@
                 "tags": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 140,
+                    "pattern": "^[^,]+$"
                   },
                   "maxItems": 30,
-                  "description": "Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case"
+                  "description": "Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case"
                 },
                 "title": {
                   "type": "string",
@@ -2825,7 +2833,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead."
+            "description": "The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead."
           }
         },
         "additionalProperties": false
@@ -2942,13 +2950,13 @@
     {
       "name": "update_post",
       "title": "Update Post",
-      "description": "Update a DRAFT or SCHEDULED post in place; any other status fails with \"Cannot edit post in current state\", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post's target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft's status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.",
+      "description": "Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with \"Cannot edit post in current state\", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post's target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft's status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string",
-            "description": "Post ID to update (must be DRAFT or SCHEDULED)"
+            "description": "Post ID to update (DRAFT, SCHEDULED, or FAILED on every platform)"
           },
           "text": {
             "type": "string",
@@ -2993,7 +3001,7 @@
               "string",
               "null"
             ],
-            "description": "New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft; null takes the planned date off a DRAFT and moves it off the calendar. On a SCHEDULED post null fails with 400 (use unschedule_post), and moving it more than a minute into the past fails with 400; use publish_draft to publish now"
+            "description": "New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft; null takes the planned date off a DRAFT (or a FAILED post, which becomes a draft) and moves it off the calendar. On a SCHEDULED post null fails with 400 (use unschedule_post), and moving it more than a minute into the past fails with 400; use publish_draft to publish now"
           },
           "timezone": {
             "type": "string",
@@ -3053,6 +3061,7 @@
                   "enum": [
                     "LINKEDIN",
                     "TWITTER",
+                    "THREADS",
                     "BLUESKY",
                     "MASTODON",
                     "YOUTUBE",
@@ -3073,7 +3082,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -3092,7 +3101,8 @@
                 "texts": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 25000
                   },
                   "maxItems": 25,
                   "description": "The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies"
@@ -3305,12 +3315,12 @@
                 "title": {
                   "type": "string",
                   "maxLength": 90,
-                  "description": "Video title (max 90 chars)"
+                  "description": "Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty"
                 },
                 "caption": {
                   "type": "string",
                   "maxLength": 4000,
-                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post"
+                  "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption"
                 },
                 "privacyLevel": {
                   "type": "string",
@@ -3774,10 +3784,12 @@
                 "tags": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 140,
+                    "pattern": "^[^,]+$"
                   },
                   "maxItems": 30,
-                  "description": "Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case"
+                  "description": "Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case"
                 },
                 "title": {
                   "type": "string",
@@ -3905,7 +3917,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The updated post record: id, status (still DRAFT or SCHEDULED), text, contentType, scheduledAt, timezone, and platforms with per-target details."
+            "description": "The updated post record: id, status (DRAFT or SCHEDULED; a FAILED post comes back as DRAFT), text, contentType, scheduledAt, timezone, and platforms with per-target details."
           }
         },
         "additionalProperties": false
@@ -4247,6 +4259,7 @@
                         "enum": [
                           "LINKEDIN",
                           "TWITTER",
+                          "THREADS",
                           "BLUESKY",
                           "MASTODON",
                           "YOUTUBE",
@@ -4267,7 +4280,7 @@
                     ],
                     "additionalProperties": false
                   },
-                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
                 },
                 "threadReplies": {
                   "type": "array",
@@ -4286,7 +4299,8 @@
                       "texts": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 25000
                         },
                         "maxItems": 25,
                         "description": "The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies"
@@ -4397,12 +4411,12 @@
                       "title": {
                         "type": "string",
                         "maxLength": 90,
-                        "description": "Video title (max 90 chars)"
+                        "description": "Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty"
                       },
                       "caption": {
                         "type": "string",
                         "maxLength": 4000,
-                        "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post"
+                        "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption"
                       },
                       "privacyLevel": {
                         "type": "string",
@@ -4866,10 +4880,12 @@
                       "tags": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 140,
+                          "pattern": "^[^,]+$"
                         },
                         "maxItems": 30,
-                        "description": "Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case"
+                        "description": "Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case"
                       },
                       "title": {
                         "type": "string",
@@ -5240,6 +5256,7 @@
                         "enum": [
                           "LINKEDIN",
                           "TWITTER",
+                          "THREADS",
                           "BLUESKY",
                           "MASTODON",
                           "YOUTUBE",
@@ -5260,7 +5277,7 @@
                     ],
                     "additionalProperties": false
                   },
-                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
                 },
                 "threadReplies": {
                   "type": "array",
@@ -5279,7 +5296,8 @@
                       "texts": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 25000
                         },
                         "maxItems": 25,
                         "description": "The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies"
@@ -5390,12 +5408,12 @@
                       "title": {
                         "type": "string",
                         "maxLength": 90,
-                        "description": "Video title (max 90 chars)"
+                        "description": "Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty"
                       },
                       "caption": {
                         "type": "string",
                         "maxLength": 4000,
-                        "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post"
+                        "description": "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption"
                       },
                       "privacyLevel": {
                         "type": "string",
@@ -5859,10 +5877,12 @@
                       "tags": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "maxLength": 140,
+                          "pattern": "^[^,]+$"
                         },
                         "maxItems": 30,
-                        "description": "Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case"
+                        "description": "Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case"
                       },
                       "title": {
                         "type": "string",
@@ -7038,7 +7058,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, and lastSyncedAt."
+            "description": "An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, accountActivityConnectionIds (accounts such as LinkedIn personal profiles and Google Business locations counted by their account-wide activity on each day of the window instead of the posts published in it; they have no rows in list_post_analytics), and lastSyncedAt."
           }
         },
         "additionalProperties": false
@@ -7172,7 +7192,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics } per platform."
+            "description": "An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics, accountActivityConnectionIds } per platform, where accountActivityConnectionIds lists the accounts counted by their account-wide daily activity instead of the posts published in the window."
           }
         },
         "additionalProperties": false
@@ -7498,7 +7518,7 @@
     {
       "name": "trigger_analytics_sync",
       "title": "Trigger Analytics Sync",
-      "description": "Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 4 hours; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.",
+      "description": "Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 15 minutes, and a YouTube channel read in the last 12 hours is skipped; inside the cooldown, or when no connected account has analytics, it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -7529,6 +7549,1204 @@
       }
     },
     {
+      "name": "get_inbox_summary",
+      "title": "Get Inbox Summary",
+      "description": "Unread counts for the workspace inbox and what each connected account can do in it. The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews; TikTok and X have no inbox. Each account lists comments, mentions, messages and reviews as AVAILABLE, RECONNECT_REQUIRED (the account lacks the platform permission, some of which still wait on platform review, or its token expired: tell the user to reconnect it in AdaptlyPost) or UNSUPPORTED. Call it first when the user asks what is new or why a channel is empty. The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now. Needs the inbox.read permission, which every role holds. Takes only the optional workspaceId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with unread { comments, mentions, conversations, reviews } and accounts: one { accountId, platform, accountName, avatarUrl, needsReconnect, lastSyncedAt, lastErrorCode, comments, mentions, messages, reviews } per account, each channel AVAILABLE, RECONNECT_REQUIRED or UNSUPPORTED."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "refresh_inbox",
+      "title": "Refresh Inbox",
+      "description": "Queue an inbox sync for every connected account now instead of waiting for the next 10-minute run. It returns at once with { queued: true }; new items show up in the list tools a minute or so later, so do not poll in a tight loop. Nothing is sent to anyone. Needs the inbox.read permission, which every role holds. Takes only the optional workspaceId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with queued: true."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_inbox_comments",
+      "title": "List Inbox Comments",
+      "description": "List comments on the account's posts, newest first, on Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn. Filter by account, platform, status, date, text, an AdaptlyPost post (postId from list_posts) or the platform's own post id. Page with cursor while hasMore is true. Each comment's capabilities say whether it can be replied to, hidden, deleted or liked. The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Only these accounts, by the id from list_accounts, up to 50. Omit for every account"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "LINKEDIN",
+                "YOUTUBE",
+                "INSTAGRAM",
+                "FACEBOOK",
+                "TIKTOK",
+                "PINTEREST",
+                "THREADS",
+                "BLUESKY",
+                "TWITTER",
+                "MASTODON",
+                "GOOGLE_BUSINESS",
+                "TUMBLR",
+                "WORDPRESS",
+                "TELEGRAM"
+              ]
+            },
+            "description": "Only these platforms"
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "UNREAD",
+                "READ",
+                "DONE"
+              ]
+            },
+            "description": "Only these statuses: UNREAD, READ or DONE. Omit for all"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 date-time; only items created on the platform at or after it"
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Free text to search for, up to 200 characters"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Items per page, 1 to 100 (default 25)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "nextCursor from the previous page. Omit for the first page; nextCursor is null on the last page"
+          },
+          "postId": {
+            "type": "string",
+            "description": "Only comments on this AdaptlyPost post, by its id from list_posts or get_post"
+          },
+          "platformPostId": {
+            "type": "string",
+            "description": "Only comments on this post, by the platform's own post id"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with comments, total, hasMore and nextCursor (null on the last page). Each comment is An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_inbox_comment",
+      "title": "Get Inbox Comment",
+      "description": "Get one inbox comment with its parent comment (when it is a reply) and the replies under it, to read a conversation before answering. 404 inbox_item_not_found when the id is unknown in this workspace. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with comment, parent (null for a top-level comment) and replies. Each is An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "reply_to_inbox_comment",
+      "title": "Reply To Comment",
+      "description": "Post a public reply to a comment, from the account the comment was left on. Works where the comment's capabilities.canReply is true, on Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn. This sends text to a real person from the account: show the user the exact text and the item it answers, and get their yes before calling. Each call posts a new reply, so after an error or timeout read get_inbox_comment before trying again. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "The text to send. The limit is the platform's comment limit: LinkedIn 1250 characters, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The new reply. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "hide_inbox_comment",
+      "title": "Hide Comment",
+      "description": "Hide a comment on the platform so other people no longer see it, where capabilities.canHide is true. Confirm with the user first, naming the comment. A comment that cannot be hidden answers 400 inbox_action_unsupported; stop there. unhide_inbox_comment reverses it. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The comment with isHidden: true. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "unhide_inbox_comment",
+      "title": "Unhide Comment",
+      "description": "Show a hidden comment on the platform again, where capabilities.canHide is true. A comment that cannot be unhidden answers 400 inbox_action_unsupported; stop there. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The comment with isHidden: false. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "like_inbox_comment",
+      "title": "Like Comment",
+      "description": "Like a comment from the account, on Facebook, Bluesky, Mastodon (a favourite) and LinkedIn. Instagram, YouTube and Threads do not allow it, and a comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. The like is public. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The comment with likedByAccount: true. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "unlike_inbox_comment",
+      "title": "Unlike Comment",
+      "description": "Take back the account's like on a comment, on Facebook, Bluesky, Mastodon and LinkedIn. A comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The comment with likedByAccount: false. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_inbox_comment",
+      "title": "Delete Comment",
+      "description": "Delete a comment on the platform and from the inbox, where capabilities.canDelete is true. Facebook and LinkedIn allow any comment on the Page's or organization's posts, Instagram any comment on the account's media, and YouTube, Threads, Bluesky and Mastodon only the account's own comments and replies. Anything else answers 400 inbox_action_unsupported; stop there. It cannot be undone, so confirm with the user first, quoting the comment. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The comment id, from list_inbox_comments"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with deleted: true."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_inbox_comments_status",
+      "title": "Mark Inbox Comments",
+      "description": "Mark up to 100 comments UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "1 to 100 comment ids from list_inbox_comments"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNREAD",
+              "READ",
+              "DONE"
+            ],
+            "description": "UNREAD, READ or DONE"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with comments (the updated comments) and unreadCount. An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_inbox_mentions",
+      "title": "List Inbox Mentions",
+      "description": "List posts and comments that mention the account, newest first, on Facebook, Instagram, Threads, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose mentions show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Only these accounts, by the id from list_accounts, up to 50. Omit for every account"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "LINKEDIN",
+                "YOUTUBE",
+                "INSTAGRAM",
+                "FACEBOOK",
+                "TIKTOK",
+                "PINTEREST",
+                "THREADS",
+                "BLUESKY",
+                "TWITTER",
+                "MASTODON",
+                "GOOGLE_BUSINESS",
+                "TUMBLR",
+                "WORDPRESS",
+                "TELEGRAM"
+              ]
+            },
+            "description": "Only these platforms"
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "UNREAD",
+                "READ",
+                "DONE"
+              ]
+            },
+            "description": "Only these statuses: UNREAD, READ or DONE. Omit for all"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 date-time; only items created on the platform at or after it"
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Free text to search for, up to 200 characters"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Items per page, 1 to 100 (default 25)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "nextCursor from the previous page. Omit for the first page; nextCursor is null on the last page"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with mentions, total, hasMore and nextCursor (null on the last page). Each mention is An InboxMention: id, accountId, platform, accountName, platformMentionId, author { id, name, username, avatarUrl }, text, permalink, thumbnailUrl, createdAt, status, replied, repliedAt, capabilities { canReply } and replies (each { id, text, permalink, createdAt })."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "reply_to_inbox_mention",
+      "title": "Reply To Mention",
+      "description": "Post a public reply to a mention, from the account that was mentioned, where capabilities.canReply is true. This sends text to a real person from the account: show the user the exact text and the item it answers, and get their yes before calling. Each call posts a new reply, so after an error or timeout check the mention's replies in list_inbox_mentions before trying again. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The mention id, from list_inbox_mentions"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "The text to send. The limit is the platform's reply limit: Threads 500 characters, Bluesky 300, Mastodon 500, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The mention with the new reply in replies. An InboxMention: id, accountId, platform, accountName, platformMentionId, author { id, name, username, avatarUrl }, text, permalink, thumbnailUrl, createdAt, status, replied, repliedAt, capabilities { canReply } and replies (each { id, text, permalink, createdAt })."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_inbox_mentions_status",
+      "title": "Mark Inbox Mentions",
+      "description": "Mark up to 100 mentions UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "1 to 100 mention ids from list_inbox_mentions"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNREAD",
+              "READ",
+              "DONE"
+            ],
+            "description": "UNREAD, READ or DONE"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with mentions (the updated mentions) and unreadCount. An InboxMention: id, accountId, platform, accountName, platformMentionId, author { id, name, username, avatarUrl }, text, permalink, thumbnailUrl, createdAt, status, replied, repliedAt, capabilities { canReply } and replies (each { id, text, permalink, createdAt })."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_inbox_conversations",
+      "title": "List Inbox Conversations",
+      "description": "List direct message conversations, most recent message first, on Facebook (Messenger), Instagram, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose messages show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Only these accounts, by the id from list_accounts, up to 50. Omit for every account"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "LINKEDIN",
+                "YOUTUBE",
+                "INSTAGRAM",
+                "FACEBOOK",
+                "TIKTOK",
+                "PINTEREST",
+                "THREADS",
+                "BLUESKY",
+                "TWITTER",
+                "MASTODON",
+                "GOOGLE_BUSINESS",
+                "TUMBLR",
+                "WORDPRESS",
+                "TELEGRAM"
+              ]
+            },
+            "description": "Only these platforms"
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "UNREAD",
+                "READ",
+                "DONE"
+              ]
+            },
+            "description": "Only these statuses: UNREAD, READ or DONE. Omit for all"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 date-time; only items created on the platform at or after it"
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Free text to search for, up to 200 characters"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Items per page, 1 to 100 (default 25)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "nextCursor from the previous page. Omit for the first page; nextCursor is null on the last page"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with conversations, total, hasMore and nextCursor (null on the last page). Each conversation is An InboxConversation: id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status, repliedAt, replyWindowEndsAt (the end of the 24-hour Facebook and Instagram reply window, else null), maxMessageLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_inbox_conversation",
+      "title": "Get Inbox Conversation",
+      "description": "Get one direct message conversation with its messages, to read the thread before answering. 404 inbox_item_not_found when the id is unknown in this workspace. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The conversation id, from list_inbox_conversations"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with conversation and messages: one { id, isOwn, text, hasAttachments, createdAt } per message. An InboxConversation: id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status, repliedAt, replyWindowEndsAt (the end of the 24-hour Facebook and Instagram reply window, else null), maxMessageLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "send_inbox_message",
+      "title": "Send Direct Message",
+      "description": "Send a direct message in a conversation, from the account, where capabilities.canReply is true. Facebook and Instagram only allow a reply within 24 hours of the person's last message (replyWindowEndsAt); after that the call answers 400 inbox_messaging_window_closed, so stop and tell the user. This sends text to a real person from the account: show the user the exact text and the item it answers, and get their yes before calling. Each call sends a new message, so after an error or timeout read get_inbox_conversation before trying again. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The conversation id, from list_inbox_conversations"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "The text to send. Up to the conversation's maxMessageLength. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with conversation and message ({ id, isOwn, text, hasAttachments, createdAt }). An InboxConversation: id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status, repliedAt, replyWindowEndsAt (the end of the 24-hour Facebook and Instagram reply window, else null), maxMessageLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_inbox_conversations_status",
+      "title": "Mark Inbox Conversations",
+      "description": "Mark up to 100 conversations UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "1 to 100 conversation ids from list_inbox_conversations"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNREAD",
+              "READ",
+              "DONE"
+            ],
+            "description": "UNREAD, READ or DONE"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with conversations (the updated conversations) and unreadCount. An InboxConversation: id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status, repliedAt, replyWindowEndsAt (the end of the 24-hour Facebook and Instagram reply window, else null), maxMessageLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_inbox_reviews",
+      "title": "List Inbox Reviews",
+      "description": "List Google Business Profile reviews of the connected locations, newest first. Filter by rating and by whether the review already has a reply, plus the usual inbox filters. Page with cursor while hasMore is true. The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now. Needs the inbox.read permission, which every role holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Only these accounts, by the id from list_accounts, up to 50. Omit for every account"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "LINKEDIN",
+                "YOUTUBE",
+                "INSTAGRAM",
+                "FACEBOOK",
+                "TIKTOK",
+                "PINTEREST",
+                "THREADS",
+                "BLUESKY",
+                "TWITTER",
+                "MASTODON",
+                "GOOGLE_BUSINESS",
+                "TUMBLR",
+                "WORDPRESS",
+                "TELEGRAM"
+              ]
+            },
+            "description": "Only these platforms"
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "UNREAD",
+                "READ",
+                "DONE"
+              ]
+            },
+            "description": "Only these statuses: UNREAD, READ or DONE. Omit for all"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 date-time; only items created on the platform at or after it"
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Free text to search for, up to 200 characters"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Items per page, 1 to 100 (default 25)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "nextCursor from the previous page. Omit for the first page; nextCursor is null on the last page"
+          },
+          "ratings": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "description": "Only reviews with these star ratings, 1 to 5"
+          },
+          "replied": {
+            "type": "boolean",
+            "description": "true for reviews that already have a reply, false for those without one"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with reviews, total, hasMore and nextCursor (null on the last page). Each review is An InboxReview: id, accountId, platform (GOOGLE_BUSINESS), accountName, platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text, reply ({ text, updatedAt } or null), createdAt, updatedAt, status, repliedAt, maxReplyLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "reply_to_inbox_review",
+      "title": "Reply To Review",
+      "description": "Post the location's public reply to a Google review. Google allows one reply per review, so this replaces any reply already there; show the user the old reply too when there is one. This sends text to a real person from the account: show the user the exact text and the item it answers, and get their yes before calling. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The review id, from list_inbox_reviews"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "The text to send. Up to 4096 bytes in UTF-8 (maxReplyLength on the review). Empty or too long text answers 400 inbox_reply_invalid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The review with its new reply. An InboxReview: id, accountId, platform (GOOGLE_BUSINESS), accountName, platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text, reply ({ text, updatedAt } or null), createdAt, updatedAt, status, repliedAt, maxReplyLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_inbox_review_reply",
+      "title": "Delete Review Reply",
+      "description": "Delete the location's reply to a Google review; the review itself stays. It cannot be undone, so confirm with the user first, quoting the reply. A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry. 404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The review id, from list_inbox_reviews"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The review with reply: null. An InboxReview: id, accountId, platform (GOOGLE_BUSINESS), accountName, platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text, reply ({ text, updatedAt } or null), createdAt, updatedAt, status, repliedAt, maxReplyLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_inbox_reviews_status",
+      "title": "Mark Inbox Reviews",
+      "description": "Mark up to 100 reviews UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to Google. Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "1 to 100 review ids from list_inbox_reviews"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNREAD",
+              "READ",
+              "DONE"
+            ],
+            "description": "UNREAD, READ or DONE"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "ids",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with reviews (the updated reviews) and unreadCount. An InboxReview: id, accountId, platform (GOOGLE_BUSINESS), accountName, platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text, reply ({ text, updatedAt } or null), createdAt, updatedAt, status, repliedAt, maxReplyLength and capabilities { canReply }."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "idempotentHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
       "name": "list_webhooks",
       "title": "List Webhooks",
       "description": "List the webhook endpoints registered for the workspace (the current one unless workspaceId names another), with whether each is active and when it last succeeded or failed. Needs the webhooks.read permission, which Admin, Editor and Viewer hold. Takes only the optional workspaceId.",
@@ -7546,7 +8764,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "An object with webhooks: one record per endpoint. The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
+            "description": "An object with webhooks: one record per endpoint. The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
           }
         },
         "additionalProperties": false
@@ -7585,7 +8803,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
+            "description": "The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
           }
         },
         "additionalProperties": false
@@ -7602,18 +8820,39 @@
     {
       "name": "create_webhook",
       "title": "Create Webhook",
-      "description": "Register a URL that receives every workspace event as an HTTP POST: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+      "description": "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "url": {
             "type": "string",
             "format": "uri",
-            "description": "Publicly reachable http(s) endpoint that receives every event"
+            "description": "Publicly reachable http(s) endpoint that receives the events"
           },
           "workspaceId": {
             "type": "string",
             "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "post.published",
+                "post.partially_failed",
+                "post.failed",
+                "post.scheduled",
+                "account.unauthorized",
+                "image.completed",
+                "image.failed",
+                "comment.created",
+                "comment.replied",
+                "mention.created",
+                "message.received",
+                "review.created"
+              ]
+            },
+            "description": "Events this endpoint receives. Omit it or send [] for the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. The inbox events comment.created (a new comment from someone else), comment.replied (the account replied, from AdaptlyPost or the platform app), mention.created, message.received and review.created (a new Google review) reach only an endpoint that lists them. A non-empty list means only the listed events. Inbox events arrive within about 10 minutes, after the next inbox sync, and the first sync of an account fires none for its history"
           }
         },
         "required": [
@@ -7625,7 +8864,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The new webhook plus secret, the signing secret shown only this once. The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
+            "description": "The new webhook plus secret, the signing secret shown only this once. The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
           }
         },
         "additionalProperties": false
@@ -7642,7 +8881,7 @@
     {
       "name": "update_webhook",
       "title": "Update Webhook",
-      "description": "Change a webhook endpoint's URL, or turn it off or back on with active. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.",
+      "description": "Change a webhook endpoint's URL or the events it receives, or turn it off or back on with active. Sending events replaces the list, and [] goes back to the default set. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -7662,6 +8901,27 @@
           "workspaceId": {
             "type": "string",
             "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "post.published",
+                "post.partially_failed",
+                "post.failed",
+                "post.scheduled",
+                "account.unauthorized",
+                "image.completed",
+                "image.failed",
+                "comment.created",
+                "comment.replied",
+                "mention.created",
+                "message.received",
+                "review.created"
+              ]
+            },
+            "description": "Events this endpoint receives. Omit it or send [] for the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. The inbox events comment.created (a new comment from someone else), comment.replied (the account replied, from AdaptlyPost or the platform app), mention.created, message.received and review.created (a new Google review) reach only an endpoint that lists them. A non-empty list means only the listed events. Inbox events arrive within about 10 minutes, after the next inbox sync, and the first sync of an account fires none for its history"
           }
         },
         "required": [
@@ -7673,7 +8933,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The updated webhook. The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
+            "description": "The updated webhook. The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row)."
           }
         },
         "additionalProperties": false

@@ -1,6 +1,6 @@
 # AdaptlyPost agent
 
-Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 58 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, and analytics.
+Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 80 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, analytics, and an inbox for answering comments, mentions, direct messages and Google reviews.
 
 ## Connect in 30 seconds
 
@@ -160,10 +160,13 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 - "Connect our blog's RSS feed so every new article becomes a LinkedIn draft."
 - "What were my five best posts last month by engagement, and on which platforms?"
 - "Create a connect link my client can use to add their Instagram and Facebook accounts."
+- "What's new in my inbox? Show unread comments and messages from today."
+- "Draft friendly replies to the unanswered Instagram comments on yesterday's post, and send them once I approve."
+- "Reply to every 5-star Google review from this week that has no reply yet."
 
 ## Tools
 
-58 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
+80 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
 
 ### Workspaces and accounts
 
@@ -185,7 +188,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything | No |
 | `get_post` | Get full details of a single post by ID | No |
 | `list_posts` | List posts with filters by status, platform, date range | No |
-| `update_post` | Update a scheduled or draft post | Yes |
+| `update_post` | Update a scheduled or draft post, or a post that failed on every platform, which becomes a draft again | Yes |
 | `delete_post` | Delete a post record; cancels a draft or scheduled post, never removes content already live | Yes |
 | `unschedule_post` | Turn a scheduled post back into an undated draft without deleting it | Yes |
 | `publish_draft` | Publish a draft post immediately or schedule it. Without a date, a draft with a future planned date is scheduled for it and any other draft publishes now; `publishNow: true` publishes now regardless | Yes |
@@ -246,7 +249,36 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | `list_top_posts` | The best posts in a window by one metric, in one call | No |
 | `list_discovered_posts` | Posts found on the connected accounts that were not published through AdaptlyPost | No |
 | `get_analytics_sync_status` | When each account last synced and whether one needs reconnecting for analytics | No |
-| `trigger_analytics_sync` | Refresh analytics now (once per 4 hours per workspace) | Yes |
+| `trigger_analytics_sync` | Refresh analytics now (once per 15 minutes per workspace) | Yes |
+
+### Inbox
+
+The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews. TikTok and X have no inbox. It syncs every 10 minutes per account. An account that lacks a platform permission for a channel shows `RECONNECT_REQUIRED` in `get_inbox_summary`, and a write to it answers 403 `inbox_reconnect_required`: reconnect the account in AdaptlyPost.
+
+| Tool | What it does | Changes data |
+| --- | --- | --- |
+| `get_inbox_summary` | Unread counts per channel, and per account which channels work, need a reconnect or are unsupported | No |
+| `refresh_inbox` | Sync the inbox now instead of waiting for the next 10-minute run | Yes |
+| `list_inbox_comments` | Comments on the account's posts, newest first, filtered by account, platform, status, date, text or post | No |
+| `get_inbox_comment` | One comment with its parent and the replies under it | No |
+| `reply_to_inbox_comment` | Post a public reply to a comment from the account | Yes |
+| `hide_inbox_comment` | Hide a comment on the platform | Yes |
+| `unhide_inbox_comment` | Show a hidden comment again | Yes |
+| `like_inbox_comment` | Like a comment (Facebook, Bluesky, Mastodon, LinkedIn) | Yes |
+| `unlike_inbox_comment` | Take back a like | Yes |
+| `delete_inbox_comment` | Delete a comment where the platform allows it | Yes |
+| `update_inbox_comments_status` | Mark comments unread, read or done in AdaptlyPost | Yes |
+| `list_inbox_mentions` | Posts and comments that mention the account | No |
+| `reply_to_inbox_mention` | Post a public reply to a mention | Yes |
+| `update_inbox_mentions_status` | Mark mentions unread, read or done | Yes |
+| `list_inbox_conversations` | Direct message conversations, most recent first | No |
+| `get_inbox_conversation` | One conversation with its messages | No |
+| `send_inbox_message` | Send a direct message; Facebook and Instagram allow it within 24 hours of the person's last message | Yes |
+| `update_inbox_conversations_status` | Mark conversations unread, read or done | Yes |
+| `list_inbox_reviews` | Google Business Profile reviews, filtered by rating and whether they have a reply | No |
+| `reply_to_inbox_review` | Post or replace the location's reply to a review | Yes |
+| `delete_inbox_review_reply` | Delete the location's reply to a review | Yes |
+| `update_inbox_reviews_status` | Mark reviews unread, read or done | Yes |
 
 ### Webhooks
 
@@ -254,8 +286,8 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | --- | --- | --- |
 | `list_webhooks` | List webhook endpoints and their delivery state | No |
 | `get_webhook` | One webhook endpoint | No |
-| `create_webhook` | Register an endpoint for every event; the signing secret is shown only in this response | Yes |
-| `update_webhook` | Change an endpoint's URL or turn it off and on | Yes |
+| `create_webhook` | Register an endpoint for the post, account and image events, or for the events you pick, inbox events included; the signing secret is shown only in this response | Yes |
+| `update_webhook` | Change an endpoint's URL or events, or turn it off and on | Yes |
 | `delete_webhook` | Delete an endpoint | Yes |
 | `test_webhook` | Send a signed `webhook.test` event and see how the endpoint answered | Yes |
 
@@ -275,6 +307,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 - An action outside the role answers 403 with `code: permission_denied`. The tool tells the agent to save a draft and ask a workspace member to publish, not to retry or look for another key.
 - Read-only tools carry `readOnlyHint`, so clients that ask before a write (Claude, ChatGPT, Hermes) ask before creating, scheduling, publishing or deleting anything.
 - `generate_caption`, `refine_caption` and `generate_image` spend AdaptlyPost AI credits on every call: 2 credits per caption, 2 or 4 per image.
+- Every role can read the inbox. Replying, messaging, hiding, liking, deleting and marking inbox items need Admin or Editor. Replies and messages reach real people, so the agent shows the text and what it answers before it sends.
 - Without an API-capable plan every call answers 403 with `code: subscription_required`. A 429 carries `Retry-After`.
 
 ## Workspaces
@@ -313,7 +346,8 @@ An operation outside the role answers 403 with `code: permission_denied`. The sk
 - Save drafts and publish them later
 - Repeat a post daily, weekly, monthly or yearly, then pause, resume or stop the series
 - Read analytics: views, likes, comments, followers and engagement per window, per platform and per post
-- Manage webhooks and client connect links
+- Read and answer comments, mentions, direct messages and Google reviews from the inbox, and hide, like or delete comments
+- Manage webhooks, including which events each one receives, and client connect links
 - Write captions and generate images with AdaptlyPost AI, paid from your AI credits
 
 ```
@@ -356,6 +390,12 @@ Every tool that creates, schedules, publishes or deletes is marked as a write, s
 
 **Which platforms can I post to?**
 Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress.
+
+**Can it answer comments and messages?**
+Yes. The inbox tools read and answer comments on Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn, mentions on Facebook, Instagram, Threads, Bluesky and Mastodon, direct messages on Facebook, Instagram, Bluesky and Mastodon, and Google Business Profile reviews. They can also hide, like and delete comments where the platform allows it. Webhooks can send `comment.created`, `comment.replied`, `mention.created`, `message.received` and `review.created` when you list them in `events`.
+
+**Why does a channel say `RECONNECT_REQUIRED`?**
+The account was connected before AdaptlyPost asked for that permission, its token expired, or the platform has not approved the permission yet (Messenger and Instagram direct messages and Threads mentions depend on Meta's review). Reconnect the account in AdaptlyPost; retrying the call will not help.
 
 **Can it upload my own photos and videos?**
 Yes. `upload_media` takes public URLs, base64 or ChatGPT attachments; `open_upload_widget` shows an upload box in ChatGPT and Claude, or gives an upload link where a box can't show.

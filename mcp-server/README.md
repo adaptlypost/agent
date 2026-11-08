@@ -1,6 +1,6 @@
 # @adaptlypost/mcp-server
 
-MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics generate captions and images, and manage RSS feeds, connect links and webhooks across 14 platforms. The server exposes 59 tools.
+MCP (Model Context Protocol) server for AdaptlyPost. It lets AI agents manage social media posts, schedule content, check publishing results, read post analytics, generate captions and images, answer comments, mentions, direct messages and Google reviews from the inbox, and manage RSS feeds, connect links and webhooks across 14 platforms. The server exposes 81 tools.
 
 ## Supported Platforms
 

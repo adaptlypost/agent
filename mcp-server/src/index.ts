@@ -119,6 +119,7 @@ const PlatformType = z.enum([...CaptionPlatform.options, 'TELEGRAM']);
 const FirstCommentPlatform = z.enum([
   'LINKEDIN',
   'TWITTER',
+  'THREADS',
   'BLUESKY',
   'MASTODON',
   'YOUTUBE',
@@ -227,6 +228,23 @@ const RecurringPostStatus = z.enum(['ACTIVE', 'PAUSED', 'ENDED']);
 
 const AnalyticsGranularity = z.enum(['DAILY', 'WEEKLY', 'MONTHLY']);
 
+const WebhookEvent = z.enum([
+  'post.published',
+  'post.partially_failed',
+  'post.failed',
+  'post.scheduled',
+  'account.unauthorized',
+  'image.completed',
+  'image.failed',
+  'comment.created',
+  'comment.replied',
+  'mention.created',
+  'message.received',
+  'review.created',
+]);
+
+const InboxStatus = z.enum(['UNREAD', 'READ', 'DONE']);
+
 const AnalyticsSortMetric = z.enum([
   'VIEWS',
   'LIKES',
@@ -245,12 +263,20 @@ const AnalyticsSortMetric = z.enum([
 
 const TikTokConfigSchema = z.object({
   connectionId: z.string().describe('TikTok connection ID from list_accounts'),
-  title: z.string().max(90).optional().describe('Video title (max 90 chars)'),
+  title: z
+    .string()
+    .max(90)
+    .optional()
+    .describe(
+      'Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty',
+    ),
   caption: z
     .string()
     .max(4000)
     .optional()
-    .describe('TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post'),
+    .describe(
+      "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption",
+    ),
   privacyLevel: z
     .enum([
       'PUBLIC_TO_EVERYONE',
@@ -507,10 +533,12 @@ const TwitterConfigSchema = z.object({
 const TumblrConfigSchema = z.object({
   connectionId: z.string().describe('Tumblr blog account id from list_accounts'),
   tags: z
-    .array(z.string())
+    .array(z.string().max(140).regex(/^[^,]+$/))
     .max(30)
     .optional()
-    .describe('Tumblr tags, without commas, up to 30. A leading # is stripped and duplicates are dropped, ignoring case'),
+    .describe(
+      'Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case',
+    ),
   title: z.string().max(4096).optional().describe('Shown as a heading above the media and the text'),
   sourceUrl: z.string().max(2048).optional().describe('Shown as the source link of the post'),
 });
@@ -755,14 +783,14 @@ const postExtrasFields = {
     )
     .optional()
     .describe(
-      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
+      'A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones',
     ),
   threadReplies: z
     .array(
       z.object({
         platform: ThreadReplyPlatform,
         texts: z
-          .array(z.string())
+          .array(z.string().max(25000))
           .max(25)
           .describe('The replies in order, each trimmed. The limit per reply depends on the platform, see threadReplies'),
         mediaUrls: z
@@ -1139,6 +1167,8 @@ const SERVER_INSTRUCTIONS = [
   'A 429 means the rate limit was hit. Wait for the Retry-After time before the next call and do not loop.',
   'generate_caption, refine_caption and generate_image spend AI credits on every call, so generate only what the user asked for. generate_image returns a jobId, not an image: poll get_image_job until status is completed or failed.',
   'validate_post and validate_bulk_posts take the same input as create_post and bulk_schedule_posts and report every problem without creating anything. Use them before a large or unusual post.',
+  'The inbox tools read and answer comments, mentions, direct messages and Google Business Profile reviews. Every role can read the inbox; replying, messaging, hiding, liking, deleting and marking items need Admin or Editor. Before reply_to_inbox_comment, reply_to_inbox_mention, send_inbox_message or reply_to_inbox_review, show the user the exact text and the item it answers and wait for their yes; confirm hide_inbox_comment, delete_inbox_comment and delete_inbox_review_reply the same way.',
+  'A 403 with code inbox_reconnect_required means the account lacks the platform permission for that inbox channel or action, or its token expired. Tell the user to reconnect the account in AdaptlyPost and do not retry.',
 ].join('\n');
 
 const LINK_CLAIM_WAIT_MS = 25_000;
@@ -1851,7 +1881,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1932,9 +1962,9 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT or SCHEDULED post in place; any other status fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments and platformThumbnails you omit keep their values; sending firstComments or platformThumbnails replaces every stored entry. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. mediaUrls only take effect together with platforms; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
-        id: z.string().describe('Post ID to update (must be DRAFT or SCHEDULED)'),
+        id: z.string().describe('Post ID to update (DRAFT, SCHEDULED, or FAILED on every platform)'),
         text: z
           .string()
           .optional()
@@ -1953,7 +1983,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .nullable()
           .optional()
           .describe(
-            'New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft; null takes the planned date off a DRAFT and moves it off the calendar. On a SCHEDULED post null fails with 400 (use unschedule_post), and moving it more than a minute into the past fails with 400; use publish_draft to publish now',
+            'New schedule time as an absolute ISO 8601 instant; omit to keep. On a DRAFT it sets the planned date and the post stays a draft; null takes the planned date off a DRAFT (or a FAILED post, which becomes a draft) and moves it off the calendar. On a SCHEDULED post null fails with 400 (use unschedule_post), and moving it more than a minute into the past fails with 400; use publish_draft to publish now',
           ),
         timezone: z
           .string()
@@ -1981,7 +2011,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         ...twitterConfigsField,
       },
       outputSchema: resultSchema(
-        'The updated post record: id, status (still DRAFT or SCHEDULED), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
+        'The updated post record: id, status (DRAFT or SCHEDULED; a FAILED post comes back as DRAFT), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
       ),
       annotations: {
         readOnlyHint: false,
@@ -2739,7 +2769,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         `Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use this for "how did we do this month" questions and for follower counts. Metrics are summed over the selected platforms; partialMetrics names metrics some selected platform cannot report, and a metric no platform reports is null. ${ANALYTICS_COVERAGE} Analytics refresh every few hours (lastSyncedAt says when); if the user just published, call trigger_analytics_sync first. Use get_analytics_timeseries for a trend, get_platform_breakdown to compare platforms, and list_post_analytics for individual posts.`,
       inputSchema: analyticsRangeFields,
       outputSchema: resultSchema(
-        'An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, and lastSyncedAt.',
+        'An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, accountActivityConnectionIds (accounts such as LinkedIn personal profiles and Google Business locations counted by their account-wide activity on each day of the window instead of the posts published in it; they have no rows in list_post_analytics), and lastSyncedAt.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2800,7 +2830,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         connectionIds: analyticsRangeFields.connectionIds,
       },
       outputSchema: resultSchema(
-        'An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics } per platform.',
+        'An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics, accountActivityConnectionIds } per platform, where accountActivityConnectionIds lists the accounts counted by their account-wide daily activity instead of the posts published in the window.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2948,7 +2978,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Trigger Analytics Sync',
       description:
-        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 4 hours; inside the cooldown it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
+        'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 15 minutes, and a YouTube channel read in the last 12 hours is skipped; inside the cooldown, or when no connected account has analytics, it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
       inputSchema: {},
       outputSchema: resultSchema(
         'An object with queued (true when a sync was started), message, and cooldownSecondsRemaining (seconds until the next allowed sync, null when queued).',
@@ -2970,12 +3000,516 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     },
   );
 
+  // ── Inbox ──────────────────────────────────────────────────────────────
+
+  const respond = async (run: () => Promise<unknown>) => {
+    try {
+      return toolResult(await run());
+    } catch (error) {
+      return toolError(error);
+    }
+  };
+
+  const inboxPath = (collection: string, id: string, suffix = '') =>
+    `/inbox/${collection}/${encodeURIComponent(id)}${suffix}`;
+
+  const INBOX_SYNC =
+    'The inbox syncs every 10 minutes per account; refresh_inbox asks for a sync now.';
+
+  const INBOX_READ_RULE = 'Needs the inbox.read permission, which every role holds.';
+
+  const INBOX_REPLY_RULE =
+    'Needs the inbox.reply permission, which Admin and Editor hold (403 permission_denied otherwise), and an active plan.';
+
+  const INBOX_RECONNECT_RULE =
+    'A 403 with code inbox_reconnect_required means the account lacks the platform permission for this channel or action (some channels still wait on platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry.';
+
+  const INBOX_REFUSALS =
+    '404 inbox_item_not_found means the id is unknown in this workspace. 429 inbox_rate_limited means the platform rate limited the call: wait a while before trying again. 503 inbox_platform_error means the platform failed: try again later.';
+
+  const INBOX_CONFIRM =
+    'This sends text to a real person from the account: show the user the exact text and the item it answers, and get their yes before calling.';
+
+  const INBOX_COMMENT_RECORD =
+    'An InboxComment: id, accountId, platform, accountName, postId (the AdaptlyPost post id, null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId (null for a top-level comment), isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied (the account has a reply under it, sent from AdaptlyPost or the platform app), repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }.';
+
+  const INBOX_MENTION_RECORD =
+    'An InboxMention: id, accountId, platform, accountName, platformMentionId, author { id, name, username, avatarUrl }, text, permalink, thumbnailUrl, createdAt, status, replied, repliedAt, capabilities { canReply } and replies (each { id, text, permalink, createdAt }).';
+
+  const INBOX_CONVERSATION_RECORD =
+    'An InboxConversation: id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status, repliedAt, replyWindowEndsAt (the end of the 24-hour Facebook and Instagram reply window, else null), maxMessageLength and capabilities { canReply }.';
+
+  const INBOX_REVIEW_RECORD =
+    'An InboxReview: id, accountId, platform (GOOGLE_BUSINESS), accountName, platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text, reply ({ text, updatedAt } or null), createdAt, updatedAt, status, repliedAt, maxReplyLength and capabilities { canReply }.';
+
+  const inboxIdField = (what: string, source: string) => ({
+    id: z.string().min(1).describe(`The ${what} id, from ${source}`),
+  });
+
+  const inboxReplyTextField = (limits: string) => ({
+    text: z.string().min(1).max(10000).describe(`The text to send. ${limits}`),
+  });
+
+  const inboxListFields = {
+    accountIds: z
+      .array(z.string())
+      .max(50)
+      .optional()
+      .describe('Only these accounts, by the id from list_accounts, up to 50. Omit for every account'),
+    platforms: z.array(PlatformType).optional().describe('Only these platforms'),
+    statuses: z
+      .array(InboxStatus)
+      .optional()
+      .describe('Only these statuses: UNREAD, READ or DONE. Omit for all'),
+    since: z
+      .string()
+      .optional()
+      .describe('ISO 8601 date-time; only items created on the platform at or after it'),
+    search: z.string().max(200).optional().describe('Free text to search for, up to 200 characters'),
+    limit: z.number().int().min(1).max(100).optional().describe('Items per page, 1 to 100 (default 25)'),
+    cursor: z
+      .string()
+      .optional()
+      .describe('nextCursor from the previous page. Omit for the first page; nextCursor is null on the last page'),
+  };
+
+  const inboxStatusFields = (what: string, source: string) => ({
+    ids: z.array(z.string()).min(1).max(100).describe(`1 to 100 ${what} ids from ${source}`),
+    status: InboxStatus.describe('UNREAD, READ or DONE'),
+  });
+
+  const COMMENT_REPLY_LIMITS =
+    'The limit is the platform\'s comment limit: LinkedIn 1250 characters, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit';
+
+  tool(
+    'get_inbox_summary',
+    {
+      title: 'Get Inbox Summary',
+      description: `Unread counts for the workspace inbox and what each connected account can do in it. The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews; TikTok and X have no inbox. Each account lists comments, mentions, messages and reviews as AVAILABLE, RECONNECT_REQUIRED (the account lacks the platform permission, some of which still wait on platform review, or its token expired: tell the user to reconnect it in AdaptlyPost) or UNSUPPORTED. Call it first when the user asks what is new or why a channel is empty. ${INBOX_SYNC} ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
+      inputSchema: {},
+      outputSchema: resultSchema(
+        'An object with unread { comments, mentions, conversations, reviews } and accounts: one { accountId, platform, accountName, avatarUrl, needsReconnect, lastSyncedAt, lastErrorCode, comments, mentions, messages, reviews } per account, each channel AVAILABLE, RECONNECT_REQUIRED or UNSUPPORTED.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (_args, client) => respond(() => client.get('/inbox/summary')),
+  );
+
+  tool(
+    'refresh_inbox',
+    {
+      title: 'Refresh Inbox',
+      description: `Queue an inbox sync for every connected account now instead of waiting for the next 10-minute run. It returns at once with { queued: true }; new items show up in the list tools a minute or so later, so do not poll in a tight loop. Nothing is sent to anyone. ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
+      inputSchema: {},
+      outputSchema: resultSchema('An object with queued: true.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (_args, client) => respond(() => client.post('/inbox/refresh')),
+  );
+
+  tool(
+    'list_inbox_comments',
+    {
+      title: 'List Inbox Comments',
+      description: `List comments on the account's posts, newest first, on Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn. Filter by account, platform, status, date, text, an AdaptlyPost post (postId from list_posts) or the platform's own post id. Page with cursor while hasMore is true. Each comment's capabilities say whether it can be replied to, hidden, deleted or liked. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      inputSchema: {
+        ...inboxListFields,
+        postId: z.string().optional().describe('Only comments on this AdaptlyPost post, by its id from list_posts or get_post'),
+        platformPostId: z.string().optional().describe("Only comments on this post, by the platform's own post id"),
+      },
+      outputSchema: resultSchema(
+        `An object with comments, total, hasMore and nextCursor (null on the last page). Each comment is ${INBOX_COMMENT_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => respond(() => client.get('/inbox/comments', input)),
+  );
+
+  tool(
+    'get_inbox_comment',
+    {
+      title: 'Get Inbox Comment',
+      description: `Get one inbox comment with its parent comment (when it is a reply) and the replies under it, to read a conversation before answering. 404 inbox_item_not_found when the id is unknown in this workspace. ${INBOX_READ_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(
+        `An object with comment, parent (null for a top-level comment) and replies. Each is ${INBOX_COMMENT_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }, client) => respond(() => client.get(inboxPath('comments', id))),
+  );
+
+  tool(
+    'reply_to_inbox_comment',
+    {
+      title: 'Reply To Comment',
+      description: `Post a public reply to a comment, from the account the comment was left on. Works where the comment's capabilities.canReply is true, on Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn. ${INBOX_CONFIRM} Each call posts a new reply, so after an error or timeout read get_inbox_comment before trying again. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: {
+        ...inboxIdField('comment', 'list_inbox_comments'),
+        ...inboxReplyTextField(COMMENT_REPLY_LIMITS),
+      },
+      outputSchema: resultSchema(`The new reply. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: false,
+      },
+    },
+    async ({ id, text }, client) => respond(() => client.post(inboxPath('comments', id, '/reply'), { text })),
+  );
+
+  tool(
+    'hide_inbox_comment',
+    {
+      title: 'Hide Comment',
+      description: `Hide a comment on the platform so other people no longer see it, where capabilities.canHide is true. Confirm with the user first, naming the comment. A comment that cannot be hidden answers 400 inbox_action_unsupported; stop there. unhide_inbox_comment reverses it. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(`The comment with isHidden: true. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.post(inboxPath('comments', id, '/hide'))),
+  );
+
+  tool(
+    'unhide_inbox_comment',
+    {
+      title: 'Unhide Comment',
+      description: `Show a hidden comment on the platform again, where capabilities.canHide is true. A comment that cannot be unhidden answers 400 inbox_action_unsupported; stop there. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(`The comment with isHidden: false. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.post(inboxPath('comments', id, '/unhide'))),
+  );
+
+  tool(
+    'like_inbox_comment',
+    {
+      title: 'Like Comment',
+      description: `Like a comment from the account, on Facebook, Bluesky, Mastodon (a favourite) and LinkedIn. Instagram, YouTube and Threads do not allow it, and a comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. The like is public. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(`The comment with likedByAccount: true. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.post(inboxPath('comments', id, '/like'))),
+  );
+
+  tool(
+    'unlike_inbox_comment',
+    {
+      title: 'Unlike Comment',
+      description: `Take back the account's like on a comment, on Facebook, Bluesky, Mastodon and LinkedIn. A comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(`The comment with likedByAccount: false. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.delete(inboxPath('comments', id, '/like'))),
+  );
+
+  tool(
+    'delete_inbox_comment',
+    {
+      title: 'Delete Comment',
+      description: `Delete a comment on the platform and from the inbox, where capabilities.canDelete is true. Facebook and LinkedIn allow any comment on the Page's or organization's posts, Instagram any comment on the account's media, and YouTube, Threads, Bluesky and Mastodon only the account's own comments and replies. Anything else answers 400 inbox_action_unsupported; stop there. It cannot be undone, so confirm with the user first, quoting the comment. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema('An object with deleted: true.'),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.delete(inboxPath('comments', id))),
+  );
+
+  tool(
+    'update_inbox_comments_status',
+    {
+      title: 'Mark Inbox Comments',
+      description: `Mark up to 100 comments UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxStatusFields('comment', 'list_inbox_comments'),
+      outputSchema: resultSchema(`An object with comments (the updated comments) and unreadCount. ${INBOX_COMMENT_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input, client) => respond(() => client.post('/inbox/comments/status', input)),
+  );
+
+  tool(
+    'list_inbox_mentions',
+    {
+      title: 'List Inbox Mentions',
+      description: `List posts and comments that mention the account, newest first, on Facebook, Instagram, Threads, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose mentions show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      inputSchema: inboxListFields,
+      outputSchema: resultSchema(
+        `An object with mentions, total, hasMore and nextCursor (null on the last page). Each mention is ${INBOX_MENTION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => respond(() => client.get('/inbox/mentions', input)),
+  );
+
+  tool(
+    'reply_to_inbox_mention',
+    {
+      title: 'Reply To Mention',
+      description: `Post a public reply to a mention, from the account that was mentioned, where capabilities.canReply is true. ${INBOX_CONFIRM} Each call posts a new reply, so after an error or timeout check the mention's replies in list_inbox_mentions before trying again. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: {
+        ...inboxIdField('mention', 'list_inbox_mentions'),
+        ...inboxReplyTextField(
+          'The limit is the platform\'s reply limit: Threads 500 characters, Bluesky 300, Mastodon 500, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit',
+        ),
+      },
+      outputSchema: resultSchema(`The mention with the new reply in replies. ${INBOX_MENTION_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: false,
+      },
+    },
+    async ({ id, text }, client) => respond(() => client.post(inboxPath('mentions', id, '/reply'), { text })),
+  );
+
+  tool(
+    'update_inbox_mentions_status',
+    {
+      title: 'Mark Inbox Mentions',
+      description: `Mark up to 100 mentions UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxStatusFields('mention', 'list_inbox_mentions'),
+      outputSchema: resultSchema(`An object with mentions (the updated mentions) and unreadCount. ${INBOX_MENTION_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input, client) => respond(() => client.post('/inbox/mentions/status', input)),
+  );
+
+  tool(
+    'list_inbox_conversations',
+    {
+      title: 'List Inbox Conversations',
+      description: `List direct message conversations, most recent message first, on Facebook (Messenger), Instagram, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose messages show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      inputSchema: inboxListFields,
+      outputSchema: resultSchema(
+        `An object with conversations, total, hasMore and nextCursor (null on the last page). Each conversation is ${INBOX_CONVERSATION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => respond(() => client.get('/inbox/conversations', input)),
+  );
+
+  tool(
+    'get_inbox_conversation',
+    {
+      title: 'Get Inbox Conversation',
+      description: `Get one direct message conversation with its messages, to read the thread before answering. 404 inbox_item_not_found when the id is unknown in this workspace. ${INBOX_READ_RULE}`,
+      inputSchema: inboxIdField('conversation', 'list_inbox_conversations'),
+      outputSchema: resultSchema(
+        `An object with conversation and messages: one { id, isOwn, text, hasAttachments, createdAt } per message. ${INBOX_CONVERSATION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async ({ id }, client) => respond(() => client.get(inboxPath('conversations', id))),
+  );
+
+  tool(
+    'send_inbox_message',
+    {
+      title: 'Send Direct Message',
+      description: `Send a direct message in a conversation, from the account, where capabilities.canReply is true. Facebook and Instagram only allow a reply within 24 hours of the person's last message (replyWindowEndsAt); after that the call answers 400 inbox_messaging_window_closed, so stop and tell the user. ${INBOX_CONFIRM} Each call sends a new message, so after an error or timeout read get_inbox_conversation before trying again. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: {
+        ...inboxIdField('conversation', 'list_inbox_conversations'),
+        ...inboxReplyTextField(
+          "Up to the conversation's maxMessageLength. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit",
+        ),
+      },
+      outputSchema: resultSchema(
+        `An object with conversation and message ({ id, isOwn, text, hasAttachments, createdAt }). ${INBOX_CONVERSATION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: false,
+      },
+    },
+    async ({ id, text }, client) =>
+      respond(() => client.post(inboxPath('conversations', id, '/messages'), { text })),
+  );
+
+  tool(
+    'update_inbox_conversations_status',
+    {
+      title: 'Mark Inbox Conversations',
+      description: `Mark up to 100 conversations UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxStatusFields('conversation', 'list_inbox_conversations'),
+      outputSchema: resultSchema(
+        `An object with conversations (the updated conversations) and unreadCount. ${INBOX_CONVERSATION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input, client) => respond(() => client.post('/inbox/conversations/status', input)),
+  );
+
+  tool(
+    'list_inbox_reviews',
+    {
+      title: 'List Inbox Reviews',
+      description: `List Google Business Profile reviews of the connected locations, newest first. Filter by rating and by whether the review already has a reply, plus the usual inbox filters. Page with cursor while hasMore is true. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      inputSchema: {
+        ...inboxListFields,
+        ratings: z
+          .array(z.number().int().min(1).max(5))
+          .optional()
+          .describe('Only reviews with these star ratings, 1 to 5'),
+        replied: z
+          .boolean()
+          .optional()
+          .describe('true for reviews that already have a reply, false for those without one'),
+      },
+      outputSchema: resultSchema(
+        `An object with reviews, total, hasMore and nextCursor (null on the last page). Each review is ${INBOX_REVIEW_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (input, client) => respond(() => client.get('/inbox/reviews', input)),
+  );
+
+  tool(
+    'reply_to_inbox_review',
+    {
+      title: 'Reply To Review',
+      description: `Post the location's public reply to a Google review. Google allows one reply per review, so this replaces any reply already there; show the user the old reply too when there is one. ${INBOX_CONFIRM} ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: {
+        ...inboxIdField('review', 'list_inbox_reviews'),
+        ...inboxReplyTextField(
+          'Up to 4096 bytes in UTF-8 (maxReplyLength on the review). Empty or too long text answers 400 inbox_reply_invalid',
+        ),
+      },
+      outputSchema: resultSchema(`The review with its new reply. ${INBOX_REVIEW_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id, text }, client) => respond(() => client.put(inboxPath('reviews', id, '/reply'), { text })),
+  );
+
+  tool(
+    'delete_inbox_review_reply',
+    {
+      title: 'Delete Review Reply',
+      description: `Delete the location's reply to a Google review; the review itself stays. It cannot be undone, so confirm with the user first, quoting the reply. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxIdField('review', 'list_inbox_reviews'),
+      outputSchema: resultSchema(`The review with reply: null. ${INBOX_REVIEW_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: true,
+      },
+    },
+    async ({ id }, client) => respond(() => client.delete(inboxPath('reviews', id, '/reply'))),
+  );
+
+  tool(
+    'update_inbox_reviews_status',
+    {
+      title: 'Mark Inbox Reviews',
+      description: `Mark up to 100 reviews UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to Google. ${INBOX_REPLY_RULE}`,
+      inputSchema: inboxStatusFields('review', 'list_inbox_reviews'),
+      outputSchema: resultSchema(`An object with reviews (the updated reviews) and unreadCount. ${INBOX_REVIEW_RECORD}`),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input, client) => respond(() => client.post('/inbox/reviews/status', input)),
+  );
+
   // ── Webhooks ───────────────────────────────────────────────────────────
 
   const webhookIdField = { id: z.string().describe('Webhook id from list_webhooks or create_webhook') };
 
   const WEBHOOK_RECORD =
-    'The webhook: id, url, active, createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row).';
+    'The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row).';
+
+  const webhookEventsField = z
+    .array(WebhookEvent)
+    .optional()
+    .describe(
+      'Events this endpoint receives. Omit it or send [] for the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. The inbox events comment.created (a new comment from someone else), comment.replied (the account replied, from AdaptlyPost or the platform app), mention.created, message.received and review.created (a new Google review) reach only an endpoint that lists them. A non-empty list means only the listed events. Inbox events arrive within about 10 minutes, after the next inbox sync, and the first sync of an account fires none for its history',
+    );
 
   tool(
     'list_webhooks',
@@ -3030,9 +3564,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Create Webhook',
       description:
-        "Register a URL that receives every workspace event as an HTTP POST: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
       inputSchema: {
-        url: z.string().url().describe('Publicly reachable http(s) endpoint that receives every event'),
+        url: z.string().url().describe('Publicly reachable http(s) endpoint that receives the events'),
+        events: webhookEventsField,
       },
       outputSchema: resultSchema(`The new webhook plus secret, the signing secret shown only this once. ${WEBHOOK_RECORD}`),
       annotations: {
@@ -3056,11 +3591,12 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Update Webhook',
       description:
-        'Change a webhook endpoint\'s URL, or turn it off or back on with active. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.',
+        'Change a webhook endpoint\'s URL or the events it receives, or turn it off or back on with active. Sending events replaces the list, and [] goes back to the default set. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.',
       inputSchema: {
         ...webhookIdField,
         url: z.string().url().optional().describe('New http(s) endpoint URL'),
         active: z.boolean().optional().describe('false stops deliveries, true resumes them'),
+        events: webhookEventsField,
       },
       outputSchema: resultSchema(`The updated webhook. ${WEBHOOK_RECORD}`),
       annotations: {

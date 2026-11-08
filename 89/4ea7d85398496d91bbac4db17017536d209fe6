@@ -1,0 +1,19 @@
+lhm.plugin.json
+  s_3e8181728daf1a::t_e33abf134342e8 21-7929
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "894ea7d85398496d91bbac4db17017536d209fe6",
+  "prompts": {},
+  "sessions": {
+    "s_3e8181728daf1a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "182ff6ac-b752-40aa-b47f-ca4e4b96eef4",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

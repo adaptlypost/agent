@@ -1,8 +1,14 @@
 # AdaptlyPost agent
 
-[![smithery badge](https://smithery.ai/badge/tarasshyn/adaptlypost)](https://smithery.ai/servers/tarasshyn/adaptlypost)
-
 Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed.
+
+Install the agent skill in any agent that supports skills (Claude Code, Cursor, Codex, Windsurf):
+
+```bash
+npx skills add adaptlypost/agent
+```
+
+Or connect any MCP client to `https://mcp.adaptlypost.com/mcp` and sign in. More options are in [Pick your install](#pick-your-install).
 
 ## What this repo is
 

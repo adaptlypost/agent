@@ -306,7 +306,7 @@ An operation outside the role answers 403 with `code: permission_denied`. The sk
 
 ### What the agent can do
 
-- Post to any of the 14 platforms in one call, with per-platform captions, first comments, thumbnails and image shapes
+- Post to any of the 14 platforms in one call, with per-platform captions, first comments, threads of replies with images, thumbnails and image shapes
 - Check a post before creating it, and get every problem back at once
 - Schedule for any future time, or bulk schedule up to 100 posts
 - See per-platform results with error details, and retry only the platforms that failed

@@ -213,6 +213,30 @@ function buildFirstComments(args) {
   });
 }
 
+function buildThreadReplies(args) {
+  const threads = new Map();
+  for (const value of parseRepeatedRaw(args, "thread-reply")) {
+    const [platform, text] = splitPlatformPair(value, "thread-reply");
+    if (!threads.has(platform)) threads.set(platform, { platform, texts: [], mediaUrls: [] });
+    threads.get(platform).texts.push(text);
+    threads.get(platform).mediaUrls.push([]);
+  }
+  for (const value of parseRepeatedRaw(args, "thread-media")) {
+    const [target, url] = splitPlatformPair(value, "thread-media");
+    const [platform, position] = target.split(":");
+    const reply = Number(position) - 1;
+    const thread = threads.get(platform);
+    if (!thread || !Number.isInteger(reply) || reply < 0 || reply >= thread.texts.length) {
+      error(`--thread-media ${value} names no reply; use PLATFORM:N=url with N counting that platform's --thread-reply flags from 1`);
+      process.exit(1);
+    }
+    thread.mediaUrls[reply].push(url);
+  }
+  return [...threads.values()].map(({ platform, texts, mediaUrls }) =>
+    mediaUrls.some((urls) => urls.length > 0) ? { platform, texts, mediaUrls } : { platform, texts },
+  );
+}
+
 function buildPlatformThumbnails(args) {
   return parseRepeatedRaw(args, "platform-thumbnail").map((value) => {
     const [platform, source] = splitPlatformPair(value, "platform-thumbnail");
@@ -233,6 +257,15 @@ function buildAspectRatios(args) {
 function applyPostExtras(args, parsed, body, { aspectRatios = true } = {}) {
   const firstComments = buildFirstComments(args);
   if (firstComments.length > 0) body.firstComments = firstComments;
+  const threadReplies = buildThreadReplies(args);
+  if (threadReplies.length > 0) body.threadReplies = threadReplies;
+  if (parsed["clear-threads"]) {
+    if (threadReplies.length > 0) {
+      error("--clear-threads cannot be combined with --thread-reply");
+      process.exit(1);
+    }
+    body.threadReplies = [];
+  }
   const thumbnails = buildPlatformThumbnails(args);
   if (thumbnails.length > 0) body.platformThumbnails = thumbnails;
   if (aspectRatios) {

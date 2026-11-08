@@ -1,0 +1,31 @@
+README.md
+  s_9fcd50f8ee03ee::t_6ec4a30386fa43 309
+gemini-extension.json
+  s_9fcd50f8ee03ee::t_89a7605ebb4bb1 3
+lhm.plugin.json
+  s_9fcd50f8ee03ee::t_a77d45e4193ed5 4
+mcp-server/package.json
+  s_9fcd50f8ee03ee::t_5c35ea7105d6c0 3
+package.json
+  s_9fcd50f8ee03ee::t_c2c672508745bd 3
+skills/adaptlypost/SKILL.md
+  s_9fcd50f8ee03ee::t_753a62ec502f2f 112,137-139,324-325,435,504
+skills/adaptlypost/scripts/adaptlypost.js
+  s_9fcd50f8ee03ee::t_0535ac0d88f895 216-239,260-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "568460c4653744bab03a0e30722b844f8f56878e",
+  "prompts": {},
+  "sessions": {
+    "s_9fcd50f8ee03ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79549624-43f3-433c-84f4-edea199c41d0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

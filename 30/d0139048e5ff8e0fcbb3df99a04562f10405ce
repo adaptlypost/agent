@@ -1,0 +1,21 @@
+README.md
+  s_3e8181728daf1a::t_51e817444f8c81 17
+lhm.plugin.json
+  s_3e8181728daf1a::t_abebd2e5cf69d2 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "30d0139048e5ff8e0fcbb3df99a04562f10405ce",
+  "prompts": {},
+  "sessions": {
+    "s_3e8181728daf1a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "182ff6ac-b752-40aa-b47f-ca4e4b96eef4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

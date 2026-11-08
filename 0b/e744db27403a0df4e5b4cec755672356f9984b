@@ -1,0 +1,29 @@
+README.md
+  s_9fcd50f8ee03ee::t_9e9d8262281c54 184
+gemini-extension.json
+  s_9fcd50f8ee03ee::t_e42d1b88d7e26b 3
+lhm.plugin.json
+  s_9fcd50f8ee03ee::t_85932c89c06763 4,928,940-951,960,1968,1980-1991,2000,2828,3087,3099-3110,3119,4281,4293-4304,4313,5274,5286-5297,5306
+mcp-server/package.json
+  s_9fcd50f8ee03ee::t_459ea118d054ac 3
+mcp-server/src/index.ts
+  s_9fcd50f8ee03ee::t_c0cb6a2b119545 129,768-774,779,1854
+package.json
+  s_9fcd50f8ee03ee::t_017b509ec8dc51 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0be744db27403a0df4e5b4cec755672356f9984b",
+  "prompts": {},
+  "sessions": {
+    "s_9fcd50f8ee03ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79549624-43f3-433c-84f4-edea199c41d0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

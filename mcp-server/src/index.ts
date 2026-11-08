@@ -493,6 +493,17 @@ const LinkedInConfigSchema = z.object({
     ),
 });
 
+const TwitterConfigSchema = z.object({
+  connectionId: z.string().describe('X connection ID from list_accounts'),
+  quoteOf: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      "Quote one of this account's own X posts, with the post text as the commentary. Takes a post link such as https://x.com/<handle>/status/<id> or the post's numeric id, such as the platformPostId from list_post_results. X only lets an account quote posts it wrote or posts that mention it: a link naming another handle is refused with 400, and any other post fails when it publishes. Needs text, and media on the post is not attached on this account. Costs the same as any X post",
+    ),
+});
+
 const TumblrConfigSchema = z.object({
   connectionId: z.string().describe('Tumblr blog account id from list_accounts'),
   tags: z
@@ -807,6 +818,15 @@ const twitterKeepLinksField = {
     ),
 };
 
+const twitterConfigsField = {
+  twitterConfigs: z
+    .array(TwitterConfigSchema)
+    .optional()
+    .describe(
+      "X per-connection config: quoteOf quotes one of the account's own posts with the text as commentary. connectionId must match an entry in twitterConnectionIds",
+    ),
+};
+
 const linkedinConfigsField = {
   linkedinConfigs: z
     .array(LinkedInConfigSchema)
@@ -876,6 +896,7 @@ const createPostShape = {
   ...connectionIdFields,
   ...platformConfigFields,
   ...linkedinConfigsField,
+  ...twitterConfigsField,
 };
 
 const bulkPostsShape = {
@@ -1823,7 +1844,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentError and firstCommentPublishedAt; threadReplies with threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -1950,6 +1971,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         ...connectionIdFields,
         ...platformConfigFields,
         ...linkedinConfigsField,
+        ...twitterConfigsField,
       },
       outputSchema: resultSchema(
         'The updated post record: id, status (still DRAFT or SCHEDULED), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
@@ -2148,7 +2170,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails and platformAspectRatios. twitterKeepLinks and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
         'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',

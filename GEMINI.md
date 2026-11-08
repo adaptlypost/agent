@@ -1,6 +1,6 @@
 # AdaptlyPost
 
-AdaptlyPost schedules and publishes social posts across LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile. This extension connects Gemini CLI to an AdaptlyPost workspace
+AdaptlyPost schedules and publishes social posts across Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress. This extension connects Gemini CLI to an AdaptlyPost workspace
 over MCP.
 
 ## Signing in

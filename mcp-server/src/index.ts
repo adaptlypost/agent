@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z, type ZodRawShape, type ZodTypeAny } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, readFileSync } from 'node:fs';
 import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -59,6 +59,8 @@ import {
   looksLikeJwt,
   verifyOauthJwt,
 } from './oauth.js';
+
+const SERVER_VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -1150,7 +1152,7 @@ function createMcpServer(apiClient?: RestClient): McpServer {
   const server = new McpServer(
     {
       name: 'adaptlypost',
-      version: '1.2.0',
+      version: SERVER_VERSION,
     },
     { instructions: SERVER_INSTRUCTIONS },
   );

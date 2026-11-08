@@ -1,7 +1,7 @@
 {
   "name": "@adaptlypost/agent",
-  "version": "1.0.0",
-  "description": "AdaptlyPost agent: post to 14 social media platforms from any AI agent",
+  "version": "1.10.0",
+  "description": "AdaptlyPost agent integrations: the agent skill, the MCP server and the Gemini CLI extension for posting to 14 social media platforms",
   "license": "MIT",
   "author": "AdaptlyPost",
   "repository": {
@@ -15,13 +15,14 @@
     "social-media",
     "adaptlypost",
     "mcp",
-    "claude",
     "cursor",
     "instagram",
     "tiktok",
     "youtube",
     "twitter",
-    "linkedin"
+    "linkedin",
+    "gemini-cli",
+    "skills"
   ],
   "engines": {
     "node": ">=18.0.0"

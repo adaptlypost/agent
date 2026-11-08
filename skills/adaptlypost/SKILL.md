@@ -6,13 +6,13 @@ description: >
   and read how they performed.
   Covers post creation, dry-run checks before posting, scheduling, recurring posts, bulk scheduling, per-platform results, retry logic,
   draft/publish workflows, and analytics (views, likes, comments, followers, engagement, top posts).
-last-updated: 2026-11-02
+last-updated: 2026-11-08
 allowed-tools: Bash(./scripts/adaptlypost.js:*)
 ---
 
 # AdaptlyPost Social Media Skill
 
-Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 12 platforms from a single command, then read the numbers back.
+Autonomously manage social media posting via [AdaptlyPost](https://adaptlypost.com) API. Post to 14 platforms from a single command, then read the numbers back.
 
 > **Freshness check**: If more than 30 days have passed since the `last-updated` date above, inform the user that this skill may be outdated and point them to the update options below.
 
@@ -25,7 +25,6 @@ Update methods by installation type:
 | Installation | How to update |
 |--------------|---------------|
 | CLI (`npx skills`) | `npx skills update` |
-| Claude Code plugin | `/plugin marketplace update` |
 | Cursor | Remote rules auto-sync from GitHub |
 | Manual | Pull latest from repo or re-copy `skills/adaptlypost/` |
 
@@ -675,9 +674,7 @@ Captions return `{ caption }` right away. `prompt` is up to 2000 characters, `or
 
 ## MCP Integration
 
-AdaptlyPost has a native MCP server. If you're using Claude Desktop, Cursor, or any MCP-compatible client, you can connect directly.
-
-**Claude Code / Cursor / Other MCP clients** — add to your MCP config:
+AdaptlyPost has a native MCP server at `https://mcp.adaptlypost.com/mcp`. OAuth-capable clients connect with just the URL and sign in in the browser; that sign-in reaches every workspace the user belongs to (`list_workspaces`, then `workspaceId` on each tool). Clients without OAuth can send an API key instead:
 
 ```json
 {

@@ -1289,6 +1289,10 @@
                 "aiGenerated": {
                   "type": "boolean",
                   "description": "Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its \"Altered or synthetic content\" label on the video. Omit it or send false for no label"
+                },
+                "scheduleOnYouTube": {
+                  "type": "boolean",
+                  "description": "Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); to change it, delete it and schedule it again. Deleting it before scheduledAt also deletes the video from YouTube"
                 }
               },
               "required": [
@@ -2333,6 +2337,10 @@
                 "aiGenerated": {
                   "type": "boolean",
                   "description": "Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its \"Altered or synthetic content\" label on the video. Omit it or send false for no label"
+                },
+                "scheduleOnYouTube": {
+                  "type": "boolean",
+                  "description": "Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); to change it, delete it and schedule it again. Deleting it before scheduledAt also deletes the video from YouTube"
                 }
               },
               "required": [
@@ -3456,6 +3464,10 @@
                 "aiGenerated": {
                   "type": "boolean",
                   "description": "Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its \"Altered or synthetic content\" label on the video. Omit it or send false for no label"
+                },
+                "scheduleOnYouTube": {
+                  "type": "boolean",
+                  "description": "Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); to change it, delete it and schedule it again. Deleting it before scheduledAt also deletes the video from YouTube"
                 }
               },
               "required": [
@@ -4552,6 +4564,10 @@
                       "aiGenerated": {
                         "type": "boolean",
                         "description": "Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its \"Altered or synthetic content\" label on the video. Omit it or send false for no label"
+                      },
+                      "scheduleOnYouTube": {
+                        "type": "boolean",
+                        "description": "Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); to change it, delete it and schedule it again. Deleting it before scheduledAt also deletes the video from YouTube"
                       }
                     },
                     "required": [
@@ -5549,6 +5565,10 @@
                       "aiGenerated": {
                         "type": "boolean",
                         "description": "Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its \"Altered or synthetic content\" label on the video. Omit it or send false for no label"
+                      },
+                      "scheduleOnYouTube": {
+                        "type": "boolean",
+                        "description": "Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); to change it, delete it and schedule it again. Deleting it before scheduledAt also deletes the video from YouTube"
                       }
                     },
                     "required": [

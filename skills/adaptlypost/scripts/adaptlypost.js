@@ -376,6 +376,7 @@ function buildYouTubeConfig(parsed) {
   return withoutEmpty({
     aiGenerated: parsed["youtube-ai-generated"] ? true : undefined,
     defaultAudioLanguage: parsed["youtube-audio-language"] && String(parsed["youtube-audio-language"]),
+    scheduleOnYouTube: parsed["youtube-schedule-on-youtube"] ? true : undefined,
   });
 }
 

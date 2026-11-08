@@ -1,0 +1,19 @@
+README.md
+  s_3e8181728daf1a::t_c971c9664c05d4 5-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf71c5be5bf22ba0ce6ca7c4a548ac1cc195ff45",
+  "prompts": {},
+  "sessions": {
+    "s_3e8181728daf1a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "182ff6ac-b752-40aa-b47f-ca4e4b96eef4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

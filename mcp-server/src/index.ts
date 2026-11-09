@@ -53,6 +53,7 @@ import {
   type ParkedFile,
 } from './upload-links.js';
 import { withoutSchemaDialect } from './schema-dialect.js';
+import { isSetupPageRequest, sendSetupPage, type SetupPageConfig } from './setup-page.js';
 import {
   oauthConfigFromEnv,
   handleProtectedResourceMetadata,
@@ -276,7 +277,7 @@ const TikTokConfigSchema = z.object({
     .max(4000)
     .optional()
     .describe(
-      "TikTok-specific caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post (where it is the description). Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption",
+      "TikTok-specific caption, used instead of the post text. TikTok caps it at 2200 characters on a video; on a photo or photo carousel post it is the description and can use the full length. Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without it, because TikTok's inbox upload takes no caption",
     ),
   privacyLevel: z
     .enum([
@@ -379,14 +380,14 @@ const InstagramAudioSchema = z.object({
     .min(1)
     .max(100)
     .optional()
-    .describe('Volume of the added audio, where 100 is full volume. Defaults to 100'),
+    .describe('How loud the added audio plays, as a percentage of its full volume. Omit for full volume'),
   videoVolume: z
     .number()
     .int()
     .min(1)
     .max(100)
     .optional()
-    .describe("Volume of the video's own sound, where 100 is full volume. Defaults to 100"),
+    .describe("How loud the video's own sound plays under the added audio, as a percentage of its full volume. Omit for full volume"),
 });
 
 const InstagramConfigSchema = z.object({
@@ -1124,9 +1125,112 @@ const UPLOAD_WIDGET_RESULT = z.object({
 });
 
 const UPLOAD_TICKET_RESULT = z.object({
-  expiresAt: z.string(),
-  uploadUrl: z.string(),
+  expiresAt: z.string().describe('ISO 8601 time the ticket stops working, 5 minutes after it was issued'),
+  uploadUrl: z.string().describe('Address the upload box sends the file to, together with the ticket'),
 });
+
+const DELETED_RESULT = z
+  .object({
+    deleted: z
+      .literal(true)
+      .describe('Always true: the record is gone. A delete that fails returns an error instead'),
+  })
+  .passthrough();
+
+const RETRY_RESULT = z
+  .object({
+    postId: z.string().describe('The post whose platforms were re-queued'),
+    queuedPlatforms: z
+      .array(z.string())
+      .describe('Platform names, such as BLUESKY, queued to publish again'),
+    isScheduled: z
+      .boolean()
+      .describe('Always false: the retry publishes now; list_post_results shows each outcome'),
+  })
+  .passthrough();
+
+const BULK_SCHEDULE_RESULT = z
+  .object({
+    totalScheduled: z.number().int().describe('Items created and scheduled'),
+    totalFailed: z.number().int().describe('Items that failed; their rows carry errorMessage'),
+    results: z
+      .array(
+        z
+          .object({
+            postId: z.string().nullish().describe('The created post, for get_post; missing when the item failed'),
+            success: z.boolean().describe('True when the item was created'),
+            isScheduled: z.boolean().describe('True when the post is waiting for scheduledAt'),
+            scheduledAt: z.string().nullish().describe('ISO 8601 time the post goes out'),
+            errorMessage: z.string().nullish().describe('Why the item failed; missing on success'),
+          })
+          .passthrough(),
+      )
+      .describe('One row per input item, in input order'),
+  })
+  .passthrough();
+
+const inboxChannelAccess = (channel: string) =>
+  z
+    .string()
+    .describe(
+      `Whether the ${channel} channel works for this account: AVAILABLE, RECONNECT_REQUIRED (reconnect the account in AdaptlyPost) or UNSUPPORTED`,
+    );
+
+const INBOX_SUMMARY_RESULT = z
+  .object({
+    unread: z
+      .object({
+        comments: z.number().int().describe('Unread comments'),
+        mentions: z.number().int().describe('Unread mentions'),
+        conversations: z.number().int().describe('Direct-message conversations with unread messages'),
+        reviews: z.number().int().describe('Unread Google Business Profile reviews'),
+      })
+      .passthrough()
+      .describe('Unread counts across the workspace inbox'),
+    accounts: z
+      .array(
+        z
+          .object({
+            accountId: z.string().describe('Account id from list_accounts'),
+            platform: z.string().describe('Platform name, such as INSTAGRAM'),
+            accountName: z.string().describe('Account name as shown on the platform'),
+            avatarUrl: z.string().nullable().describe('Profile picture URL; null when there is none'),
+            needsReconnect: z.boolean().describe('True when the account must be reconnected in AdaptlyPost'),
+            lastSyncedAt: z.string().nullable().describe('ISO 8601 time of the last inbox sync; null before the first'),
+            lastErrorCode: z.string().nullable().describe('Error from the last sync; null when it succeeded'),
+            comments: inboxChannelAccess('comments'),
+            mentions: inboxChannelAccess('mentions'),
+            messages: inboxChannelAccess('messages'),
+            reviews: inboxChannelAccess('reviews'),
+          })
+          .passthrough(),
+      )
+      .describe('One entry per connected account, with what each inbox channel can do'),
+  })
+  .passthrough();
+
+const RSS_FEED_ITEMS_RESULT = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            id: z.string().describe('Feed item id'),
+            createdAt: z.string().describe('ISO 8601 time AdaptlyPost found the item'),
+            title: z.string().nullish().describe("The article's title from the feed"),
+            link: z.string().nullish().describe("The article's URL from the feed"),
+            publishedAt: z.string().nullish().describe('ISO 8601 publish time the feed gave the article'),
+            status: z
+              .string()
+              .describe('PROCESSING, POSTED, FILTERED (keyword rules), SKIPPED (too old when the feed was added) or FAILED'),
+            postId: z.string().nullish().describe('The post created from it, for get_post; set when status is POSTED'),
+            error: z.string().nullish().describe('Why it failed; set when status is FAILED'),
+          })
+          .passthrough(),
+      )
+      .describe('Items the feed has seen, newest first'),
+  })
+  .passthrough();
 
 type Uploaded = { publicUrl: string; key: string };
 
@@ -1221,6 +1325,18 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 
 const SERVER_DESCRIPTION =
   'Schedule, publish and manage social media posts on Facebook, Instagram, Threads, X, LinkedIn, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Tumblr, Telegram, WordPress and Google Business Profile from the user\'s connected accounts. Upload media, draft, validate, schedule and bulk-schedule posts, run recurring posts and RSS feeds, read and answer comments, mentions, direct messages and Google reviews, read post and account analytics, write captions and images with AI, and manage webhooks.';
+
+const SETUP_PAGE: SetupPageConfig = {
+  key: 'adaptlypost',
+  title: 'AdaptlyPost',
+  description: SERVER_DESCRIPTION,
+  mcpUrl: 'https://mcp.adaptlypost.com/mcp',
+  websiteUrl: 'https://adaptlypost.com/features/agents',
+  repoUrl: 'https://github.com/adaptlypost/agent',
+  iconUrl: 'https://raw.githubusercontent.com/adaptlypost/agent/main/assets/icon.svg',
+  apiTokensUrl: 'https://adaptlypost.com/api-tokens',
+  apiKeyExample: 'adaptly_your_key',
+};
 
 const SERVER_INSTRUCTIONS = [
   'Tools act as the signed-in member, or the API key\'s creator, with that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
@@ -2196,7 +2312,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Post ID to delete, from list_posts or create_post'),
       },
       outputSchema: resultSchema(
-        apiResponses.deletePost,
+        DELETED_RESULT,
         'An object with deleted: true once the post record is removed from AdaptlyPost.',
       ),
       annotations: {
@@ -2333,7 +2449,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Retry Failed Platforms',
       description:
-        'Re-queue publishing for a post\'s FAILED platforms. platformIds takes platformId values from list_post_results, platform names such as "BLUESKY" (every failed row of that platform), or can be omitted to retry every failed row. Only rows with status FAILED are reset to PENDING and retried with the same content. A value matching neither a row id nor a platform of the post fails with "Unknown retry target"; with nothing failed among the matches the call fails with "No failed platforms to retry". The post moves to PUBLISHING and the retry is asynchronous, so check list_post_results for the outcome. Read each errorMessage first and retry once the cause is fixed (reconnected account, replaced media), not for a platform-side restriction, which will just fail again. Content cannot change on retry.',
+        'Re-queue publishing for a post\'s FAILED platforms. platformIds takes platformId values from list_post_results, platform names such as "BLUESKY" (every failed row of that platform), or can be omitted to retry every failed row. Only rows with status FAILED are reset to PENDING and retried with the same content. A value matching neither a row id nor a platform of the post fails with "Unknown retry target"; with nothing failed among the matches the call fails with "No failed platforms to retry". The post moves to PUBLISHING and the retry is asynchronous, so check list_post_results for the outcome. Read each errorMessage first and retry once the cause is fixed (reconnected account, replaced media), not for a platform-side restriction, which will just fail again. Content cannot change on retry. Returns { postId, queuedPlatforms, isScheduled: false }.',
       inputSchema: {
         id: z.string().describe('Post ID whose platforms failed'),
         platformIds: z
@@ -2344,7 +2460,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           ),
       },
       outputSchema: resultSchema(
-        apiResponses.retryFailedPlatforms,
+        RETRY_RESULT,
         'An object with postId, queuedPlatforms (platforms re-queued for publishing), and isScheduled: false. Outcomes arrive asynchronously in list_post_results.',
       ),
       annotations: {
@@ -2373,10 +2489,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule a batch of posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
-        apiResponses.bulkSchedulePosts,
+        BULK_SCHEDULE_RESULT,
         'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',
       ),
       annotations: {
@@ -2569,7 +2685,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Recurring post ID to delete, from list_recurring_posts'),
       },
       outputSchema: resultSchema(
-        apiResponses.deleteRecurringPost,
+        DELETED_RESULT,
         'An object with deleted: true once the recurring post is removed.',
       ),
       annotations: {
@@ -2596,7 +2712,12 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   const rssFeedTarget = z.object({
     platform: RssFeedPlatform.describe('Platform of the account in connectionId'),
     connectionId: z.string().describe('Account id from list_accounts'),
-    pageId: z.string().optional().describe('Facebook page id from list_accounts. Required for FACEBOOK'),
+    pageId: z
+      .string()
+      .optional()
+      .describe(
+        'The Facebook page to post to, as the pageId from list_accounts. A FACEBOOK target without it is refused with 400; other platforms ignore it',
+      ),
   });
 
   const rssFeedSettingsFields = {
@@ -2841,7 +2962,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Delete an RSS feed: it stops being checked for good. Posts it already created stay. Prefer pause_rss_feed when the user may want it back. Ids outside the workspace return 404. Needs the posts.draft permission. Returns { deleted: true }. Irreversible.',
       inputSchema: rssFeedIdField,
       outputSchema: resultSchema(
-        apiResponses.deleteRssFeed,
+        DELETED_RESULT,
         'An object with deleted: true once the feed is removed.',
       ),
       annotations: {
@@ -2866,13 +2987,13 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'List RSS Feed Items',
       description:
-        "List the items an RSS feed has seen, newest first, leaving out the ones already in the feed when it was added. Each item has a status: PROCESSING, POSTED (postId links it to its post, for get_post), FILTERED (keyword rules), SKIPPED (published more than 14 days before the feed was added) or FAILED (error says why). Use it to answer why an article was or was not posted. Needs the posts.read permission.",
+        "List the items an RSS feed has seen, newest first, leaving out the ones already in the feed when it was added. Each item has a status: PROCESSING, POSTED (postId links it to its post, for get_post), FILTERED (keyword rules), SKIPPED (published more than 14 days before the feed was added) or FAILED (error says why). Returns { items } with id, createdAt, title, link, publishedAt, status, postId and error per item. Use it to answer why an article was or was not posted. Needs the posts.read permission.",
       inputSchema: {
         ...rssFeedIdField,
         limit: z.number().int().min(1).max(100).optional().describe('Items to return, newest first (default 20)'),
       },
       outputSchema: resultSchema(
-        apiResponses.listRssFeedItems,
+        RSS_FEED_ITEMS_RESULT,
         'An object with items: one { id, createdAt, title, link, publishedAt, status, postId, error } per item.',
       ),
       annotations: {
@@ -3015,7 +3136,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       inputSchema: {
         ...analyticsRangeFields,
         granularity: AnalyticsGranularity.optional().describe(
-          'DAILY (default), WEEKLY, or MONTHLY buckets',
+          'How much time each point in the series covers: one day, one week or one month. Omit for one point per day',
         ),
       },
       outputSchema: resultSchema(
@@ -3313,16 +3434,16 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   });
 
   const COMMENT_REPLY_LIMITS =
-    'The limit is the platform\'s comment limit: LinkedIn 1250 characters, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit';
+    'Each platform has its own comment limit, tighter than the schema on most: LinkedIn 1250 characters, Threads 500, Bluesky 300, Mastodon 500, Facebook 8000, Instagram 2200, while YouTube takes the full length. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit';
 
   tool(
     'get_inbox_summary',
     {
       title: 'Get Inbox Summary',
-      description: `Unread counts for the workspace inbox and what each connected account can do in it. The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews; TikTok and X have no inbox. Each account lists comments, mentions, messages and reviews as AVAILABLE, RECONNECT_REQUIRED (the account lacks the platform permission, some of which still wait on platform review, or its token expired: tell the user to reconnect it in AdaptlyPost) or UNSUPPORTED. Call it first when the user asks what is new or why a channel is empty. ${INBOX_SYNC} ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
+      description: `Unread counts for the workspace inbox and what each connected account can do in it. The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews; TikTok and X have no inbox. Each account lists comments, mentions, messages and reviews as AVAILABLE, RECONNECT_REQUIRED (the account lacks the platform permission, some of which still wait on platform review, or its token expired: tell the user to reconnect it in AdaptlyPost) or UNSUPPORTED. Returns { unread, accounts }: unread comment, mention, conversation and review counts, and one entry per account with each channel's access. Call it first when the user asks what is new or why a channel is empty. ${INBOX_SYNC} ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
       inputSchema: {},
       outputSchema: resultSchema(
-        apiResponses.getInboxSummary,
+        INBOX_SUMMARY_RESULT,
         'An object with unread { comments, mentions, conversations, reviews } and accounts: one { accountId, platform, accountName, avatarUrl, needsReconnect, lastSyncedAt, lastErrorCode, comments, mentions, messages, reviews } per account, each channel AVAILABLE, RECONNECT_REQUIRED or UNSUPPORTED.',
       ),
       annotations: {
@@ -3506,10 +3627,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'delete_inbox_comment',
     {
       title: 'Delete Comment',
-      description: `Delete a comment on the platform and from the inbox, where capabilities.canDelete is true. Facebook and LinkedIn allow any comment on the Page's or organization's posts, Instagram any comment on the account's media, and YouTube, Threads, Bluesky and Mastodon only the account's own comments and replies. Anything else answers 400 inbox_action_unsupported; stop there. It cannot be undone, so confirm with the user first, quoting the comment. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
+      description: `Delete a comment on the platform and from the inbox, where capabilities.canDelete is true. Facebook and LinkedIn allow any comment on the Page's or organization's posts, Instagram any comment on the account's media, and YouTube, Threads, Bluesky and Mastodon only the account's own comments and replies. Anything else answers 400 inbox_action_unsupported; stop there. Returns { deleted: true }. It cannot be undone, so confirm with the user first, quoting the comment. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
       outputSchema: resultSchema(
-        apiResponses.deleteInboxComment,
+        DELETED_RESULT,
         'An object with deleted: true.',
       ),
       annotations: {
@@ -3526,7 +3647,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'update_inbox_comments_status',
     {
       title: 'Mark Inbox Comments',
-      description: `Mark up to 100 comments UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      description: `Mark a batch of comments as unread, read or done in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('comment', 'list_inbox_comments'),
       outputSchema: resultSchema(
         apiResponses.updateInboxCommentsStatus,
@@ -3591,7 +3712,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'update_inbox_mentions_status',
     {
       title: 'Mark Inbox Mentions',
-      description: `Mark up to 100 mentions UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      description: `Mark a batch of mentions as unread, read or done in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('mention', 'list_inbox_mentions'),
       outputSchema: resultSchema(
         apiResponses.updateInboxMentionsStatus,
@@ -3677,7 +3798,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'update_inbox_conversations_status',
     {
       title: 'Mark Inbox Conversations',
-      description: `Mark up to 100 conversations UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
+      description: `Mark a batch of conversations as unread, read or done in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('conversation', 'list_inbox_conversations'),
       outputSchema: resultSchema(
         apiResponses.updateInboxConversationsStatus,
@@ -3731,7 +3852,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       inputSchema: {
         ...inboxIdField('review', 'list_inbox_reviews'),
         ...inboxReplyTextField(
-          'Up to 4096 bytes in UTF-8 (maxReplyLength on the review). Empty or too long text answers 400 inbox_reply_invalid',
+          'Your public reply to the review. Google measures the limit in UTF-8 bytes, not characters: see maxReplyLength on the review from list_inbox_reviews. Empty or too long text answers 400 inbox_reply_invalid',
         ),
       },
       outputSchema: resultSchema(
@@ -3772,7 +3893,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'update_inbox_reviews_status',
     {
       title: 'Mark Inbox Reviews',
-      description: `Mark up to 100 reviews UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to Google. ${INBOX_REPLY_RULE}`,
+      description: `Mark a batch of reviews as unread, read or done in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to Google. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('review', 'list_inbox_reviews'),
       outputSchema: resultSchema(
         apiResponses.updateInboxReviewsStatus,
@@ -3863,7 +3984,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Create Webhook',
       description:
-        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. The response is the only time the signing secret is shown, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. Returns the new webhook (id, url, active, events, createdAt, updatedAt, lastSuccessAt, lastFailureAt, disabledAt) plus secret. This response is the only time the signing secret is shown: list_webhooks and get_webhook never return it, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
       inputSchema: {
         url: z.string().url().describe('Publicly reachable http(s) endpoint that receives the events'),
         events: webhookEventsField,
@@ -3930,7 +4051,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Delete a webhook endpoint; it receives nothing more. Use update_webhook with active: false to pause it instead. Needs the webhooks.manage permission. Returns { deleted: true }. Irreversible.',
       inputSchema: webhookIdField,
       outputSchema: resultSchema(
-        apiResponses.deleteWebhook,
+        DELETED_RESULT,
         'An object with deleted: true once the webhook is removed.',
       ),
       annotations: {
@@ -4084,7 +4205,9 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         model: ImageModel.optional().describe(
           'standard (default, 2 credits) or premium (higher fidelity, 4 credits)',
         ),
-        quality: ImageQuality.optional().describe('Rendering quality of the image'),
+        quality: ImageQuality.optional().describe(
+          "Rendering quality, used only when the member generates with their own OpenAI key. Omit for medium. AdaptlyPost's standard and premium models and a Google key ignore it",
+        ),
         sessionId: z
           .string()
           .uuid()
@@ -4682,6 +4805,11 @@ async function main() {
       }
 
       if (req.url === '/mcp') {
+        if (isSetupPageRequest(req)) {
+          sendSetupPage(SETUP_PAGE, req, res);
+          return;
+        }
+
         const startedAt = Date.now();
         let rpcLabel = '-';
         res.on('close', () => {

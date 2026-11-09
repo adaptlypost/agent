@@ -1,0 +1,27 @@
+gemini-extension.json
+  s_0ed36dadf0d8a2::t_729378a512ae41 3
+lhm.plugin.json
+  s_0ed36dadf0d8a2::t_8279fb0cf164db 4
+mcp-server/package.json
+  s_0ed36dadf0d8a2::t_1b44153486e799 3
+mcp-server/src/index.ts
+  s_0ed36dadf0d8a2::t_a06ed3f5f031d3 2090,3648
+package.json
+  s_0ed36dadf0d8a2::t_c55abb63a9cdc1 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c57534242bafd9b968e26f1c79a926f6ef34f84",
+  "prompts": {},
+  "sessions": {
+    "s_0ed36dadf0d8a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd50f4e1-61a4-44ea-876c-c989e5fcc527",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

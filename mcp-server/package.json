@@ -1,6 +1,6 @@
 {
   "name": "@adaptlypost/mcp-server",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "AdaptlyPost MCP server: schedule, publish and measure social posts on 14 platforms from AI agents",
   "homepage": "https://adaptlypost.com",
   "repository": {

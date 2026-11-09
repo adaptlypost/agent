@@ -3635,7 +3635,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Update Webhook',
       description:
-        'Change a webhook endpoint\'s URL or the events it receives, or turn it off or back on with active. Sending events replaces the list, and [] goes back to the default set. Turning on an endpoint that was turned off after failed deliveries starts sending again. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.',
+        'Change a webhook endpoint\'s URL or the events it receives, or turn it off or back on with active. Sending events replaces the list, and [] goes back to the default set. Turning on an endpoint that was turned off after failed deliveries starts sending again. Events that happen while an endpoint is off, or that a new events list leaves out, are never delivered later, and after a URL change the old URL receives nothing more, so confirm the change with the user first. Fails with 409 when the new URL is already registered. Needs the webhooks.manage permission.',
       inputSchema: {
         ...webhookIdField,
         url: z.string().url().optional().describe('New http(s) endpoint URL'),
@@ -3646,7 +3646,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
       },
     },

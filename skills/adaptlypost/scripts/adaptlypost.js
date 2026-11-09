@@ -261,6 +261,25 @@ function buildPlatformThumbnails(args) {
   });
 }
 
+function buildPlatformMedia(args) {
+  const entries = new Map();
+  for (const value of parseRepeatedRaw(args, "platform-media")) {
+    const [platform, url] = splitPlatformPair(value, "platform-media");
+    if (!entries.has(platform)) entries.set(platform, { platform, mediaUrls: [] });
+    entries.get(platform).mediaUrls.push(url);
+  }
+  for (const value of parseRepeatedRaw(args, "platform-alt-text")) {
+    const [platform, alt] = splitPlatformPair(value, "platform-alt-text");
+    const entry = entries.get(platform);
+    if (!entry) {
+      error(`--platform-alt-text ${value} names a platform with no --platform-media`);
+      process.exit(1);
+    }
+    entry.mediaAltTexts = [...(entry.mediaAltTexts || []), alt];
+  }
+  return [...entries.values()];
+}
+
 function buildAspectRatios(args) {
   return parseRepeatedRaw(args, "aspect-ratio").map((value) => {
     const [platform, shape] = splitPlatformPair(value, "aspect-ratio");
@@ -283,6 +302,15 @@ function applyPostExtras(args, parsed, body, { aspectRatios = true } = {}) {
   }
   const thumbnails = buildPlatformThumbnails(args);
   if (thumbnails.length > 0) body.platformThumbnails = thumbnails;
+  const platformMedia = buildPlatformMedia(args);
+  if (platformMedia.length > 0) body.platformMedia = platformMedia;
+  if (parsed["clear-platform-media"]) {
+    if (platformMedia.length > 0) {
+      error("--clear-platform-media cannot be combined with --platform-media");
+      process.exit(1);
+    }
+    body.platformMedia = [];
+  }
   if (aspectRatios) {
     const ratios = buildAspectRatios(args);
     if (ratios.length > 0) body.platformAspectRatios = ratios;

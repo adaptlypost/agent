@@ -154,6 +154,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 - "Schedule this announcement on LinkedIn and X for tomorrow at 9am, with a shorter version for X."
 - "Turn https://example.com/blog/launch into posts for Instagram, Threads and Bluesky and save them as drafts."
 - "Post this video as an Instagram Reel and a TikTok, with a first comment that links to our site."
+- "Post this video to YouTube, Instagram and TikTok, and use the 60-second cut for TikTok."
 - "Check this post for problems on every platform before you schedule it."
 - "Which platforms failed on yesterday's post? Retry only those."
 - "Repeat our weekly tips post every Monday at 10am."
@@ -184,7 +185,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 
 | Tool | What it does | Changes data |
 | --- | --- | --- |
-| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails and image shapes, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, X quotes of the account's own posts, threads of replies with images, Tumblr tags, WordPress titles, categories and tags, the YouTube audio language and Google Business Profile events and offers | Yes |
+| `create_post` | Create a post: publish immediately, schedule, or save as draft (a draft can carry a planned date). Takes first comments, per-platform thumbnails, image shapes and media, Instagram and Facebook story sharing, Instagram collaborators, user tags, AI labels and Reel audio, Facebook text backgrounds and link carousels, LinkedIn reshares, X quotes of the account's own posts, threads of replies with images, Tumblr tags, WordPress titles, categories and tags, the YouTube audio language and Google Business Profile events and offers | Yes |
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything | No |
 | `get_post` | Get full details of a single post by ID | No |
 | `list_posts` | List posts with filters by status, platform, date range | No |
@@ -340,7 +341,7 @@ An operation outside the role answers 403 with `code: permission_denied`. The sk
 
 ### What the agent can do
 
-- Post to any of the 14 platforms in one call, with per-platform captions, first comments, threads of replies with images, thumbnails and image shapes
+- Post to any of the 14 platforms in one call, with per-platform captions, first comments, threads of replies with images, thumbnails, image shapes and media
 - Check a post before creating it, and get every problem back at once
 - Schedule for any future time, or bulk schedule up to 100 posts
 - See per-platform results with error details, and retry only the platforms that failed
@@ -401,6 +402,9 @@ The account was connected before AdaptlyPost asked for that permission, its toke
 
 **Can it upload my own photos and videos?**
 Yes. `upload_media` takes public URLs, base64 or ChatGPT attachments; `open_upload_widget` shows an upload box in ChatGPT and Claude, or gives an upload link where a box can't show.
+
+**What if my video is too long for TikTok, or X takes only 4 images?**
+Give that platform its own media with `platformMedia`, such as a shorter cut for TikTok or four of the images for X. The other platforms keep the post's media. AdaptlyPost checks each override against its own platform's limits only.
 
 **What's the difference between this repo and adaptlypost/claude-plugin?**
 The plugin is the Claude Code and Hermes package: OAuth only, with a skill that drives these MCP tools. This repo has the server's source, the API-key skill for `npx skills add` and the Gemini extension.

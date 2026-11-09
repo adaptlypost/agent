@@ -2087,7 +2087,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       ),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
         destructiveHint: true,
       },
     },
@@ -3645,7 +3645,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       outputSchema: resultSchema(`The updated webhook. ${WEBHOOK_RECORD}`),
       annotations: {
         readOnlyHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
         destructiveHint: false,
         idempotentHint: true,
       },

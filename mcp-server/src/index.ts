@@ -27,6 +27,7 @@ import {
   SNIFF_BYTES,
   splitHead,
 } from './media.js';
+import { apiResponses } from './api-schemas.js';
 import { ApiError, RestClient } from './rest-client.js';
 import {
   decodeFileName,
@@ -198,7 +199,7 @@ const LINKEDIN_MENTION_RULE =
   'On LinkedIn, mention a company page with @[Page Name](urn:li:organization:<id>), using the page name exactly as LinkedIn shows it';
 
 const ALT_TEXT_RULE =
-  'Alt text per image, in the same order as mediaUrls (max 1000 characters each; use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
+  'Alt text per image, in the same order as mediaUrls (use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
 
 const PostStatus = z.enum([
   'COMPLETED',
@@ -268,7 +269,7 @@ const TikTokConfigSchema = z.object({
     .max(90)
     .optional()
     .describe(
-      'Max 90 characters. On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty',
+      'On a photo post, the title shown above the description. On a video, sent as the caption only when caption is empty',
     ),
   caption: z
     .string()
@@ -284,7 +285,9 @@ const TikTokConfigSchema = z.object({
       'FOLLOWER_OF_CREATOR',
       'SELF_ONLY',
     ])
-    .describe('TikTok privacy level'),
+    .describe(
+      'Who can see the TikTok post: everyone, mutual followers, followers of the creator, or only the creator (SELF_ONLY)',
+    ),
   allowComments: z.boolean().optional().describe('Allow comments on the TikTok post'),
   allowDuet: z.boolean().optional().describe('Allow other users to Duet this video'),
   allowStitch: z.boolean().optional().describe('Allow other users to Stitch this video'),
@@ -318,25 +321,31 @@ const YouTubeConfigSchema = z.object({
     .string()
     .max(100)
     .optional()
-    .describe('YouTube video title (max 100 chars)'),
+    .describe('Title of the YouTube video'),
   tags: z
     .array(z.string())
     .max(20)
     .optional()
-    .describe('Video tags (max 20)'),
+    .describe('Keyword tags stored on the YouTube video'),
   privacyStatus: z
     .enum(['public', 'private', 'unlisted'])
     .optional()
-    .describe('Video privacy status'),
+    .describe('Who can watch the video: public is everyone, unlisted is anyone with the link, private is only the channel'),
   license: z
     .enum(['youtube', 'creativeCommon'])
     .optional()
-    .describe('Video license type'),
+    .describe('youtube is the standard YouTube license; creativeCommon publishes the video under Creative Commons Attribution so others may reuse it'),
   notifySubscribers: z.boolean().optional().describe('Notify channel subscribers about the upload'),
   allowEmbedding: z.boolean().optional().describe('Allow embedding the video on other sites'),
   madeForKids: z.boolean().optional().describe('Mark the video as made for kids (COPPA)'),
-  categoryId: z.string().optional().describe('YouTube category ID'),
-  playlistId: z.string().optional().describe('Add video to this playlist'),
+  categoryId: z
+    .string()
+    .optional()
+    .describe('Numeric YouTube video category id, as a string, such as "22" for People & Blogs'),
+  playlistId: z
+    .string()
+    .optional()
+    .describe('Id of a playlist on this YouTube channel; the uploaded video is added to it'),
   defaultAudioLanguage: z
     .string()
     .max(35)
@@ -370,14 +379,14 @@ const InstagramAudioSchema = z.object({
     .min(1)
     .max(100)
     .optional()
-    .describe('Volume of the added audio, 1 to 100. Defaults to 100'),
+    .describe('Volume of the added audio, where 100 is full volume. Defaults to 100'),
   videoVolume: z
     .number()
     .int()
     .min(1)
     .max(100)
     .optional()
-    .describe("Volume of the video's own sound, 1 to 100. Defaults to 100"),
+    .describe("Volume of the video's own sound, where 100 is full volume. Defaults to 100"),
 });
 
 const InstagramConfigSchema = z.object({
@@ -401,7 +410,7 @@ const InstagramConfigSchema = z.object({
     .max(3)
     .optional()
     .describe(
-      'Instagram usernames invited as collaborators (Instagram Collab), up to 3. A leading @ is stripped and duplicates are dropped. Works on feed images, carousels and reels; a story or a trial reel with collaborators is refused with 400. Each collaborator gets an invite in Instagram and must accept it before the post shows on their profile',
+      'Instagram usernames invited as collaborators (Instagram Collab). A leading @ is stripped and duplicates are dropped. Works on feed images, carousels and reels; a story or a trial reel with collaborators is refused with 400. Each collaborator gets an invite in Instagram and must accept it before the post shows on their profile',
     ),
   audio: InstagramAudioSchema.optional().describe(
     "Music or an original sound from Instagram's audio library, added to the Reel when it is published. Needs contentType VIDEO and a postType other than STORY, and only works for accounts with supportsInstagramAudio: true in list_accounts (connected through Facebook). Find ids with search_instagram_audio",
@@ -424,19 +433,19 @@ const InstagramConfigSchema = z.object({
           .min(0)
           .max(1)
           .optional()
-          .describe('Horizontal position of the tag on the image, from 0 (left edge) to 1 (right edge)'),
+          .describe('Horizontal position of the tag as a fraction of the image width, where 0 is the left edge'),
         y: z
           .number()
           .min(0)
           .max(1)
           .optional()
-          .describe('Vertical position of the tag on the image, from 0 (top edge) to 1 (bottom edge)'),
+          .describe('Vertical position of the tag as a fraction of the image height, where 0 is the top edge'),
       }),
     )
     .max(20)
     .optional()
     .describe(
-      'Public Instagram accounts tagged in the media, up to 20. Works on a single image, a single video (published as a Reel) or a single story; a carousel or several stories with tags is refused with 400. On a feed image every tag needs x and y; on a story they are optional, and on a video they are ignored because the person is tagged on the video as a whole. A leading @ is stripped and a repeated username keeps its first entry. If Instagram refuses a tag because the account is private or does not exist, the post goes out without its tags and instagramUntaggedUsernames in get_post lists the refused usernames',
+      'Public Instagram accounts tagged in the media. Works on a single image, a single video (published as a Reel) or a single story; a carousel or several stories with tags is refused with 400. On a feed image every tag needs x and y; on a story they are optional, and on a video they are ignored because the person is tagged on the video as a whole. A leading @ is stripped and a repeated username keeps its first entry. If Instagram refuses a tag because the account is private or does not exist, the post goes out without its tags and instagramUntaggedUsernames in get_post lists the refused usernames',
     ),
   aiGenerated: z
     .boolean()
@@ -464,7 +473,7 @@ const FacebookConfigSchema = z.object({
     .string()
     .max(255)
     .optional()
-    .describe('Video title for Facebook (max 255 chars)'),
+    .describe('Title shown on the Facebook video'),
   textFormatPresetId: z
     .string()
     .regex(/^\d{1,20}$/)
@@ -514,7 +523,7 @@ const LinkedInConfigSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      'Title LinkedIn shows on a DOCUMENT post (max 100 chars). Defaults to the file name; ignored for other content types',
+      'Title LinkedIn shows on a DOCUMENT post. Defaults to the file name; ignored for other content types',
     ),
   reshareOf: z
     .string()
@@ -543,7 +552,7 @@ const TumblrConfigSchema = z.object({
     .max(30)
     .optional()
     .describe(
-      'Tumblr tags, up to 30, each up to 140 characters and without commas. A leading # is stripped and duplicates are dropped, ignoring case',
+      'Tags shown on the Tumblr post. A leading # is stripped and duplicates are dropped, ignoring case',
     ),
   title: z.string().max(4096).optional().describe('Shown as a heading above the media and the text'),
   sourceUrl: z.string().max(2048).optional().describe('Shown as the source link of the post'),
@@ -569,7 +578,7 @@ const WordPressConfigSchema = z.object({
     .max(50)
     .optional()
     .describe(
-      'Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise',
+      'WordPress tag names. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise',
     ),
 });
 
@@ -591,7 +600,7 @@ const PinterestConfigSchema = z.object({
     .describe(
       "The board's name, instead of boardId; never send both. Matched against this account's boards, exact first, then case-insensitive. A name no board has, or one several boards share, fails with 400 and never falls back to another board",
     ),
-  title: z.string().max(100).optional().describe('Pin title (max 100 chars)'),
+  title: z.string().max(100).optional().describe('Title shown on the pin'),
   link: z.string().optional().describe('Destination URL for the pin'),
 });
 
@@ -610,13 +619,17 @@ const GoogleBusinessConfigSchema = z.object({
     .describe(
       'Button shown on the post. Every type except CALL needs callToActionUrl; CALL dials the phone number on the Business Profile',
     ),
-  callToActionUrl: z.string().url().optional().describe('Ignored when callToActionType is CALL'),
+  callToActionUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe('Page the button opens. Ignored when callToActionType is CALL'),
   eventTitle: z.string().optional().describe('Title of the event or offer'),
   eventStart: GoogleBusinessEventDate.optional().describe(
-    "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset (e.g. \"2026-10-01T18:00\"). Google reads event times in the location's time zone",
+    "Start of the event or offer in the business's local time with no offset, as a date or a date and time (e.g. \"2026-10-01T18:00\"). Google reads event times in the location's time zone",
   ),
   eventEnd: GoogleBusinessEventDate.optional().describe(
-    "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset (e.g. \"2026-10-01T21:00\")",
+    "End of the event or offer in the business's local time with no offset, as a date or a date and time (e.g. \"2026-10-01T21:00\")",
   ),
   offerCouponCode: z.string().optional().describe('OFFER only: coupon code'),
   offerRedeemUrl: z.string().url().optional().describe('OFFER only: where the offer is redeemed'),
@@ -625,7 +638,7 @@ const GoogleBusinessConfigSchema = z.object({
 
 const RecurrenceSchema = z.object({
   frequency: RecurrenceFrequency.describe(
-    'How often the post repeats: DAILY, WEEKLY, MONTHLY or YEARLY. YEARLY repeats on the same date; a series started on February 29 posts on February 28 in other years',
+    'How often the post repeats. YEARLY repeats on the same date; a series started on February 29 posts on February 28 in other years',
   ),
   interval: z
     .number()
@@ -633,7 +646,7 @@ const RecurrenceSchema = z.object({
     .min(1)
     .max(30)
     .optional()
-    .describe('Repeat every N days, weeks, months or years, 1 to 30 (default 1)'),
+    .describe('Repeat every N periods of frequency, so 2 with WEEKLY is every other week (default 1)'),
   weekdays: z
     .array(Weekday)
     .max(7)
@@ -654,7 +667,7 @@ const RecurrenceSchema = z.object({
     .max(365)
     .optional()
     .describe(
-      'Total number of posts the series publishes, 2 to 365. Cannot be combined with endsOn; omit both to repeat until the user pauses or deletes the series',
+      'Total number of posts the series publishes. Cannot be combined with endsOn; omit both to repeat until the user pauses or deletes the series',
     ),
 });
 
@@ -769,7 +782,7 @@ const postThumbnailFields = {
 const platformTextsField = z
   .array(
     z.object({
-      platform: PlatformType,
+      platform: PlatformType.describe('The platform that gets this text instead of the post text; one entry per platform'),
       text: z.string().describe(LINKEDIN_MENTION_RULE),
     }),
   )
@@ -779,7 +792,7 @@ const postExtrasFields = {
   firstComments: z
     .array(
       z.object({
-        platform: FirstCommentPlatform,
+        platform: FirstCommentPlatform.describe('The platform whose published post gets this comment'),
         text: z
           .string()
           .min(1)
@@ -794,7 +807,7 @@ const postExtrasFields = {
   threadReplies: z
     .array(
       z.object({
-        platform: ThreadReplyPlatform,
+        platform: ThreadReplyPlatform.describe('The platform whose published post these replies follow'),
         texts: z
           .array(z.string().max(25000))
           .max(25)
@@ -804,7 +817,7 @@ const postExtrasFields = {
           .max(25)
           .optional()
           .describe(
-            'Parallel to texts: the image URLs of each reply, from upload_media, and [] for a reply without images. Up to 4 JPEG, PNG, GIF or WEBP images per reply',
+            'Parallel to texts: the JPEG, PNG, GIF or WEBP image URLs of each reply, from upload_media, and [] for a reply without images',
           ),
       }),
     )
@@ -815,7 +828,7 @@ const postExtrasFields = {
   platformThumbnails: z
     .array(
       z.object({
-        platform: ThumbnailPlatform,
+        platform: ThumbnailPlatform.describe('The platform that uses this thumbnail instead of the post-level one'),
         thumbnailUrl: z
           .string()
           .optional()
@@ -835,7 +848,7 @@ const postExtrasFields = {
   platformMedia: z
     .array(
       z.object({
-        platform: PlatformType,
+        platform: PlatformType.describe('The platform that publishes this media instead of the post mediaUrls'),
         mediaUrls: z
           .array(z.string())
           .min(1)
@@ -846,7 +859,7 @@ const postExtrasFields = {
           .array(z.string().max(1000))
           .optional()
           .describe(
-            'Alt text per item, in the same order as this entry\'s mediaUrls (max 1000 characters each; use "" to skip one)',
+            'Alt text per item, in the same order as this entry\'s mediaUrls (use "" to skip one)',
           ),
       }),
     )
@@ -857,7 +870,7 @@ const postExtrasFields = {
   platformAspectRatios: z
     .array(
       z.object({
-        platform: AspectRatioPlatform,
+        platform: AspectRatioPlatform.describe('The platform whose images are reframed to aspectRatio'),
         aspectRatio: MediaAspectRatio.describe(
           'SQUARE is 1:1, PORTRAIT 4:5, VERTICAL 9:16 and LANDSCAPE 1.91:1',
         ),
@@ -919,7 +932,7 @@ const createPostShape = {
       'Target platforms (e.g. ["LINKEDIN", "TWITTER"]). Each one needs its matching connection-id array (pageIds for FACEBOOK, googleBusinessConnectionIds for GOOGLE_BUSINESS) filled with ids from list_accounts. Optional when accountIds is sent',
     ),
   contentType: ContentType.describe(
-    `Content type: TEXT, IMAGE, VIDEO, CAROUSEL, or DOCUMENT. Must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}. ${DOCUMENT_POST_RULE}`,
+    `What the post carries; it must match mediaUrls. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}. ${DOCUMENT_POST_RULE}`,
   ),
   scheduledAt: z
     .string()
@@ -977,7 +990,7 @@ const bulkPostsShape = {
       z.object({
         text: z.string().optional().describe(`Post text/caption. ${LINKEDIN_MENTION_RULE}`),
         contentType: BulkContentType.describe(
-          `TEXT, IMAGE, VIDEO, or CAROUSEL; must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}`,
+          `What the post carries; it must match mediaUrls. DOCUMENT posts cannot be bulk scheduled; use create_post. ${CAROUSEL_RULE}. ${GOOGLE_BUSINESS_RULE}. ${TELEGRAM_RULE}. ${WORDPRESS_RULE}`,
         ),
         scheduledAt: z
           .string()
@@ -1029,7 +1042,7 @@ const bulkPostsShape = {
     )
     .min(1)
     .max(100)
-    .describe('1 to 100 posts to schedule; each is created independently'),
+    .describe('The posts to schedule; each is created independently'),
   ...connectionIdFields,
   ...platformConfigFields,
 };
@@ -1090,8 +1103,29 @@ const workspaceIdField = {
     ),
 };
 
-const resultSchema = (description: string) => ({
-  result: z.unknown().describe(description),
+const resultSchema = (schema: ZodTypeAny, description: string) => ({
+  result: schema.describe(description),
+});
+
+const UPLOAD_MEDIA_RESULT = z.object({
+  uploaded: z.array(z.object({ publicUrl: z.string(), key: z.string() })),
+  mediaUrls: z.array(z.string()),
+});
+
+const UPLOAD_WIDGET_RESULT = z.object({
+  status: z.enum(['waiting_for_upload', 'upload_link', 'waiting', 'saving', 'ready', 'failed', 'expired']),
+  uploadUrl: z.string().optional(),
+  uploadId: z.string().optional(),
+  acceptsUntil: z.string().optional(),
+  files: z.array(z.object({ fileName: z.string(), publicUrl: z.string() }).passthrough()).optional(),
+  mediaUrls: z.array(z.string()).optional(),
+  failed: z.array(z.object({ fileName: z.string(), error: z.string() })).optional(),
+  savingCount: z.number().optional(),
+});
+
+const UPLOAD_TICKET_RESULT = z.object({
+  expiresAt: z.string(),
+  uploadUrl: z.string(),
 });
 
 type Uploaded = { publicUrl: string; key: string };
@@ -1126,6 +1160,8 @@ async function uploadFromUrl(
     await media.dispose();
   }
 }
+
+const optionalAttachmentString = () => z.preprocess((value) => value ?? undefined, z.string().optional());
 
 type ChatAttachment = {
   download_url: string;
@@ -1183,20 +1219,17 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 // MCP Server – tool registration
 // ---------------------------------------------------------------------------
 
+const SERVER_DESCRIPTION =
+  'Schedule, publish and manage social media posts on Facebook, Instagram, Threads, X, LinkedIn, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Tumblr, Telegram, WordPress and Google Business Profile from the user\'s connected accounts. Upload media, draft, validate, schedule and bulk-schedule posts, run recurring posts and RSS feeds, read and answer comments, mentions, direct messages and Google reviews, read post and account analytics, write captions and images with AI, and manage webhooks.';
+
 const SERVER_INSTRUCTIONS = [
-  'Every tool acts as the signed-in member, or the member who created the API key, under that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
-  'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the workspace list_workspaces marks current. The role, and so what a tool may do, can differ per workspace.',
-  'A 403 with code workspace_access_denied means the workspaceId is not one this sign-in can reach. Call list_workspaces and pick an id from it.',
-  'A Contributor can create and edit their own drafts, give a draft a planned date with scheduledAt so it shows on the calendar, upload media, generate captions and images, and read posts and analytics; it cannot schedule, publish, retry, bulk schedule, delete non-drafts, trigger an analytics sync, manage webhooks or touch other members\' posts. Only an Admin can remove accounts or create connect links. A Viewer only reads. get_me says what this connection may do in a workspace.',
-  'A 403 with code permission_denied means the member\'s role does not allow this action. Tell the user and do not retry. For a schedule or publish, offer to save the post as a draft for an Admin or Editor to approve, and only do that if the user agrees. Keep the scheduledAt the user asked for: with saveAsDraft it becomes the draft\'s planned date, the draft shows on the calendar on that day, and publish_draft later schedules it for that date.',
-  'A 401 with code token_issuer_lost_access means this connection lost access to the workspace. Tell the user to reconnect AdaptlyPost, or to have a workspace member create a new API key in AdaptlyPost settings.',
-  'A 403 with code subscription_required means the organization\'s current AdaptlyPost plan does not include this. Tell the user and stop; do not retry.',
-  'A 401 with code oauth_account_not_found means the user signed in with an email that has no AdaptlyPost account. Relay the message, which names that email, and ask them to disconnect and reconnect with the email they use on AdaptlyPost.',
-  'A 429 means the rate limit was hit. Wait for the Retry-After time before the next call and do not loop.',
-  'generate_caption, refine_caption and generate_image spend AI credits on every call, so generate only what the user asked for. generate_image returns a jobId, not an image: poll get_image_job until status is completed or failed.',
-  'validate_post and validate_bulk_posts take the same input as create_post and bulk_schedule_posts and report every problem without creating anything. Use them before a large or unusual post.',
-  'The inbox tools read and answer comments, mentions, direct messages and Google Business Profile reviews. Every role can read the inbox; replying, messaging, hiding, liking, deleting and marking items need Admin or Editor. Before reply_to_inbox_comment, reply_to_inbox_mention, send_inbox_message or reply_to_inbox_review, show the user the exact text and the item it answers and wait for their yes; confirm hide_inbox_comment, delete_inbox_comment and delete_inbox_review_reply the same way.',
-  'A 403 with code inbox_reconnect_required means the account lacks the platform permission for that inbox channel or action, or its token expired. Tell the user to reconnect the account in AdaptlyPost and do not retry.',
+  'Tools act as the signed-in member, or the API key\'s creator, with that member\'s workspace role: Admin, Editor, Contributor or Viewer.',
+  'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when expected accounts or posts are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the workspace list_workspaces marks current.',
+  '403 permission_denied: the role forbids this action. Tell the user; do not retry. For a schedule or publish, offer to save the post as a draft for an Admin or Editor to approve, only if the user agrees; keep their scheduledAt, which saveAsDraft stores as the planned date publish_draft uses.',
+  '403 workspace_access_denied: this sign-in cannot reach that workspaceId; pick one from list_workspaces. 403 subscription_required: the plan does not include this; tell the user and stop. 401 token_issuer_lost_access: tell the user to reconnect AdaptlyPost or have a member create a new API key. 401 oauth_account_not_found: relay the message and ask the user to reconnect with their AdaptlyPost email. 429: wait for Retry-After; do not loop.',
+  'A Contributor can create and edit its own drafts, date them with scheduledAt, upload media, use AI and read posts and analytics, but cannot schedule, publish, retry, bulk schedule, delete non-drafts, sync analytics, manage webhooks or touch others\' posts. Only an Admin removes accounts or creates connect links. A Viewer only reads. get_me says what this connection may do.',
+  'Inbox: every role reads; replying, messaging, hiding, liking, deleting and marking need Admin or Editor. Show the user the exact text and the item it answers, and get their yes, before any reply or message; confirm hides and deletes the same way. 403 inbox_reconnect_required: tell the user to reconnect that account; do not retry.',
+  'generate_caption, refine_caption and generate_image spend AI credits per call; generate only what the user asked for.',
 ].join('\n');
 
 const LINK_CLAIM_WAIT_MS = 25_000;
@@ -1240,7 +1273,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   const server = new McpServer(
     {
       name: 'adaptlypost',
+      title: 'AdaptlyPost',
       version: SERVER_VERSION,
+      description: SERVER_DESCRIPTION,
+      websiteUrl: 'https://adaptlypost.com/features/agents',
+      icons: [
+        {
+          src: 'https://raw.githubusercontent.com/adaptlypost/agent/main/assets/icon.svg',
+          mimeType: 'image/svg+xml',
+          sizes: ['any'],
+        },
+      ],
     },
     { instructions: SERVER_INSTRUCTIONS },
   );
@@ -1284,12 +1327,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'List the workspaces this sign-in can act in, across every organization the user belongs to. Returns { workspaces } with id, name, organization { id, name }, role { key, name }, permissions (the permission keys held there), isDefault, current and can { draft, schedule, publish }. Call this when the user names a workspace, brand, client or organization, or when accounts or posts they expect are missing: then pass the matching id as workspaceId to every other tool. Without workspaceId, tools act in the workspace marked current. An API key belongs to one workspace, so it lists only that one. Takes no arguments.',
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.listWorkspaces,
         'An object with workspaces: one { id, name, organization, role, permissions, isDefault, current, can } per workspace. Pass id as workspaceId to other tools.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async () => {
@@ -1310,12 +1355,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         "Describe this connection in the workspace (the current one unless workspaceId names another): whether it is an API key or a sign-in, its role, the permission keys it holds, can { draft, schedule, publish } and a one-sentence summary of what it may do. An API key never holds more than the member who created it (issuerRole). Call this before an action the role may not allow, instead of trying and reading a 403. Takes only the optional workspaceId.",
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.getMe,
         'An object with tokenType (api_token or oauth), tokenId, tokenName, workspace { id }, organizationId, role { key, name }, issuerRole, permissions, can { draft, schedule, publish }, summary and expiresAt (null for a key that never expires).',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => {
@@ -1338,12 +1385,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.listSocialAccounts,
         'An object with accounts: one { id, platform, displayName, username, avatarUrl, status } per connected account, plus unauthorizedReason when status is unauthorized, pageId for Facebook pages and supportsInstagramAudio for Instagram. Use id as the connection id (or in pageIds for Facebook).',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => {
@@ -1373,15 +1422,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .string()
           .max(100)
           .optional()
-          .describe('Keyword filter (max 100 characters). Leave out for trending audio'),
+          .describe('Keywords to search for. Leave out for trending audio'),
       },
       outputSchema: resultSchema(
+        apiResponses.searchInstagramAudio,
         'An object with audio: one { audioId, audioType, title, displayArtist, igUsername, durationMs, coverArtworkUrl, profilePictureUrl, previewUrl, instagramUrl, isAdsEligible } per match. Pass audioId as instagramConfigs[].audio.audioId.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ accountId, ...query }, client) => {
@@ -1409,12 +1460,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('The Pinterest account id from list_accounts'),
       },
       outputSchema: resultSchema(
+        apiResponses.getPinterestBoards,
         'An object with boards: one { id, name, description, privacy, pinCount } per board. Pass id as pinterestConfigs[].boardId, or name as boardName.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ accountId }, client) => {
@@ -1443,12 +1496,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('The company page URL, its vanity name, or @vanity, e.g. "https://www.linkedin.com/company/acme/" or "acme"'),
       },
       outputSchema: resultSchema(
+        apiResponses.lookupLinkedInOrganization,
         'An object with organization: { id, name, vanityName, urn, mention }. Paste mention into the LinkedIn post text.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ query }, client) => {
@@ -1473,12 +1528,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('The WordPress account id from list_accounts'),
       },
       outputSchema: resultSchema(
+        apiResponses.getWordPressCategories,
         'An object with categories: one { id, name, parentId } per category. Pass id in wordpressConfigs[].categoryIds.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ accountId }, client) => {
@@ -1503,6 +1560,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         accountId: z.string().describe('The Facebook account id from list_accounts, or its pageId'),
       },
       outputSchema: resultSchema(
+        apiResponses.checkSocialAccount,
         'An object with id, platform, displayName, pageId, status (active or unauthorized), unauthorizedReason when unauthorized, and checkedAt.',
       ),
       annotations: {
@@ -1531,11 +1589,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       inputSchema: {
         accountId: z.string().describe('The account id from list_accounts, or the Facebook pageId'),
       },
-      outputSchema: resultSchema('An object with id, platform, displayName, pageId for Facebook, and removed: true.'),
+      outputSchema: resultSchema(
+        apiResponses.removeSocialAccount,
+        'An object with id, platform, displayName, pageId for Facebook, and removed: true.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ accountId }, client) => {
@@ -1555,7 +1617,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         "Create a link someone else, such as a client, opens to connect their social accounts to this workspace without an AdaptlyPost login. With no options it is a quick link: it lasts 7 days, offers every platform, shows the client every account in the workspace and connects any number of accounts. visibility PRIVATE shows the client only the accounts they connected through the link; allowedPlatforms limits the platforms offered; maxAccounts makes the link stop working once that many accounts are connected through it; expiresAt or neverExpires changes when it stops working. Returns the url to send. Connected accounts then show up in list_accounts. Revoke it with revoke_connect_link. Needs the accounts.manage permission, which Admin holds.",
       inputSchema: {
-        name: z.string().max(80).optional().describe('Label shown in the dashboard list of links (max 80 characters)'),
+        name: z.string().max(80).optional().describe('Label shown in the dashboard list of links'),
         visibility: z
           .enum(['PUBLIC', 'PRIVATE'])
           .optional()
@@ -1582,12 +1644,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('true keeps the link working until it is revoked or reaches maxAccounts. Cannot be combined with expiresAt'),
       },
       outputSchema: resultSchema(
+        apiResponses.createConnectLink,
         'An object with url (the link to send), token (pass it to revoke_connect_link), expiresAt (null when it never expires), name, visibility, allowedPlatforms and maxAccounts.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: false,
       },
     },
     async (input, client) => {
@@ -1609,7 +1673,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       inputSchema: {
         token: z.string().describe('The token returned by create_connect_link'),
       },
-      outputSchema: resultSchema('An object with success: true once the link is revoked.'),
+      outputSchema: resultSchema(
+        apiResponses.revokeConnectLink,
+        'An object with success: true once the link is revoked.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -1641,8 +1708,12 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
             z.object({
               download_url: z.string().describe('Temporary download URL of the attached file'),
               file_id: z.string().describe('ChatGPT file id of the attached file'),
-              mime_type: z.string().nullish().describe('MIME type of the attached file'),
-              file_name: z.string().nullish().describe('Name of the attached file, with its extension'),
+              mime_type: optionalAttachmentString().describe(
+                'MIME type ChatGPT reports for the file. Informational only: the stored type is detected from the file content',
+              ),
+              file_name: optionalAttachmentString().describe(
+                'Name of the attached file, with its extension. The stored file is named after it; when omitted, the last segment of download_url is used instead, and a PPT, PPTX, DOC or DOCX file whose URL has no extension is then refused',
+              ),
             }).passthrough(),
           )
           .optional()
@@ -1673,12 +1744,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           ),
       },
       outputSchema: resultSchema(
+        UPLOAD_MEDIA_RESULT,
         'An object with uploaded (array of { publicUrl, key } per file) and mediaUrls (the public URLs ready to pass to create_post).',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
       _meta: { 'openai/fileParams': ['attachments'] },
     },
@@ -1715,7 +1788,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Get Media Upload URLs',
       description:
-        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it, do not stop, and never put the files in a public repo or file-sharing link: call open_upload_widget and have the user add the files through the upload box or upload link it returns. If the files are ones you made, hand them to the user as downloads first. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and mimeType. Supported types: image/jpeg, image/png, image/webp, image/gif (Facebook, X, Bluesky, Mastodon, LinkedIn, Tumblr and WordPress only), video/mp4, video/quicktime, and for LinkedIn DOCUMENT posts application/pdf, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/msword and application/vnd.openxmlformats-officedocument.wordprocessingml.document; keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
+        'Get presigned upload URLs for direct file uploads. Returns uploadUrl (PUT your file here) and publicUrl (use in create_post mediaUrls). This only mints a URL. You MUST PUT the file to uploadUrl and confirm a 2xx response before using publicUrl, otherwise create_post/bulk rejects it with "Media file(s) not found in storage". If the PUT cannot reach uploadUrl, for example a sandbox network proxy answers 403 or the storage host is not on its allowlist, do not retry it, do not stop, and never put the files in a public repo or file-sharing link: call open_upload_widget and have the user add the files through the upload box or upload link it returns. If the files are ones you made, hand them to the user as downloads first. Prefer upload_media for public URLs and for inline files under 30 MB; use this for larger files you hold yourself. For each file, provide fileName and the mimeType that matches it. GIFs post only to Facebook, X, Bluesky, Mastodon, LinkedIn, Tumblr and WordPress, and the document types are for LinkedIn DOCUMENT posts. Keep the extension in fileName, since the post reads the file type from it. A publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published.',
       inputSchema: {
         files: z
           .array(
@@ -1726,15 +1799,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           )
           .min(1)
           .max(20)
-          .describe('Files to get upload URLs for'),
+          .describe('Files to get upload URLs for, one entry per file you will PUT'),
       },
       outputSchema: resultSchema(
+        apiResponses.getUploadUrls,
         'An object with urls: one { uploadUrl, publicUrl, key } entry per requested file.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: false,
       },
     },
     async ({ files }, client) => {
@@ -1799,12 +1874,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           ),
       },
       outputSchema: resultSchema(
+        UPLOAD_WIDGET_RESULT,
         'Without uploadId: status waiting_for_upload when the upload box is shown (the media URLs arrive later in a message from the box), or status upload_link with uploadUrl, uploadId and acceptsUntil. With uploadId: status (waiting, saving, ready, failed or expired), files ({ fileName, publicUrl } each), mediaUrls, failed ({ fileName, error } each), savingCount and acceptsUntil.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: false,
       },
       _meta: {
         ui: { resourceUri: UPLOAD_WIDGET_URI },
@@ -1855,11 +1932,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Called by the upload box that open_upload_widget shows, once per file, to authorize storing that file in AdaptlyPost media storage. Returns a ticket valid for 5 minutes. Do not call this yourself; call open_upload_widget instead.',
       inputSchema: {},
-      outputSchema: resultSchema('An object with expiresAt and uploadUrl for the upload box.'),
+      outputSchema: resultSchema(
+        UPLOAD_TICKET_RESULT,
+        'An object with expiresAt and uploadUrl for the upload box.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
       _meta: {
         ui: { visibility: ['app'] },
@@ -1891,12 +1972,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories and tags, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
+        apiResponses.createPost,
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty for scheduled posts and drafts), skippedPlatforms, isScheduled, and scheduledAt, plus recurringPostId when recurrence was sent. Publishing is asynchronous: check list_post_results for outcomes.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async (input, client) => {
@@ -1917,12 +2000,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Dry-run create_post: takes exactly the same input and runs every check creating the post would run, plus the ones that usually fail only at publish time (TikTok creator limits, YouTube upload quota, expired tokens, Pinterest boards, X credits), without creating a post, uploading media or writing anything. Nothing is published, so no confirmation is needed. Always returns a report: valid is false when any issue has severity ERROR. Issues tied to one account are listed under that account in accounts (status READY, WARNING or BLOCKED); the rest are in issues, each with a stable code, severity and message. outcome says what creating the post would do (DRAFT, SCHEDULED or PUBLISH_NOW), and requiredPermissions names the permissions it would need; a missing one shows up as a PERMISSION_DENIED issue. notChecked lists what only the platform decides at publish time, so valid: true is not a guarantee. Fix every ERROR, then call create_post with the same input. Needs the posts.draft permission.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
+        apiResponses.validatePost,
         'A validation report: valid, outcome (DRAFT, SCHEDULED or PUBLISH_NOW), scheduledAt, requiredPermissions, issues (each { code, severity ERROR or WARNING, message, platform, connectionId }), accounts (each { platform, connectionId, accountName, status READY, WARNING or BLOCKED, issues }), and notChecked (each { code, message }).',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -1947,12 +2032,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Post ID from create_post, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
+        apiResponses.getPost,
         'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform\'s own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated, youtubeDefaultAudioLanguage, youtubeScheduleOnYouTube and youtubeScheduledVideoId (the YouTube video id once a scheduleOnYouTube video is uploaded early); linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -1970,7 +2057,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'List Posts',
       description:
-        'List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
+        'List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. Page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
       inputSchema: {
         statuses: z
           .array(PostStatus)
@@ -1994,8 +2081,8 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe(
             'Upper bound (ISO 8601, e.g. "2026-03-31") on scheduledAt, or createdAt for posts never scheduled',
           ),
-        sortOrder: PostSortOrder.optional().describe('NEWEST (default) or OLDEST'),
-        limit: z.number().int().min(1).max(100).optional().default(20).describe('Max results, 1 to 100'),
+        sortOrder: PostSortOrder.optional().describe('Date order of the list; newest first unless OLDEST is sent'),
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Posts per page'),
         offset: z
           .number()
           .int()
@@ -2005,12 +2092,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Posts to skip; increase by limit while hasMore is true'),
       },
       outputSchema: resultSchema(
+        apiResponses.listPosts,
         'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, recurringPostId and occurrenceAt for occurrences of a recurring post, and platforms with per-platform status), total (count of all matches), and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2077,12 +2166,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         ...twitterConfigsField,
       },
       outputSchema: resultSchema(
+        apiResponses.updatePost,
         'The updated post record: id, status (DRAFT or SCHEDULED; a FAILED post comes back as DRAFT), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id, ...rest }, client) => {
@@ -2105,12 +2196,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Post ID to delete, from list_posts or create_post'),
       },
       outputSchema: resultSchema(
+        apiResponses.deletePost,
         'An object with deleted: true once the post record is removed from AdaptlyPost.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2133,6 +2226,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Post ID with status DRAFT or SCHEDULED, from list_posts or create_post'),
       },
       outputSchema: resultSchema(
+        apiResponses.unschedulePost,
         'The post record as an undated draft: id, status DRAFT, scheduledAt null, text, contentType, timezone, and platforms with per-target details.',
       ),
       annotations: {
@@ -2159,7 +2253,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Publish Draft',
       description:
-        'Publish a DRAFT post now or schedule it; SCHEDULED posts are accepted too, to reschedule or push live. Other statuses fail with "Post is not a draft". A future scheduledAt sets SCHEDULED for that time and queues nothing yet; a past one publishes now. Without scheduledAt, a draft whose planned date (the scheduledAt it was saved with) is still in the future is SCHEDULED for that date, and any other post (an undated draft, a planned date already past, a SCHEDULED post) publishes now. publishNow: true publishes now even when the draft has a planned date; sending it with scheduledAt fails with 400. Read the draft with get_post first and tell the user which of these will happen. Publishing now clears the stored scheduledAt, moves the post to PENDING and queues a publishing job per platform: content reaches the networks within moments and cannot be recalled. Fails if an account was disconnected or a TikTok entry lacks privacyLevel; fix with update_post first. A post whose YouTube video already waits on YouTube (scheduleOnYouTube) fails with 409 SCHEDULED_ON_YOUTUBE, since YouTube publishes it at scheduledAt. Not for new content, use create_post. Check list_post_results afterwards for per-platform outcomes.',
+        'Publish a DRAFT post now or schedule it; SCHEDULED posts are accepted too, to reschedule or push live. Other statuses fail with "Post is not a draft". A future scheduledAt sets SCHEDULED for that time and queues nothing yet; a past one publishes now. Without scheduledAt, a draft whose planned date (the scheduledAt it was saved with) is still in the future is SCHEDULED for that date, and any other post (an undated draft, a planned date already past, a SCHEDULED post) publishes now. publishNow: true publishes now even when the draft has a planned date; sending it with scheduledAt fails with 400. Read the draft with get_post first and tell the user which of these will happen. Publishing now clears the stored scheduledAt, moves the post to PENDING and queues a publishing job per platform: content reaches the networks within moments and cannot be recalled. Fails if an account was disconnected or a TikTok entry lacks privacyLevel; fix with update_post first. A post whose YouTube video already waits on YouTube (scheduleOnYouTube) fails with 409 SCHEDULED_ON_YOUTUBE, since YouTube publishes it at scheduledAt. Not for new content, use create_post. Returns { postId, queuedPlatforms, isScheduled, scheduledAt }: queuedPlatforms lists the platforms whose publishing job was queued and is empty when the post was scheduled for later, so it confirms queueing, not publishing. Check list_post_results afterwards for per-platform outcomes.',
       inputSchema: {
         id: z.string().describe('Post ID with status DRAFT (or SCHEDULED)'),
         scheduledAt: z
@@ -2178,16 +2272,18 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .string()
           .default('UTC')
           .describe(
-            'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt',
+            'IANA timezone stored with the post for display (e.g. "America/New_York"); it does not shift scheduledAt. Omitting it stores UTC, replacing the timezone the draft was saved with, so resend the draft\'s timezone from get_post to keep it',
           ),
       },
       outputSchema: resultSchema(
+        apiResponses.publishDraft,
         'An object with postId, queuedPlatforms (platforms whose publishing job was queued; empty when scheduled for later), isScheduled, and scheduledAt.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async ({ id, ...body }, client) => {
@@ -2212,12 +2308,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Post ID from create_post, publish_draft, bulk_schedule_posts, or list_posts'),
       },
       outputSchema: resultSchema(
+        apiResponses.getPostResults,
         'An object with postId, the overall post status, and results: one { platformId, platform, accountName, status, platformPostId, errorMessage, tiktokDraftFallback, publishedAt } per targeted platform.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2246,12 +2344,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           ),
       },
       outputSchema: resultSchema(
+        apiResponses.retryFailedPlatforms,
         'An object with postId, queuedPlatforms (platforms re-queued for publishing), and isScheduled: false. Outcomes arrive asynchronously in list_post_results.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async ({ id, platformIds }, client) => {
@@ -2276,12 +2376,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Schedule up to 100 posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
+        apiResponses.bulkSchedulePosts,
         'An object with totalScheduled, totalFailed, and results: one { postId, success, isScheduled, scheduledAt, errorMessage } per input item, in input order.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async (input, client) => {
@@ -2302,12 +2404,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Dry-run bulk_schedule_posts: takes exactly the same input and returns one validation report per item, in input order, without creating, uploading or writing anything. Nothing is published, so no confirmation is needed. Each report has valid, outcome, requiredPermissions, issues, accounts and notChecked, as in validate_post. Fix the items with ERROR issues, then call bulk_schedule_posts. Needs the posts.draft permission.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
+        apiResponses.validateBulkPosts,
         'An object with valid (true when every item is valid), totalValid, totalInvalid, and results: one { index, report } per item, where report has the validate_post shape.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2327,13 +2431,13 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'List Recurring Posts',
       description:
-        'List the recurring posts (series) in the workspace (the current one unless workspaceId names another), created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. limit is 1 to 100 (default 20); page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
+        'List the recurring posts (series) in the workspace (the current one unless workspaceId names another), created by passing recurrence to create_post. Returns { recurringPosts, total, hasMore }; each series has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, frequency, interval, weekdays, startsAt, timezone, endsOn or maxOccurrences, nextOccurrenceAt, occurrenceCount, and the content and platforms every occurrence copies. Only the next occurrence of an ACTIVE series exists as a SCHEDULED post, created about 24 hours ahead; list_posts shows it with recurringPostId set. A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content; pauseReason and lastError say which. Page with offset while hasMore is true. Editing a series or skipping one date is only possible in the AdaptlyPost app.',
       inputSchema: {
         statuses: z
           .array(RecurringPostStatus)
           .optional()
           .describe('Filter by status (e.g. ["ACTIVE", "PAUSED"]); omit for all statuses'),
-        limit: z.number().int().min(1).max(100).optional().default(20).describe('Max results, 1 to 100'),
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Recurring posts per page'),
         offset: z
           .number()
           .int()
@@ -2343,12 +2447,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Recurring posts to skip; increase by limit while hasMore is true'),
       },
       outputSchema: resultSchema(
+        apiResponses.listRecurringPosts,
         'An object with recurringPosts (each with id, status, pauseReason, lastError, frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences, nextOccurrenceAt, occurrenceCount, contentType, text, mediaUrls, platformTypes, and platforms), total (count of all matches), and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2373,12 +2479,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Recurring post ID from list_recurring_posts, create_post, or a post\'s recurringPostId'),
       },
       outputSchema: resultSchema(
+        apiResponses.getRecurringPost,
         'The recurring post: id, userId, status, pauseReason, lastError, frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences, nextOccurrenceAt, occurrenceCount, contentType, text, mediaUrls, mediaAltTexts, thumbnailUrl, platformTypes, platforms, createdAt, and updatedAt.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2401,6 +2509,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Recurring post ID to pause, from list_recurring_posts'),
       },
       outputSchema: resultSchema(
+        apiResponses.pauseRecurringPost,
         'The paused recurring post: id, status PAUSED, pauseReason USER, the schedule, occurrenceCount, and the content and platforms.',
       ),
       annotations: {
@@ -2430,12 +2539,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Recurring post ID to resume, from list_recurring_posts'),
       },
       outputSchema: resultSchema(
+        apiResponses.resumeRecurringPost,
         'The resumed recurring post: id, status (ACTIVE, or ENDED when no slot is left), nextOccurrenceAt, the schedule, occurrenceCount, and the content and platforms.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async ({ id }, client) => {
@@ -2458,12 +2569,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         id: z.string().describe('Recurring post ID to delete, from list_recurring_posts'),
       },
       outputSchema: resultSchema(
+        apiResponses.deleteRecurringPost,
         'An object with deleted: true once the recurring post is removed.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2481,19 +2594,19 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   const rssFeedIdField = { id: z.string().describe('RSS feed id from list_rss_feeds or create_rss_feed') };
 
   const rssFeedTarget = z.object({
-    platform: RssFeedPlatform,
+    platform: RssFeedPlatform.describe('Platform of the account in connectionId'),
     connectionId: z.string().describe('Account id from list_accounts'),
     pageId: z.string().optional().describe('Facebook page id from list_accounts. Required for FACEBOOK'),
   });
 
   const rssFeedSettingsFields = {
-    name: z.string().max(120).optional().describe("Name of the feed (max 120 characters). Defaults to the feed's title"),
+    name: z.string().max(120).optional().describe("Name shown for the feed in AdaptlyPost. Defaults to the feed's title"),
     targets: z
       .array(rssFeedTarget)
       .min(1)
       .max(20)
       .describe(
-        'Accounts every new item is posted to, 1 to 20. Feeds post to FACEBOOK, INSTAGRAM, THREADS, TWITTER, BLUESKY, LINKEDIN, MASTODON, TELEGRAM and GOOGLE_BUSINESS',
+        'Accounts every new item is posted to, one entry per account',
       ),
     postMode: RssFeedPostMode.describe(
       'DRAFT creates a draft and needs posts.draft; SCHEDULE schedules the post publishDelayMinutes after the item is found and needs posts.schedule; PUBLISH publishes it right away and needs posts.publish',
@@ -2504,7 +2617,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       .min(5)
       .max(10080)
       .optional()
-      .describe('Minutes between finding an item and its post going out, 5 to 10080. Required when postMode is SCHEDULE'),
+      .describe('Minutes between finding an item and its post going out. Required when postMode is SCHEDULE'),
     contentMode: RssFeedContentMode.describe(
       'TEMPLATE fills template; AI writes one caption per platform from the article, appends the link, spends 1 AI credit per platform per item and needs ai.generate',
     ),
@@ -2513,9 +2626,13 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       .max(2000)
       .optional()
       .describe(
-        'Post text with {title}, {link}, {description}, {author} and {feed} (max 2000 characters, default "{title}\\n\\n{link}"). The description, then the title, is shortened to fit each platform; the link is never cut',
+        'Post text with {title}, {link}, {description}, {author} and {feed} (default "{title}\\n\\n{link}"). The description, then the title, is shortened to fit each platform; the link is never cut',
       ),
-    aiInstructions: z.string().max(1000).optional().describe('Extra instructions for AI captions (max 1000 characters)'),
+    aiInstructions: z
+      .string()
+      .max(1000)
+      .optional()
+      .describe('Extra instructions for AI captions, such as tone or hashtags. Used when contentMode is AI'),
     includeImage: z
       .boolean()
       .optional()
@@ -2530,19 +2647,19 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       .array(z.string())
       .max(50)
       .optional()
-      .describe('Post only items whose title or summary contains one of these (up to 50)'),
+      .describe('Post only items whose title or summary contains one of these'),
     excludeKeywords: z
       .array(z.string())
       .max(50)
       .optional()
-      .describe('Skip items whose title or summary contains one of these (up to 50)'),
+      .describe('Skip items whose title or summary contains one of these'),
     maxPostsPerCheck: z
       .number()
       .int()
       .min(1)
       .max(10)
       .optional()
-      .describe('New items posted per check, 1 to 10 (default 3). New items are posted oldest first; the rest wait for the next check'),
+      .describe('New items posted per check (default 3). New items are posted oldest first; the rest wait for the next check'),
     checkIntervalMinutes: z
       .union([
         z.literal(15),
@@ -2554,7 +2671,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         z.literal(1440),
       ])
       .optional()
-      .describe('Minutes between checks: 15, 30, 60 (default), 180, 360, 720 or 1440'),
+      .describe('Minutes between checks of the feed (default 60)'),
   };
 
   const RSS_FEED_RECORD =
@@ -2567,11 +2684,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'List the RSS and Atom feeds connected to the workspace (the current one unless workspaceId names another), newest first; a workspace holds at most 20. Each new item of a feed becomes a post on its targets. A feed pauses itself after 5 failed fetches in a row (FETCH_FAILURES), 3 items in a row that failed to post (CONSECUTIVE_FAILURES), when its owner loses the permission its post mode needs (ACCESS_LOST), when the plan no longer covers publishing (SUBSCRIPTION_INACTIVE) or when every target account was disconnected (CONNECTION_REMOVED); pauseReason and lastError say which. Needs the posts.read permission. Takes only the optional workspaceId.',
       inputSchema: {},
-      outputSchema: resultSchema(`An object with rssFeeds: one record per feed. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.listRssFeeds,
+        `An object with rssFeeds: one record per feed. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => {
@@ -2591,11 +2712,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Get one RSS feed by id: its settings, targets, status, pauseReason and lastError, and when it was last checked and last posted. Use list_rss_feed_items to see what it did with each item. Ids outside the workspace return 404. Needs the posts.read permission.',
       inputSchema: rssFeedIdField,
-      outputSchema: resultSchema(RSS_FEED_RECORD),
+      outputSchema: resultSchema(
+        apiResponses.getRssFeed,
+        RSS_FEED_RECORD,
+      ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2619,12 +2744,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         template: rssFeedSettingsFields.template,
       },
       outputSchema: resultSchema(
+        apiResponses.previewRssFeed,
         'An object with url, title, siteUrl and items: one { title, link, summary, publishedAt, imageUrl, text } per item, where text is the item rendered with template.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2651,11 +2778,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .describe('Also post the newest item on the first check (default false)'),
         ...rssFeedSettingsFields,
       },
-      outputSchema: resultSchema(`The new feed. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.createRssFeed,
+        `The new feed. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: false,
       },
     },
     async (input, client) => {
@@ -2681,11 +2812,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         postMode: rssFeedSettingsFields.postMode.optional(),
         contentMode: rssFeedSettingsFields.contentMode.optional(),
       },
-      outputSchema: resultSchema(`The updated feed. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.updateRssFeed,
+        `The updated feed. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id, ...body }, client) => {
@@ -2705,11 +2840,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Delete an RSS feed: it stops being checked for good. Posts it already created stay. Prefer pause_rss_feed when the user may want it back. Ids outside the workspace return 404. Needs the posts.draft permission. Returns { deleted: true }. Irreversible.',
       inputSchema: rssFeedIdField,
-      outputSchema: resultSchema('An object with deleted: true once the feed is removed.'),
+      outputSchema: resultSchema(
+        apiResponses.deleteRssFeed,
+        'An object with deleted: true once the feed is removed.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2730,15 +2869,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         "List the items an RSS feed has seen, newest first, leaving out the ones already in the feed when it was added. Each item has a status: PROCESSING, POSTED (postId links it to its post, for get_post), FILTERED (keyword rules), SKIPPED (published more than 14 days before the feed was added) or FAILED (error says why). Use it to answer why an article was or was not posted. Needs the posts.read permission.",
       inputSchema: {
         ...rssFeedIdField,
-        limit: z.number().int().min(1).max(100).optional().describe('Max items, 1 to 100 (default 20)'),
+        limit: z.number().int().min(1).max(100).optional().describe('Items to return, newest first (default 20)'),
       },
       outputSchema: resultSchema(
+        apiResponses.listRssFeedItems,
         'An object with items: one { id, createdAt, title, link, publishedAt, status, postId, error } per item.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id, ...query }, client) => {
@@ -2758,7 +2899,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Pause an RSS feed: it stops being checked until resume_rss_feed. Posts it already created stay, scheduled ones included; cancel those with delete_post. Ids outside the workspace return 404. Needs the posts.draft permission. Returns the feed with status PAUSED and pauseReason USER.',
       inputSchema: rssFeedIdField,
-      outputSchema: resultSchema(`The paused feed. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.pauseRssFeed,
+        `The paused feed. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -2783,11 +2927,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         "Resume a paused RSS feed: the pause reason is cleared and the feed is checked within a minute, posting new items according to its post mode, so confirm with the user first. It then posts as the member resuming it, who needs the permission of its post mode. When pauseReason is ACCESS_LOST, SUBSCRIPTION_INACTIVE or CONNECTION_REMOVED, fix the cause first or the feed pauses again. Ids outside the workspace return 404. Needs the posts.draft permission.",
       inputSchema: rssFeedIdField,
-      outputSchema: resultSchema(`The resumed feed. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.resumeRssFeed,
+        `The resumed feed. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -2807,7 +2955,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         "Move an RSS feed's next check to now; the feed is fetched within a minute and any new items are posted according to its post mode. Use it when the user just published an article and does not want to wait for the interval. Read list_rss_feed_items a minute later to see the result. Ids outside the workspace return 404. Needs the posts.draft permission.",
       inputSchema: rssFeedIdField,
-      outputSchema: resultSchema(`The feed with its new nextCheckAt. ${RSS_FEED_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.checkRssFeedNow,
+        `The feed with its new nextCheckAt. ${RSS_FEED_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -2835,12 +2986,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         `Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use this for "how did we do this month" questions and for follower counts. Metrics are summed over the selected platforms; partialMetrics names metrics some selected platform cannot report, and a metric no platform reports is null. ${ANALYTICS_COVERAGE} Analytics refresh every few hours (lastSyncedAt says when); if the user just published, call trigger_analytics_sync first. Use get_analytics_timeseries for a trend, get_platform_breakdown to compare platforms, and list_post_analytics for individual posts.`,
       inputSchema: analyticsRangeFields,
       outputSchema: resultSchema(
+        apiResponses.getAnalyticsOverview,
         'An object with views, likes, comments, shares, followers, postsCount, avgViewsPerPost and engagementRate (each { value, previousValue, deltaPercent }), partialMetrics, accountActivityConnectionIds (accounts such as LinkedIn personal profiles and Google Business locations counted by their account-wide activity on each day of the window instead of the posts published in it; they have no rows in list_post_analytics), and lastSyncedAt.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2866,12 +3019,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         ),
       },
       outputSchema: resultSchema(
+        apiResponses.getAnalyticsTimeseries,
         'An object with points: one { date, views, likes, comments, shares, followers, postsCount, engagementRate } per bucket, in date order.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2896,12 +3051,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         connectionIds: analyticsRangeFields.connectionIds,
       },
       outputSchema: resultSchema(
+        apiResponses.getAnalyticsPlatformBreakdown,
         'An object with platforms: one { platform, followers, views, likes, comments, shares, postsCount, avgViewsPerPost, engagementRate, supportedMetrics, accountActivityConnectionIds } per platform, where accountActivityConnectionIds lists the accounts counted by their account-wide daily activity instead of the posts published in the window.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2925,7 +3082,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         sortBy: AnalyticsSortMetric.optional().describe(
           'Metric to sort by, descending. PUBLISHED_AT (default) lists newest first',
         ),
-        page: z.number().int().min(1).optional().default(1).describe('Page number, from 1'),
+        page: z.number().int().min(1).optional().default(1).describe('Page of results to return; move to the next one while hasMore is true'),
         limit: z
           .number()
           .int()
@@ -2933,15 +3090,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .max(100)
           .optional()
           .default(20)
-          .describe('Posts per page, 1 to 100'),
+          .describe('Posts per page'),
       },
       outputSchema: resultSchema(
+        apiResponses.listPostAnalytics,
         'An object with posts (each { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, connectionId, accountName, metrics }), total, page, limit, and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2963,15 +3122,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       inputSchema: {
         ...analyticsRangeFields,
         sortBy: AnalyticsSortMetric.optional().describe('Metric to rank by, descending (default VIEWS)'),
-        limit: z.number().int().min(1).max(50).optional().describe('Posts to return, 1 to 50 (default 10)'),
+        limit: z.number().int().min(1).max(50).optional().describe('How many top posts to return (default 10)'),
       },
       outputSchema: resultSchema(
+        apiResponses.listTopPosts,
         'An object with posts: one { id, postId, postPlatformId, platform, publishedAt, title, thumbnailUrl, permalink, connectionId, accountName, metrics } per post, best first.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -2992,15 +3153,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         "Posts found on the connected accounts that were not published through AdaptlyPost (published natively or with another tool), inside the window: text, thumbnail, permalink, account and publish time. They are read-only; their metrics are in list_post_analytics. Use it to show what an account posted outside AdaptlyPost or to fill in the calendar. Needs the analytics.read permission.",
       inputSchema: {
         ...analyticsRangeFields,
-        limit: z.number().int().min(1).max(1000).optional().describe('Posts to return, 1 to 1000 (default 200)'),
+        limit: z.number().int().min(1).max(1000).optional().describe('Posts to return (default 200)'),
       },
       outputSchema: resultSchema(
+        apiResponses.listDiscoveredPosts,
         'An object with posts: one { id, platform, publishedAt, text, thumbnailUrl, permalink, connectionId, accountName } per post.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => {
@@ -3021,12 +3184,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'How fresh the analytics are, per connected account. Returns syncInProgress, lastSyncedAt, historyHorizonAt (the earliest date any account has data for; earlier dates have no data rather than zero activity) and platforms: one row per account with status (IDLE, QUEUED, SYNCING, FAILED), lastSyncedAt, lastErrorMessage, historyHorizonAt and needsAnalyticsReconnect. When needsAnalyticsReconnect is true the account was connected before analytics permissions existed and returns nothing until the user reconnects it (a connect link works); tell them, do not keep querying. Call this when numbers look stale or empty, and after trigger_analytics_sync to see the run finish. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.getAnalyticsSyncStatus,
         'An object with accountGroupId, syncInProgress, lastSyncedAt, historyHorizonAt, and platforms: one { platform, connectionId, accountName, status, lastSyncedAt, lastErrorMessage, historyHorizonAt, lastDiscoveryAt, needsAnalyticsReconnect } per connected account.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => {
@@ -3047,6 +3212,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Ask AdaptlyPost to refresh analytics now instead of waiting for the scheduled sync: every connected account is queued and the last 7 days are re-read. Use it when the user just published and wants numbers, or when get_analytics_overview shows an old lastSyncedAt. Allowed once per workspace every 15 minutes, and a YouTube channel read in the last 12 hours is skipped; inside the cooldown, or when no connected account has analytics, it returns queued: false with cooldownSecondsRemaining rather than an error, so do not retry in a loop. The sync runs in the background: poll get_analytics_sync_status until syncInProgress is false, then read the metrics again. Takes only the optional workspaceId and changes no content.',
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.triggerAnalyticsSync,
         'An object with queued (true when a sync was started), message, and cooldownSecondsRemaining (seconds until the next allowed sync, null when queued).',
       ),
       annotations: {
@@ -3121,18 +3287,20 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       .array(z.string())
       .max(50)
       .optional()
-      .describe('Only these accounts, by the id from list_accounts, up to 50. Omit for every account'),
+      .describe('Only these accounts, by the id from list_accounts. Omit for every account'),
     platforms: z.array(PlatformType).optional().describe('Only these platforms'),
     statuses: z
       .array(InboxStatus)
       .optional()
-      .describe('Only these statuses: UNREAD, READ or DONE. Omit for all'),
+      .describe('Only items with these inbox statuses. Omit for every status'),
     since: z
       .string()
       .optional()
-      .describe('ISO 8601 date-time; only items created on the platform at or after it'),
-    search: z.string().max(200).optional().describe('Free text to search for, up to 200 characters'),
-    limit: z.number().int().min(1).max(100).optional().describe('Items per page, 1 to 100 (default 25)'),
+      .describe(
+        'ISO 8601 date-time. Only items created on the platform at or after it; for conversations, only those with a message at or after it. Omit for items of any date',
+      ),
+    search: z.string().max(200).optional().describe('Free text to search the items for'),
+    limit: z.number().int().min(1).max(100).optional().describe('Items per page (default 25)'),
     cursor: z
       .string()
       .optional()
@@ -3140,8 +3308,8 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   };
 
   const inboxStatusFields = (what: string, source: string) => ({
-    ids: z.array(z.string()).min(1).max(100).describe(`1 to 100 ${what} ids from ${source}`),
-    status: InboxStatus.describe('UNREAD, READ or DONE'),
+    ids: z.array(z.string()).min(1).max(100).describe(`Ids of the ${what}s to mark, from ${source}`),
+    status: InboxStatus.describe('Inbox status to give every listed item'),
   });
 
   const COMMENT_REPLY_LIMITS =
@@ -3154,12 +3322,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description: `Unread counts for the workspace inbox and what each connected account can do in it. The inbox holds comments on the account's posts (Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky and Mastodon), direct messages (Facebook, Instagram, Bluesky and Mastodon) and Google Business Profile reviews; TikTok and X have no inbox. Each account lists comments, mentions, messages and reviews as AVAILABLE, RECONNECT_REQUIRED (the account lacks the platform permission, some of which still wait on platform review, or its token expired: tell the user to reconnect it in AdaptlyPost) or UNSUPPORTED. Call it first when the user asks what is new or why a channel is empty. ${INBOX_SYNC} ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
       inputSchema: {},
       outputSchema: resultSchema(
+        apiResponses.getInboxSummary,
         'An object with unread { comments, mentions, conversations, reviews } and accounts: one { accountId, platform, accountName, avatarUrl, needsReconnect, lastSyncedAt, lastErrorCode, comments, mentions, messages, reviews } per account, each channel AVAILABLE, RECONNECT_REQUIRED or UNSUPPORTED.',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => respond(() => client.get('/inbox/summary')),
@@ -3171,7 +3341,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Refresh Inbox',
       description: `Queue an inbox sync for every connected account now instead of waiting for the next 10-minute run. It returns at once with { queued: true }; new items show up in the list tools a minute or so later, so do not poll in a tight loop. Nothing is sent to anyone. ${INBOX_READ_RULE} Takes only the optional workspaceId.`,
       inputSchema: {},
-      outputSchema: resultSchema('An object with queued: true.'),
+      outputSchema: resultSchema(
+        apiResponses.refreshInbox,
+        'An object with queued: true.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3193,12 +3366,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         platformPostId: z.string().optional().describe("Only comments on this post, by the platform's own post id"),
       },
       outputSchema: resultSchema(
+        apiResponses.listInboxComments,
         `An object with comments, total, hasMore and nextCursor (null on the last page). Each comment is ${INBOX_COMMENT_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => respond(() => client.get('/inbox/comments', input)),
@@ -3211,12 +3386,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description: `Get one inbox comment with its parent comment (when it is a reply) and the replies under it, to read a conversation before answering. 404 inbox_item_not_found when the id is unknown in this workspace. ${INBOX_READ_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
       outputSchema: resultSchema(
+        apiResponses.getInboxComment,
         `An object with comment, parent (null for a top-level comment) and replies. Each is ${INBOX_COMMENT_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => respond(() => client.get(inboxPath('comments', id))),
@@ -3231,7 +3408,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         ...inboxIdField('comment', 'list_inbox_comments'),
         ...inboxReplyTextField(COMMENT_REPLY_LIMITS),
       },
-      outputSchema: resultSchema(`The new reply. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.replyToInboxComment,
+        `The new reply. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3248,7 +3428,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Hide Comment',
       description: `Hide a comment on the platform so other people no longer see it, where capabilities.canHide is true. Confirm with the user first, naming the comment. A comment that cannot be hidden answers 400 inbox_action_unsupported; stop there. unhide_inbox_comment reverses it. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema(`The comment with isHidden: true. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.hideInboxComment,
+        `The comment with isHidden: true. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3265,7 +3448,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Unhide Comment',
       description: `Show a hidden comment on the platform again, where capabilities.canHide is true. A comment that cannot be unhidden answers 400 inbox_action_unsupported; stop there. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema(`The comment with isHidden: false. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.unhideInboxComment,
+        `The comment with isHidden: false. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3282,7 +3468,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Like Comment',
       description: `Like a comment from the account, on Facebook, Bluesky, Mastodon (a favourite) and LinkedIn. Instagram, YouTube and Threads do not allow it, and a comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. The like is public. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema(`The comment with likedByAccount: true. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.likeInboxComment,
+        `The comment with likedByAccount: true. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3299,7 +3488,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Unlike Comment',
       description: `Take back the account's like on a comment, on Facebook, Bluesky, Mastodon and LinkedIn. A comment whose capabilities.canLike is false answers 400 inbox_action_unsupported; stop there. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema(`The comment with likedByAccount: false. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.unlikeInboxComment,
+        `The comment with likedByAccount: false. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3316,11 +3508,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Delete Comment',
       description: `Delete a comment on the platform and from the inbox, where capabilities.canDelete is true. Facebook and LinkedIn allow any comment on the Page's or organization's posts, Instagram any comment on the account's media, and YouTube, Threads, Bluesky and Mastodon only the account's own comments and replies. Anything else answers 400 inbox_action_unsupported; stop there. It cannot be undone, so confirm with the user first, quoting the comment. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema('An object with deleted: true.'),
+      outputSchema: resultSchema(
+        apiResponses.deleteInboxComment,
+        'An object with deleted: true.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => respond(() => client.delete(inboxPath('comments', id))),
@@ -3332,7 +3528,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Mark Inbox Comments',
       description: `Mark up to 100 comments UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('comment', 'list_inbox_comments'),
-      outputSchema: resultSchema(`An object with comments (the updated comments) and unreadCount. ${INBOX_COMMENT_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.updateInboxCommentsStatus,
+        `An object with comments (the updated comments) and unreadCount. ${INBOX_COMMENT_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -3350,12 +3549,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description: `List posts and comments that mention the account, newest first, on Facebook, Instagram, Threads, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose mentions show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
       inputSchema: inboxListFields,
       outputSchema: resultSchema(
+        apiResponses.listInboxMentions,
         `An object with mentions, total, hasMore and nextCursor (null on the last page). Each mention is ${INBOX_MENTION_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => respond(() => client.get('/inbox/mentions', input)),
@@ -3372,7 +3573,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           'The limit is the platform\'s reply limit: Threads 500 characters, Bluesky 300, Mastodon 500, Facebook 8000, Instagram 2200. Empty or too long text answers 400 inbox_reply_invalid, whose message names the limit',
         ),
       },
-      outputSchema: resultSchema(`The mention with the new reply in replies. ${INBOX_MENTION_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.replyToInboxMention,
+        `The mention with the new reply in replies. ${INBOX_MENTION_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3389,7 +3593,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Mark Inbox Mentions',
       description: `Mark up to 100 mentions UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('mention', 'list_inbox_mentions'),
-      outputSchema: resultSchema(`An object with mentions (the updated mentions) and unreadCount. ${INBOX_MENTION_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.updateInboxMentionsStatus,
+        `An object with mentions (the updated mentions) and unreadCount. ${INBOX_MENTION_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -3404,15 +3611,17 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'list_inbox_conversations',
     {
       title: 'List Inbox Conversations',
-      description: `List direct message conversations, most recent message first, on Facebook (Messenger), Instagram, Bluesky and Mastodon. Page with cursor while hasMore is true. An account whose messages show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      description: `List direct message conversations, most recent message first, on Facebook (Messenger), Instagram, Bluesky and Mastodon. Returns { conversations, total, hasMore, nextCursor }; each conversation has the account, the other participant, the last message text and time, its inbox status, replyWindowEndsAt and capabilities.canReply, but not the messages themselves, which get_inbox_conversation returns. Page with cursor while hasMore is true. An account whose messages show RECONNECT_REQUIRED in get_inbox_summary returns none until the user reconnects it in AdaptlyPost. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
       inputSchema: inboxListFields,
       outputSchema: resultSchema(
+        apiResponses.listInboxConversations,
         `An object with conversations, total, hasMore and nextCursor (null on the last page). Each conversation is ${INBOX_CONVERSATION_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => respond(() => client.get('/inbox/conversations', input)),
@@ -3425,12 +3634,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description: `Get one direct message conversation with its messages, to read the thread before answering. 404 inbox_item_not_found when the id is unknown in this workspace. ${INBOX_READ_RULE}`,
       inputSchema: inboxIdField('conversation', 'list_inbox_conversations'),
       outputSchema: resultSchema(
+        apiResponses.getInboxConversation,
         `An object with conversation and messages: one { id, isOwn, text, hasAttachments, createdAt } per message. ${INBOX_CONVERSATION_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => respond(() => client.get(inboxPath('conversations', id))),
@@ -3448,6 +3659,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         ),
       },
       outputSchema: resultSchema(
+        apiResponses.sendInboxMessage,
         `An object with conversation and message ({ id, isOwn, text, hasAttachments, createdAt }). ${INBOX_CONVERSATION_RECORD}`,
       ),
       annotations: {
@@ -3468,6 +3680,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description: `Mark up to 100 conversations UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to the platform. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('conversation', 'list_inbox_conversations'),
       outputSchema: resultSchema(
+        apiResponses.updateInboxConversationsStatus,
         `An object with conversations (the updated conversations) and unreadCount. ${INBOX_CONVERSATION_RECORD}`,
       ),
       annotations: {
@@ -3484,25 +3697,27 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     'list_inbox_reviews',
     {
       title: 'List Inbox Reviews',
-      description: `List Google Business Profile reviews of the connected locations, newest first. Filter by rating and by whether the review already has a reply, plus the usual inbox filters. Page with cursor while hasMore is true. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
+      description: `List Google Business Profile reviews of the connected locations, newest first. Returns { reviews, total, hasMore, nextCursor }; each review has the location, reviewer name, star rating, text, the location's current reply (or null), its inbox status and capabilities.canReply. Filter by rating and by whether the review already has a reply, plus the usual inbox filters. Page with cursor while hasMore is true. ${INBOX_SYNC} ${INBOX_READ_RULE}`,
       inputSchema: {
         ...inboxListFields,
         ratings: z
           .array(z.number().int().min(1).max(5))
           .optional()
-          .describe('Only reviews with these star ratings, 1 to 5'),
+          .describe('Only reviews with these star ratings'),
         replied: z
           .boolean()
           .optional()
           .describe('true for reviews that already have a reply, false for those without one'),
       },
       outputSchema: resultSchema(
+        apiResponses.listInboxReviews,
         `An object with reviews, total, hasMore and nextCursor (null on the last page). Each review is ${INBOX_REVIEW_RECORD}`,
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (input, client) => respond(() => client.get('/inbox/reviews', input)),
@@ -3519,7 +3734,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           'Up to 4096 bytes in UTF-8 (maxReplyLength on the review). Empty or too long text answers 400 inbox_reply_invalid',
         ),
       },
-      outputSchema: resultSchema(`The review with its new reply. ${INBOX_REVIEW_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.replyToInboxReview,
+        `The review with its new reply. ${INBOX_REVIEW_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3536,11 +3754,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Delete Review Reply',
       description: `Delete the location's reply to a Google review; the review itself stays. It cannot be undone, so confirm with the user first, quoting the reply. ${INBOX_RECONNECT_RULE} ${INBOX_REFUSALS} ${INBOX_REPLY_RULE}`,
       inputSchema: inboxIdField('review', 'list_inbox_reviews'),
-      outputSchema: resultSchema(`The review with reply: null. ${INBOX_REVIEW_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.deleteInboxReviewReply,
+        `The review with reply: null. ${INBOX_REVIEW_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => respond(() => client.delete(inboxPath('reviews', id, '/reply'))),
@@ -3552,7 +3774,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       title: 'Mark Inbox Reviews',
       description: `Mark up to 100 reviews UNREAD, READ or DONE in the AdaptlyPost inbox. Only AdaptlyPost changes; nothing is sent to Google. ${INBOX_REPLY_RULE}`,
       inputSchema: inboxStatusFields('review', 'list_inbox_reviews'),
-      outputSchema: resultSchema(`An object with reviews (the updated reviews) and unreadCount. ${INBOX_REVIEW_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.updateInboxReviewsStatus,
+        `An object with reviews (the updated reviews) and unreadCount. ${INBOX_REVIEW_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -3584,11 +3809,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'List the webhook endpoints registered for the workspace (the current one unless workspaceId names another), with whether each is active and when it last succeeded or failed. Needs the webhooks.read permission, which Admin, Editor and Viewer hold. Takes only the optional workspaceId.',
       inputSchema: {},
-      outputSchema: resultSchema(`An object with webhooks: one record per endpoint. ${WEBHOOK_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.listWebhooks,
+        `An object with webhooks: one record per endpoint. ${WEBHOOK_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async (_args, client) => {
@@ -3608,11 +3837,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Get one webhook endpoint by id. Ids outside the workspace return 404. Needs the webhooks.read permission.',
       inputSchema: webhookIdField,
-      outputSchema: resultSchema(WEBHOOK_RECORD),
+      outputSchema: resultSchema(
+        apiResponses.getWebhook,
+        WEBHOOK_RECORD,
+      ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -3635,11 +3868,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         url: z.string().url().describe('Publicly reachable http(s) endpoint that receives the events'),
         events: webhookEventsField,
       },
-      outputSchema: resultSchema(`The new webhook plus secret, the signing secret shown only this once. ${WEBHOOK_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.createWebhook,
+        `The new webhook plus secret, the signing secret shown only this once. ${WEBHOOK_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: false,
       },
     },
     async (input, client) => {
@@ -3664,7 +3901,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         active: z.boolean().optional().describe('false stops deliveries, true resumes them'),
         events: webhookEventsField,
       },
-      outputSchema: resultSchema(`The updated webhook. ${WEBHOOK_RECORD}`),
+      outputSchema: resultSchema(
+        apiResponses.updateWebhook,
+        `The updated webhook. ${WEBHOOK_RECORD}`,
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
@@ -3689,11 +3929,15 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       description:
         'Delete a webhook endpoint; it receives nothing more. Use update_webhook with active: false to pause it instead. Needs the webhooks.manage permission. Returns { deleted: true }. Irreversible.',
       inputSchema: webhookIdField,
-      outputSchema: resultSchema('An object with deleted: true once the webhook is removed.'),
+      outputSchema: resultSchema(
+        apiResponses.deleteWebhook,
+        'An object with deleted: true once the webhook is removed.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: true,
+        idempotentHint: true,
       },
     },
     async ({ id }, client) => {
@@ -3714,12 +3958,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         'Send one signed webhook.test event to the endpoint now and report how it answered, to check the URL and the signature check work. Needs the webhooks.manage permission.',
       inputSchema: webhookIdField,
       outputSchema: resultSchema(
+        apiResponses.testWebhook,
         'An object with success, statusCode (the HTTP status the endpoint answered) and error when the delivery failed.',
       ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: true,
         destructiveHint: false,
+        idempotentHint: false,
       },
     },
     async ({ id }, client) => {
@@ -3746,13 +3992,16 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .min(1)
           .max(2000)
           .describe(
-            'What the caption should say or be about, including tone, audience, hashtags or a call to action (max 2000 characters)',
+            'What the caption should say or be about, including tone, audience, hashtags or a call to action',
           ),
         platform: CaptionPlatform.optional().describe(
           "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting. Omit for a general caption",
         ),
       },
-      outputSchema: resultSchema('An object with caption: the generated text.'),
+      outputSchema: resultSchema(
+        apiResponses.generateCaption,
+        'An object with caption: the generated text.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -3781,22 +4030,25 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .string()
           .min(1)
           .max(2000)
-          .describe('How the caption should change (max 2000 characters)'),
+          .describe('How the caption should change'),
         originalText: z
           .string()
           .min(1)
           .max(10000)
-          .describe('The caption to rewrite (max 10000 characters)'),
+          .describe('The caption to rewrite'),
         partialText: z
           .string()
           .max(10000)
           .optional()
-          .describe('A partly written caption to continue from (max 10000 characters)'),
+          .describe('A partly written caption to continue from'),
         platform: CaptionPlatform.optional().describe(
           "Platform the caption is for; generation targets that platform's character limit; check the returned text before posting",
         ),
       },
-      outputSchema: resultSchema('An object with caption: the rewritten text.'),
+      outputSchema: resultSchema(
+        apiResponses.refineCaption,
+        'An object with caption: the rewritten text.',
+      ),
       annotations: {
         readOnlyHint: false,
         openWorldHint: false,
@@ -3825,14 +4077,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .string()
           .min(1)
           .max(2000)
-          .describe('What the image should show, including style and composition (max 2000 characters)'),
+          .describe('What the image should show, including style and composition'),
         aspectRatio: ImageAspectRatio.optional().describe(
           'Image shape (default 1:1). Pick one that suits the target platform, e.g. 9:16 for stories and reels, 4:5 for Instagram feed, 16:9 for YouTube and X',
         ),
         model: ImageModel.optional().describe(
           'standard (default, 2 credits) or premium (higher fidelity, 4 credits)',
         ),
-        quality: ImageQuality.optional().describe('LOW, MEDIUM or HIGH rendering quality'),
+        quality: ImageQuality.optional().describe('Rendering quality of the image'),
         sessionId: z
           .string()
           .uuid()
@@ -3844,9 +4096,10 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .array(z.string())
           .max(5)
           .optional()
-          .describe('Up to 5 image URLs the user provided, such as publicUrl values from upload_media, to guide the style or subject'),
+          .describe('Image URLs the user provided, such as publicUrl values from upload_media, to guide the style or subject'),
       },
       outputSchema: resultSchema(
+        apiResponses.generateImage,
         'An object with jobId (pass it to get_image_job), sessionId, and status (queued).',
       ),
       annotations: {
@@ -3876,12 +4129,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
         jobId: z.string().min(1).describe('jobId returned by generate_image'),
       },
       outputSchema: resultSchema(
+        apiResponses.getImageJob,
         'An object with jobId, sessionId, status (queued, processing, generating, completed or failed), imageUrl (null until completed), imageId, and error (null unless failed).',
       ),
       annotations: {
         readOnlyHint: true,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
     },
     async ({ jobId }, client) => {

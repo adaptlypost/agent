@@ -25,6 +25,7 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "check-types": "tsc --noEmit",
+    "generate:api-schemas": "node scripts/generate-api-schemas.mjs",
     "lint": "eslint src/"
   },
   "dependencies": {

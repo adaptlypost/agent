@@ -212,6 +212,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | `search_instagram_audio` | Search Instagram music and original sounds to add to a Reel | No |
 | `list_pinterest_boards` | List the boards of a Pinterest account; pass a board `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) | No |
 | `list_wordpress_categories` | List the categories of a WordPress site; pass their `id`s as `wordpressConfigs[].categoryIds` | No |
+| `resolve_linkedin_organization` | Look up a LinkedIn company page by its URL or vanity name and get the `mention` to paste into a LinkedIn post. Only on a server you run yourself for now, see [Run the server yourself](#run-the-server-yourself) | No |
 
 ### Recurring posts
 
@@ -346,6 +347,7 @@ An operation outside the role answers 403 with `code: permission_denied`. The sk
 - Save drafts and publish them later
 - Repeat a post daily, weekly, monthly or yearly, then pause, resume or stop the series
 - Read analytics: views, likes, comments, followers and engagement per window, per platform and per post
+- Look up a LinkedIn company page from its URL and mention it in a LinkedIn post
 - Read and answer comments, mentions, direct messages and Google reviews from the inbox, and hide, like or delete comments
 - Manage webhooks, including which events each one receives, and client connect links
 - Write captions and generate images with AdaptlyPost AI, paid from your AI credits
@@ -357,7 +359,7 @@ Agent: Done. Post scheduled for tomorrow at 9:00 AM on your LinkedIn account.
 
 ## Run the server yourself
 
-The hosted server is the easy path. To run it yourself over stdio with [Bun](https://bun.sh):
+The hosted server is the easy path. A server you run yourself over stdio also has `resolve_linkedin_organization`, which the hosted server gets after its next directory review. To run it yourself with [Bun](https://bun.sh):
 
 ```json
 {

@@ -1211,7 +1211,9 @@ function callerOf(headers: Record<string, string | string[] | undefined> | undef
   return { uploadSurface: ANTHROPIC_CLIENTS_WITH_MCP_APPS.has(anthropicClient) ? 'widget' : 'link' };
 }
 
-function createMcpServer(apiClient?: RestClient): McpServer {
+type ServerTransport = 'stdio' | 'http';
+
+function createMcpServer(transport: ServerTransport, apiClient?: RestClient): McpServer {
   const baseClient = apiClient ?? api;
   const server = new McpServer(
     {
@@ -1246,6 +1248,10 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         callerOf(extra.requestInfo?.headers),
       );
     });
+  };
+
+  const stdioOnlyTool = <Args extends ZodRawShape>(...args: Parameters<typeof tool<Args>>): void => {
+    if (transport === 'stdio') tool<Args>(...args);
   };
 
   server.registerTool(
@@ -1394,6 +1400,38 @@ function createMcpServer(apiClient?: RestClient): McpServer {
         const data = await client.get(
           `/social-accounts/${encodeURIComponent(accountId)}/pinterest-boards`,
         );
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  stdioOnlyTool(
+    'resolve_linkedin_organization',
+    {
+      title: 'Look Up LinkedIn Company Page',
+      description:
+        "Look up a LinkedIn company page so a LinkedIn post can mention (tag) it. Takes the page URL (https://www.linkedin.com/company/acme/), its vanity name (acme, the part after linkedin.com/company/) or @acme. LinkedIn only matches the exact vanity name, so this is not a search: 'acm' or a company name with spaces finds nothing, and you should ask the user for the page URL when you do not know the vanity name. Returns { organization } with id, name, vanityName, urn and mention. Paste mention as it is into the LinkedIn text of create_post, update_post or bulk_schedule_posts; when the post also goes to other platforms, put it in platformTexts for LINKEDIN, because other platforms show the mention syntax as raw text. Fails with linkedin_organization_not_found (404) when no page has that vanity name, linkedin_organization_query_invalid (400) when the query is neither a page URL nor a vanity name, and linkedin_organization_lookup_unavailable (400) when no LinkedIn account of the workspace could run the lookup: tell the user to connect or reconnect a LinkedIn account in AdaptlyPost, ideally a company page they administer. Nothing is posted.",
+      inputSchema: {
+        query: z
+          .string()
+          .min(1)
+          .max(300)
+          .describe('The company page URL, its vanity name, or @vanity, e.g. "https://www.linkedin.com/company/acme/" or "acme"'),
+      },
+      outputSchema: resultSchema(
+        'An object with organization: { id, name, vanityName, urn, mention }. Paste mention into the LinkedIn post text.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+      },
+    },
+    async ({ query }, client) => {
+      try {
+        const data = await client.get('/linkedin-organizations/lookup', { query });
         return toolResult(data);
       } catch (error) {
         return toolError(error);
@@ -4403,7 +4441,7 @@ async function main() {
           sessionIdGenerator: undefined,
           enableJsonResponse: !wantsSse,
         });
-        const reqServer = createMcpServer(reqApi);
+        const reqServer = createMcpServer('http', reqApi);
         await reqServer.connect(withoutSchemaDialect(transport));
         try {
           let parsedBody: unknown;
@@ -4447,7 +4485,7 @@ async function main() {
       console.error(`Connect with: https://your-domain/mcp`);
     });
   } else {
-    const server = createMcpServer();
+    const server = createMcpServer('stdio');
     const transport = new StdioServerTransport();
     await server.connect(withoutSchemaDialect(transport));
   }

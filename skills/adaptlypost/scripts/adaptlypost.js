@@ -547,6 +547,19 @@ const COMMANDS = {
     output(data);
   },
 
+  "linkedin:organization": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.query || parsed.query === true) {
+      error(
+        "Usage: ./scripts/adaptlypost.js linkedin:organization --query <company page URL or vanity name>",
+      );
+      process.exit(1);
+    }
+    const params = new URLSearchParams({ query: parsed.query });
+    const data = await request("GET", `/api/v1/linkedin-organizations/lookup?${params}`);
+    output(data);
+  },
+
   post: async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.caption && !parsed.text) {

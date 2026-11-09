@@ -1,7 +1,7 @@
 {
   "identifier": "adaptlypost-agent",
   "name": "AdaptlyPost",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, and an inbox to answer comments, mentions, direct messages and Google reviews. Sign in with OAuth or an API key.",
   "author": "AdaptlyPost",
   "authorUrl": "https://adaptlypost.com",

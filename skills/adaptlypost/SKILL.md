@@ -849,7 +849,7 @@ AdaptlyPost has a native MCP server at `https://mcp.adaptlypost.com/mcp`. OAuth-
 | `trigger_analytics_sync` | Refresh analytics now, once per 15 minutes per workspace |
 | `list_webhooks` | List webhook endpoints and their delivery state |
 | `get_webhook` | One webhook endpoint |
-| `create_webhook` | Register an endpoint for the default events or the `events` you list, inbox events included; the signing secret is shown only in this response |
+| `create_webhook` | Register an endpoint for the default events or the `events` you list, inbox events included; returns a one-time `secretRevealUrl` for the user to see the signing secret, never the secret itself |
 | `update_webhook` | Change an endpoint's URL or `events`, or turn it off and on |
 | `delete_webhook` | Delete an endpoint |
 | `test_webhook` | Send a signed `webhook.test` event and see how the endpoint answered |

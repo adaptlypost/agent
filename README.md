@@ -288,7 +288,7 @@ The inbox holds comments on the account's posts (Facebook, Instagram, Threads, Y
 | --- | --- | --- |
 | `list_webhooks` | List webhook endpoints and their delivery state | No |
 | `get_webhook` | One webhook endpoint | No |
-| `create_webhook` | Register an endpoint for the post, account and image events, or for the events you pick, inbox events included; the signing secret is shown only in this response | Yes |
+| `create_webhook` | Register an endpoint for the post, account and image events, or for the events you pick, inbox events included; the signing secret goes to the user through a one-time browser link, never to the assistant | Yes |
 | `update_webhook` | Change an endpoint's URL or events, or turn it off and on | Yes |
 | `delete_webhook` | Delete an endpoint | Yes |
 | `test_webhook` | Send a signed `webhook.test` event and see how the endpoint answered | Yes |

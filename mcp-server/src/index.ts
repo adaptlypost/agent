@@ -55,6 +55,12 @@ import {
 import { withoutSchemaDialect } from './schema-dialect.js';
 import { isSetupPageRequest, sendSetupPage, type SetupPageConfig } from './setup-page.js';
 import {
+  parkWebhookSecret,
+  routeWebhookSecret,
+  saveWebhookSecretFile,
+  WEBHOOK_SECRET_PATH,
+} from './webhook-secret-links.js';
+import {
   oauthConfigFromEnv,
   handleProtectedResourceMetadata,
   sendUnauthorized,
@@ -3916,6 +3922,20 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
   const WEBHOOK_RECORD =
     'The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row).';
 
+  const CREATE_WEBHOOK_RESULT = apiResponses.createWebhook
+    .omit({ secret: true })
+    .extend({
+      secretRevealUrl: z
+        .string()
+        .optional()
+        .describe('One-time link for the user to open in their browser to see the signing secret. Give it to the user; never open or fetch it yourself'),
+      secretRevealExpiresAt: z.string().optional().describe('When secretRevealUrl stops working, 30 minutes after creation'),
+      secretFile: z
+        .string()
+        .optional()
+        .describe('Local install only: path of the file, readable only by the user, that holds the signing secret. Give the path to the user; never read the file yourself'),
+    });
+
   const webhookEventsField = z
     .array(WebhookEvent)
     .optional()
@@ -3984,14 +4004,14 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Create Webhook',
       description:
-        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. Returns the new webhook (id, url, active, events, createdAt, updatedAt, lastSuccessAt, lastFailureAt, disabledAt) plus secret. This response is the only time the signing secret is shown: list_webhooks and get_webhook never return it, so give it to the user to store. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. Returns the new webhook (id, url, active, events, createdAt, updatedAt, lastSuccessAt, lastFailureAt, disabledAt). The signing secret never comes back to you: the result carries secretRevealUrl, a link the user opens in their browser to see the secret once within 30 minutes (on a local install, secretFile, a file only the user can read). Give the user that link or path and do not open, fetch or read it yourself. If the user loses the secret, delete the webhook and create it again. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
       inputSchema: {
         url: z.string().url().describe('Publicly reachable http(s) endpoint that receives the events'),
         events: webhookEventsField,
       },
       outputSchema: resultSchema(
-        apiResponses.createWebhook,
-        `The new webhook plus secret, the signing secret shown only this once. ${WEBHOOK_RECORD}`,
+        CREATE_WEBHOOK_RESULT,
+        `The new webhook, plus where the user collects the signing secret. ${WEBHOOK_RECORD}`,
       ),
       annotations: {
         readOnlyHint: false,
@@ -4002,8 +4022,12 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     },
     async (input, client) => {
       try {
-        const data = await client.post('/webhooks', input);
-        return toolResult(data);
+        const { secret, ...webhook } = (await client.post('/webhooks', input)) as Record<string, unknown>;
+        if (typeof secret !== 'string') return toolResult(webhook);
+        const handoff = isHttpMode
+          ? parkWebhookSecret(PUBLIC_ORIGIN, secret, String(webhook.url ?? input.url))
+          : { secretFile: await saveWebhookSecretFile(String(webhook.id ?? randomUUID()), secret) };
+        return toolResult({ ...webhook, ...handoff });
       } catch (error) {
         return toolError(error);
       }
@@ -4792,6 +4816,11 @@ async function main() {
 
       if (req.url?.startsWith(`${UPLOAD_SESSION_PATH}/`) && req.method === 'POST') {
         await routeUploadSession(req, res);
+        return;
+      }
+
+      if (req.url?.startsWith(`${WEBHOOK_SECRET_PATH}/`)) {
+        routeWebhookSecret(req, res);
         return;
       }
 

@@ -1,0 +1,33 @@
+mcp-server/src/webhook-secret-links.ts
+  s_aee215e150de04::t_cc687e66894be2 1-122
+README.md
+  s_aee215e150de04::t_c348975a601fbc 291
+gemini-extension.json
+  s_aee215e150de04::t_a0ab9f499f16b7 3
+lhm.plugin.json
+  s_aee215e150de04::t_06c7e7ba656026 4
+mcp-server/package.json
+  s_aee215e150de04::t_be9a2494bc2a0e 3
+mcp-server/src/index.ts
+  s_aee215e150de04::t_4775a85e39e536 57-62,3925-3938,4007,4013-4014,4025-4030,4822-4826
+package.json
+  s_aee215e150de04::t_96c513bacc671d 3
+skills/adaptlypost/SKILL.md
+  s_aee215e150de04::t_b2b79c6f5c755e 852
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "098f2276d9698c07b0486258b41de20f9fea051f",
+  "prompts": {},
+  "sessions": {
+    "s_aee215e150de04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff7c7e82-a0b1-4c95-a485-a2af69cad7f0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

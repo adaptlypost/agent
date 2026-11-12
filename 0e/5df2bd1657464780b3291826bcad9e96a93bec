@@ -1,0 +1,29 @@
+gemini-extension.json
+  s_cf82ba64fdcd75::t_016209070dc623 3
+lhm.plugin.json
+  s_cf82ba64fdcd75::t_d37da51c4517df 4,775,1856,3071,4313,5347
+mcp-server/package.json
+  s_cf82ba64fdcd75::t_b32a4815ceed82 3
+mcp-server/src/index.ts
+  s_cf82ba64fdcd75::t_77e014d22801af 194
+package.json
+  s_cf82ba64fdcd75::t_85d23fa38295c4 3
+skills/adaptlypost/SKILL.md
+  s_cf82ba64fdcd75::t_e7f4e53525c33d 375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e5df2bd1657464780b3291826bcad9e96a93bec",
+  "prompts": {},
+  "sessions": {
+    "s_cf82ba64fdcd75": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "badcde7c-47cb-4a38-8043-549adbafe864",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

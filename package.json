@@ -1,6 +1,6 @@
 {
   "name": "@adaptlypost/agent",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "description": "AdaptlyPost agent integrations: the agent skill, the MCP server and the Gemini CLI extension for posting to 14 social media platforms",
   "license": "MIT",
   "author": "AdaptlyPost",

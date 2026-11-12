@@ -372,7 +372,7 @@ Body: {
 
 `linkedinConfigs` is accepted on create and update. Bulk scheduling does not take `DOCUMENT` posts; create them one at a time.
 
-`CAROUSEL` takes 2 or more items: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel. Give a platform with a lower limit its own items through `platformMedia`.
+`CAROUSEL` takes 2 or more items: up to 4 on Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on X, LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos in one carousel; every other platform takes images only, and YouTube has no carousel. Give a platform with a lower limit its own items through `platformMedia`.
 
 Omit `scheduledAt` to publish now (a past value does the same); a future value schedules; `saveAsDraft: true` stores a DRAFT and defers validation to publish. A `scheduledAt` sent with `saveAsDraft: true` is the draft's planned date: the post stays a DRAFT, nothing is scheduled or published, and Publish Draft without `scheduledAt` later schedules it for that date. `timezone` is stored for display and does not shift `scheduledAt`.
 

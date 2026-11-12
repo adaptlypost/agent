@@ -191,7 +191,7 @@ const DOCUMENT_POST_RULE =
   'DOCUMENT publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post and is LinkedIn only: put exactly that one file in mediaUrls, target only LINKEDIN, and set the title with linkedinConfigs';
 
 const CAROUSEL_RULE =
-  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on TWITTER, BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK, THREADS and TELEGRAM, 20 on LINKEDIN and WORDPRESS, 30 on TUMBLR and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel. Give a platform with a lower limit its own items through platformMedia';
+  'CAROUSEL takes 2 or more items in mediaUrls, up to 4 on BLUESKY and MASTODON, 5 on PINTEREST, 10 on INSTAGRAM, FACEBOOK, THREADS and TELEGRAM, 20 on TWITTER, LINKEDIN and WORDPRESS, 30 on TUMBLR and 35 on TIKTOK (JPEG or WebP photos only). INSTAGRAM and THREADS accept images and videos in the same carousel; every other platform takes images only, and YOUTUBE has no carousel. Give a platform with a lower limit its own items through platformMedia';
 
 const GOOGLE_BUSINESS_RULE =
   'GOOGLE_BUSINESS takes TEXT or IMAGE with one JPEG or PNG image up to 5 MB, and text up to 1500 characters';

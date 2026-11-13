@@ -1,7 +1,7 @@
 {
   "identifier": "adaptlypost-agent",
   "name": "AdaptlyPost",
-  "version": "1.20.1",
+  "version": "1.21.0",
   "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, and an inbox to answer comments, mentions, direct messages and Google reviews. Sign in with OAuth or an API key.",
   "author": "AdaptlyPost",
   "authorUrl": "https://adaptlypost.com",
@@ -723,7 +723,7 @@
     {
       "name": "create_post",
       "title": "Create Post",
-      "description": "Create one post on the user's own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft's planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories and tags, YouTube audio language, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.",
+      "description": "Create one post on the user's own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft's planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1715,6 +1715,15 @@
                   },
                   "maxItems": 50,
                   "description": "Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PUBLISH",
+                    "DRAFT",
+                    "PENDING"
+                  ],
+                  "description": "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor"
                 }
               },
               "required": [
@@ -1722,7 +1731,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds"
+            "description": "WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds"
           },
           "linkedinConfigs": {
             "type": "array",
@@ -2796,6 +2805,15 @@
                   },
                   "maxItems": 50,
                   "description": "Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PUBLISH",
+                    "DRAFT",
+                    "PENDING"
+                  ],
+                  "description": "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor"
                 }
               },
               "required": [
@@ -2803,7 +2821,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds"
+            "description": "WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds"
           },
           "linkedinConfigs": {
             "type": "array",
@@ -3956,6 +3974,15 @@
                   },
                   "maxItems": 50,
                   "description": "Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PUBLISH",
+                    "DRAFT",
+                    "PENDING"
+                  ],
+                  "description": "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor"
                 }
               },
               "required": [
@@ -3963,7 +3990,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds"
+            "description": "WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds"
           },
           "linkedinConfigs": {
             "type": "array",
@@ -5089,6 +5116,15 @@
                         },
                         "maxItems": 50,
                         "description": "Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PUBLISH",
+                          "DRAFT",
+                          "PENDING"
+                        ],
+                        "description": "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor"
                       }
                     },
                     "required": [
@@ -5261,7 +5297,7 @@
             "items": {
               "$ref": "#/properties/posts/items/properties/wordpressConfigs/items"
             },
-            "description": "WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds"
+            "description": "WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds"
           },
           "workspaceId": {
             "type": "string",
@@ -6123,6 +6159,15 @@
                         },
                         "maxItems": 50,
                         "description": "Tag names, up to 50. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PUBLISH",
+                          "DRAFT",
+                          "PENDING"
+                        ],
+                        "description": "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor"
                       }
                     },
                     "required": [
@@ -6295,7 +6340,7 @@
             "items": {
               "$ref": "#/properties/posts/items/properties/wordpressConfigs/items"
             },
-            "description": "WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds"
+            "description": "WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds"
           },
           "workspaceId": {
             "type": "string",

@@ -438,6 +438,8 @@ function buildTumblrConfig(args, parsed) {
   });
 }
 
+const WORDPRESS_STATUSES = ["PUBLISH", "DRAFT", "PENDING"];
+
 function buildWordPressConfig(args, parsed) {
   const categoryIds = parseRepeatedRaw(args, "wordpress-category").map((value) => {
     const id = Number(value);
@@ -448,11 +450,17 @@ function buildWordPressConfig(args, parsed) {
     return id;
   });
   const tags = parseRepeatedRaw(args, "wordpress-tag");
+  const status = parsed["wordpress-status"] && String(parsed["wordpress-status"]).toUpperCase();
+  if (status && !WORDPRESS_STATUSES.includes(status)) {
+    error(`--wordpress-status takes ${WORDPRESS_STATUSES.join(", ")}, got: ${parsed["wordpress-status"]}`);
+    process.exit(1);
+  }
   return withoutEmpty({
     title: parsed["wordpress-title"] && String(parsed["wordpress-title"]),
     excerpt: parsed["wordpress-excerpt"] && String(parsed["wordpress-excerpt"]),
     categoryIds: categoryIds.length > 0 ? categoryIds : undefined,
     tags: tags.length > 0 ? tags : undefined,
+    status,
   });
 }
 

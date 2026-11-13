@@ -587,6 +587,12 @@ const WordPressConfigSchema = z.object({
     .describe(
       'WordPress tag names. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise',
     ),
+  status: z
+    .enum(['PUBLISH', 'DRAFT', 'PENDING'])
+    .optional()
+    .describe(
+      "What the post becomes on the site at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to saveAsDraft: the post must still be published or scheduled to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor",
+    ),
 });
 
 const PinterestConfigSchema = z.object({
@@ -767,7 +773,7 @@ const platformConfigFields = {
     .array(WordPressConfigSchema)
     .optional()
     .describe(
-      'WordPress per-site config: title, excerpt, categories and tags. connectionId must match an entry in wordpressConnectionIds',
+      'WordPress per-site config: title, excerpt, categories, tags and status (publish, leave a draft or submit for review). connectionId must match an entry in wordpressConnectionIds',
     ),
 };
 
@@ -2091,7 +2097,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories and tags, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
         apiResponses.createPost,

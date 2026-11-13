@@ -1,0 +1,35 @@
+README.md
+  s_b2786f7d09510c::t_4adee983596064 162,189
+gemini-extension.json
+  s_b2786f7d09510c::t_3106c60742df8d 3
+lhm.plugin.json
+  s_b2786f7d09510c::t_9f211194d9e60e 4,726,1718-1726,1734,2808-2816,2824,3977-3985,3993,5119-5127,5300,6162-6170,6343
+mcp-server/package.json
+  s_b2786f7d09510c::t_0f6704c521d4ae 3
+mcp-server/src/api-schemas.ts
+  s_b2786f7d09510c::t_708567fc4058b8 90
+mcp-server/src/index.ts
+  s_b2786f7d09510c::t_d757afcf161515 590-595,776,2100
+package.json
+  s_b2786f7d09510c::t_212727101f27cd 3
+skills/adaptlypost/SKILL.md
+  s_b2786f7d09510c::t_a58c4e1d81e018 172,254,331,461,943
+skills/adaptlypost/scripts/adaptlypost.js
+  s_b2786f7d09510c::t_0b07a98ef609ae 441-442,453-457,463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4181228f65b7760994f9793b6961265d3dd47106",
+  "prompts": {},
+  "sessions": {
+    "s_b2786f7d09510c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ecb0525b-a1d3-43c2-8907-17086a4718c1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

@@ -222,10 +222,24 @@ function parseBoolean(value) {
 }
 
 function buildFirstComments(args) {
-  return parseRepeatedRaw(args, "first-comment").map((value) => {
+  const comments = parseRepeatedRaw(args, "first-comment").map((value) => {
     const [platform, text] = splitPlatformPair(value, "first-comment");
     return { platform, text };
   });
+  for (const value of parseRepeatedRaw(args, "first-comment-delay")) {
+    const [platform, minutes] = splitPlatformPair(value, "first-comment-delay");
+    const comment = comments.find((entry) => entry.platform === platform);
+    if (!comment) {
+      error(`--first-comment-delay ${value} names a platform with no --first-comment`);
+      process.exit(1);
+    }
+    if (!/^\d+$/.test(minutes) || Number(minutes) > 10080) {
+      error(`--first-comment-delay ${value} takes a whole number of minutes from 0 to 10080 (7 days)`);
+      process.exit(1);
+    }
+    comment.delayMinutes = Number(minutes);
+  }
+  return comments;
 }
 
 function buildThreadReplies(args) {

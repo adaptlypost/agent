@@ -907,6 +907,12 @@
                   "minLength": 1,
                   "maxLength": 10000,
                   "description": "The comment's text, trimmed. The limit depends on the platform, see firstComments"
+                },
+                "delayMinutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10080,
+                  "description": "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet"
                 }
               },
               "required": [
@@ -915,7 +921,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account shortly after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, and is retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -1997,6 +2003,12 @@
                   "minLength": 1,
                   "maxLength": 10000,
                   "description": "The comment's text, trimmed. The limit depends on the platform, see firstComments"
+                },
+                "delayMinutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10080,
+                  "description": "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet"
                 }
               },
               "required": [
@@ -2005,7 +2017,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account shortly after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, and is retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -2925,7 +2937,7 @@
         "type": "object",
         "properties": {
           "result": {
-            "description": "The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError and firstCommentPublishedAt; threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform's own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead."
+            "description": "The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError, firstCommentPublishedAt, firstCommentDelayMinutes (absent when the comment posts right away) and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time); threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform's own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated and youtubeDefaultAudioLanguage; linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead."
           }
         },
         "additionalProperties": false
@@ -3166,6 +3178,12 @@
                   "minLength": 1,
                   "maxLength": 10000,
                   "description": "The comment's text, trimmed. The limit depends on the platform, see firstComments"
+                },
+                "delayMinutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10080,
+                  "description": "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet"
                 }
               },
               "required": [
@@ -3174,7 +3192,7 @@
               ],
               "additionalProperties": false
             },
-            "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+            "description": "A comment posted from the same account shortly after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, and is retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
           },
           "threadReplies": {
             "type": "array",
@@ -4410,6 +4428,12 @@
                         "minLength": 1,
                         "maxLength": 10000,
                         "description": "The comment's text, trimmed. The limit depends on the platform, see firstComments"
+                      },
+                      "delayMinutes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10080,
+                        "description": "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet"
                       }
                     },
                     "required": [
@@ -4418,7 +4442,7 @@
                     ],
                     "additionalProperties": false
                   },
-                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+                  "description": "A comment posted from the same account shortly after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, and is retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
                 },
                 "threadReplies": {
                   "type": "array",
@@ -5453,6 +5477,12 @@
                         "minLength": 1,
                         "maxLength": 10000,
                         "description": "The comment's text, trimmed. The limit depends on the platform, see firstComments"
+                      },
+                      "delayMinutes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10080,
+                        "description": "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet"
                       }
                     },
                     "required": [
@@ -5461,7 +5491,7 @@
                     ],
                     "additionalProperties": false
                   },
-                  "description": "A comment posted from the same account right after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment is posted about 10 seconds after the platform publishes (60 on YouTube) and retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
+                  "description": "A comment posted from the same account shortly after the post goes out on a platform, one entry per platform. Available on LINKEDIN (1250 characters), TWITTER (280, as a reply), THREADS (500, as a reply), BLUESKY (300, as a reply), MASTODON (500, as a reply), YOUTUBE (10000), FACEBOOK (8000) and INSTAGRAM (2200). A platform the post does not go to, an empty or too long comment, a second entry for one platform, a platform that also has threadReplies, a private or made for kids YouTube video and Facebook or Instagram stories are refused with 400. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, and is retried up to 3 times; on X it is not retried, and a lifetime-deal account pays for it like any X post. A Facebook Page or Instagram account connected before first comments came to them must be reconnected once; until then its comment fails and firstCommentError says to reconnect. A comment that fails never fails the post: read firstCommentStatus and firstCommentError on the platform in get_post. On an update, sending the array replaces every first comment and omitting it keeps the stored ones"
                 },
                 "threadReplies": {
                   "type": "array",

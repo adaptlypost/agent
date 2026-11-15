@@ -669,8 +669,13 @@ Create makes a link that lets someone connect social accounts to this workspace 
 | `maxAccounts` | integer, 1 or more | The link stops working once that many accounts are connected through it |
 | `expiresAt` | ISO 8601 date-time with `Z` or an offset | When the link stops working, at least 1 hour and at most 365 days away |
 | `neverExpires` | boolean | `true` keeps the link working until it is revoked. Don't send it with `expiresAt` |
+| `returnUrl` | URL, up to 2048 characters | Where the client goes after connecting, picking pages or channels, or being refused, instead of staying on the link page. Must be https (http only for localhost) with no credentials. Your own query parameters are kept |
 
-Create returns `{ url, token, expiresAt, name, visibility, allowedPlatforms, maxAccounts }`. `expiresAt` is `null` for a link that never expires. An expiry out of range, or both `expiresAt` and `neverExpires`, answers 400. Revoke returns `{ success: true }`, or 404 when the token is unknown. Both need `accounts.manage`, which only Admin holds. Treat the link as a secret. Only make one that never expires when the user asks for it.
+Create returns `{ url, token, expiresAt, name, visibility, allowedPlatforms, maxAccounts, returnUrl, startUrls }`. `expiresAt` is `null` for a link that never expires, and `returnUrl` is `null` when not set. `startUrls` is `[{ platform, url }]`, one per platform the link offers that connects through the network's own consent screen, for an app that shows its own connect buttons. Bluesky and Telegram are left out because they connect on the link page. Add `server=` to the Mastodon URL, `site=` to the WordPress URL, and `via=facebook` to the Instagram URL to connect through a Facebook Page.
+
+After a connect, a page or channel pick, or a refused start or consent, the client lands on `returnUrl` with `status` (`connected` or `error`), `platform` (when known), one `accountId` per account connected (the same `id` that `GET /social-accounts` lists), and on an error `error` (a code) and `message` added to its query. A wrong Bluesky or WordPress password keeps the client on the link page.
+
+An expiry out of range, a `returnUrl` that is not https, or both `expiresAt` and `neverExpires`, answers 400. Revoke returns `{ success: true }`, or 404 when the token is unknown. Both need `accounts.manage`, which only Admin holds. Treat the link as a secret. Only make one that never expires when the user asks for it.
 
 ### Check an Account
 

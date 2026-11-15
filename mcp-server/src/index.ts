@@ -1752,7 +1752,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Create Connect Link',
       description:
-        "Create a link someone else, such as a client, opens to connect their social accounts to this workspace without an AdaptlyPost login. With no options it is a quick link: it lasts 7 days, offers every platform, shows the client every account in the workspace and connects any number of accounts. visibility PRIVATE shows the client only the accounts they connected through the link; allowedPlatforms limits the platforms offered; maxAccounts makes the link stop working once that many accounts are connected through it; expiresAt or neverExpires changes when it stops working. Returns the url to send. Connected accounts then show up in list_accounts. Revoke it with revoke_connect_link. Needs the accounts.manage permission, which Admin holds.",
+        "Create a link someone else, such as a client, opens to connect their social accounts to this workspace without an AdaptlyPost login. With no options it is a quick link: it lasts 7 days, offers every platform, shows the client every account in the workspace and connects any number of accounts. visibility PRIVATE shows the client only the accounts they connected through the link; allowedPlatforms limits the platforms offered; maxAccounts makes the link stop working once that many accounts are connected through it; expiresAt or neverExpires changes when it stops working; returnUrl sends the client back to your app afterwards. Returns the url to send, plus startUrls, one per platform that connects through the network's own consent screen, for your own connect buttons. Connected accounts then show up in list_accounts. Revoke it with revoke_connect_link. Needs the accounts.manage permission, which Admin holds.",
       inputSchema: {
         name: z.string().max(80).optional().describe('Label shown in the dashboard list of links'),
         visibility: z
@@ -1779,10 +1779,18 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
           .boolean()
           .optional()
           .describe('true keeps the link working until it is revoked or reaches maxAccounts. Cannot be combined with expiresAt'),
+        returnUrl: z
+          .string()
+          .url()
+          .max(2048)
+          .optional()
+          .describe(
+            'Where the client goes after connecting, picking pages or channels, or being refused, so they come back to your app instead of staying on the link page. Must be https (http only for localhost) and carry no credentials. Your own query parameters are kept. The client arrives with status (connected or error), platform when known, one accountId per account connected (the id list_accounts shows), and on an error, error (a code) and message. A wrong Bluesky or WordPress password keeps the client on the link page',
+          ),
       },
       outputSchema: resultSchema(
         apiResponses.createConnectLink,
-        'An object with url (the link to send), token (pass it to revoke_connect_link), expiresAt (null when it never expires), name, visibility, allowedPlatforms and maxAccounts.',
+        'An object with url (the link to send), token (pass it to revoke_connect_link), expiresAt (null when it never expires), name, visibility, allowedPlatforms, maxAccounts, returnUrl (null when not set) and startUrls: [{ platform, url }], one per platform the link offers that connects through the network\'s own consent screen. Bluesky and Telegram are left out because they connect on the link page. Add server= to the Mastodon URL, site= to the WordPress URL, and via=facebook to the Instagram URL to connect through a Facebook Page.',
       ),
       annotations: {
         readOnlyHint: false,

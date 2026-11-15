@@ -1,0 +1,39 @@
+gemini-extension.json
+  s_b64cca8c850e97::t_47cefb88f826d5 3
+lhm.plugin.json
+  s_b64cca8c850e97::t_3d55452423cd16 4,326,379-384
+mcp-server/package.json
+  s_b64cca8c850e97::t_b8d6152a3a65ca 3
+mcp-server/src/api-schemas.ts
+  s_c982b43a41c8d8::t_c62c99d74b48dc 90,92,160,180
+mcp-server/src/index.ts
+  s_c982b43a41c8d8::t_f51337b970f974 1755,1782-1789,1793
+package.json
+  s_b64cca8c850e97::t_f97d759bdda3bf 3
+skills/adaptlypost/SKILL.md
+  s_b64cca8c850e97::t_c39da702be583d 672,674-678
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d572ecfbde5286c23e9572d27e5344aad27e96b8",
+  "prompts": {},
+  "sessions": {
+    "s_b64cca8c850e97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6229abe-395f-49a3-957a-9dad3afc6457",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    },
+    "s_c982b43a41c8d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fdf8afb2-7cfb-4ba1-b909-180ab9c8fc95",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

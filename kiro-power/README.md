@@ -12,6 +12,11 @@ The first tool call opens a browser to sign in with your AdaptlyPost account. Th
 
 You need a AdaptlyPost account: [adaptlypost.com](https://adaptlypost.com).
 
+## Privacy and support
+
+- Privacy policy: [adaptlypost.com/privacy](https://adaptlypost.com/privacy)
+- Support: [contact@adaptlypost.com](mailto:contact@adaptlypost.com)
+
 ## What is in this folder
 
 | Path | What it is |

@@ -1,0 +1,43 @@
+mcp-server/src/index.ts
+  s_35fc76a6ffa3cd::t_fcd5152c6c1610 256-280
+  s_35fc76a6ffa3cd::t_32c0f6e88486c0 1868-2142
+  s_35fc76a6ffa3cd::t_7a328e8b45b413 1373,1392,1394
+README.md
+  s_35fc76a6ffa3cd::t_ee776910b0bbb4 3,165,172,186-198,327,370
+gemini-extension.json
+  s_35fc76a6ffa3cd::t_5fa869acdf9567 3
+lhm.plugin.json
+  s_35fc76a6ffa3cd::t_65ad6e585fd252 4-5,450-857
+mcp-server/README.md
+  s_35fc76a6ffa3cd::t_a418555dfe4f2a 3
+mcp-server/declared-tools.txt
+  s_35fc76a6ffa3cd::t_4a53375e642c7b 11-18
+mcp-server/package.json
+  s_35fc76a6ffa3cd::t_0af36587ba0c50 3
+mcp-server/src/api-schemas.ts
+  s_35fc76a6ffa3cd::t_2cae6b19305745 125-132
+mcp-server/src/rest-client.ts
+  s_35fc76a6ffa3cd::t_28d041cf78444b 18-20,79-85
+package.json
+  s_35fc76a6ffa3cd::t_fa23539527e672 3
+skills/adaptlypost/SKILL.md
+  s_35fc76a6ffa3cd::t_e03cb5a35cfbde 9-11,81-82,84,88,149-157,665-693,843,857-864,981,999
+skills/adaptlypost/scripts/adaptlypost.js
+  s_35fc76a6ffa3cd::t_38d682d625b61f 110-115,562-661,1221-1222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "794672063d704d22bea4dcac8133397a715ce108",
+  "prompts": {},
+  "sessions": {
+    "s_35fc76a6ffa3cd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1ddb3cb-0d26-434e-a3f6-94b5e8e8a8bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

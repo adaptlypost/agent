@@ -1,0 +1,21 @@
+kiro-power/README.md
+  s_b9fc587de00f9c::t_3d8f11e93bce10 15-19
+kiro-power/plugin.json
+  s_b9fc587de00f9c::t_bc13ba216db837 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa552c6392b43f173664d128c75291af8d6a92d1",
+  "prompts": {},
+  "sessions": {
+    "s_b9fc587de00f9c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "55cd77a6-6412-4381-89e0-a1f8d89ed092",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

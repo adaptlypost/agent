@@ -8,6 +8,14 @@ check_account
 remove_account
 create_connect_link
 revoke_connect_link
+create_workspace
+delete_workspace
+list_members
+remove_member
+remove_organization_member
+list_invitations
+send_invitation
+revoke_invitation
 upload_media
 get_upload_urls
 open_upload_widget

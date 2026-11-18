@@ -107,6 +107,12 @@ function explainDenial(status, data) {
     return;
   }
   if (data.code === "subscription_required") {
+    if (data.limitKey) {
+      error(
+        `The plan has no room left under ${data.limitKey}${data.limit !== undefined ? ` (limit ${data.limit}, in use ${data.currentUsage})` : ""}. Ask the user to upgrade the plan; retrying will not help.`,
+      );
+      return;
+    }
     error(
       "The workspace's plan is not active. Ask the user to renew it; retrying will not help.",
     );
@@ -551,6 +557,106 @@ const COMMANDS = {
       `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}`,
     );
     output(data);
+  },
+
+  workspaces: async () => {
+    output(await request("GET", "/api/v1/workspaces"));
+  },
+
+  "workspaces:create": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.name || parsed.name === true) {
+      error(
+        'Usage: ./scripts/adaptlypost.js workspaces:create --name "Client A" [--description "..."] [--connection-limit 10]',
+      );
+      process.exit(1);
+    }
+    const body = { name: String(parsed.name) };
+    if (typeof parsed.description === "string") body.description = parsed.description;
+    if (parsed["connection-limit"] !== undefined) {
+      body.connectionLimit = Number(parsed["connection-limit"]);
+    }
+    output(await request("POST", "/api/v1/workspaces", body));
+  },
+
+  "workspaces:delete": async (args) => {
+    const id = requireId(args, "workspaces:delete");
+    output(await request("DELETE", `/api/v1/workspaces/${encodeURIComponent(id)}`));
+  },
+
+  members: async () => {
+    output(await request("GET", "/api/v1/members"));
+  },
+
+  "members:remove": async (args) => {
+    const id = requireId(args, "members:remove");
+    output(await request("DELETE", `/api/v1/members/${encodeURIComponent(id)}`));
+  },
+
+  "organization:members:remove": async (args) => {
+    const id = requireId(args, "organization:members:remove");
+    output(await request("DELETE", `/api/v1/organization/members/${encodeURIComponent(id)}`));
+  },
+
+  invitations: async (args) => {
+    const parsed = parseArgs(args);
+    const params = new URLSearchParams();
+    if (parsed.limit) params.set("limit", parsed.limit);
+    if (parsed.offset) params.set("offset", parsed.offset);
+    const qs = params.toString();
+    output(await request("GET", `/api/v1/invitations${qs ? `?${qs}` : ""}`));
+  },
+
+  "invitations:send": async (args) => {
+    const parsed = parseArgs(args);
+    const usage =
+      "Usage: ./scripts/adaptlypost.js invitations:send --email person@example.com (--role editor | --workspace <workspace_id>=<role> ...) [--organization-role org-member|org-admin] [--credit-monthly n | --credit-fixed n]";
+    if (!parsed.email || parsed.email === true) {
+      error(usage);
+      process.exit(1);
+    }
+    const workspaces = parseRepeatedRaw(args, "workspace").map((value) => {
+      const at = value.indexOf("=");
+      if (at <= 0) {
+        error(`--workspace takes <workspace_id>=<role>, got: ${value}`);
+        process.exit(1);
+      }
+      return { workspaceId: value.slice(0, at).trim(), role: value.slice(at + 1).trim().toLowerCase() };
+    });
+    if (typeof parsed.role === "string") {
+      const me = await request("GET", "/api/v1/me");
+      workspaces.push({ workspaceId: me.workspace.id, role: parsed.role.toLowerCase() });
+    }
+    if (workspaces.length === 0) {
+      error(usage);
+      process.exit(1);
+    }
+    for (const { role } of workspaces) {
+      if (!WORKSPACE_ROLES.includes(role)) {
+        error(`A workspace role is one of ${WORKSPACE_ROLES.join(", ")}, got: ${role}`);
+        process.exit(1);
+      }
+    }
+    if (parsed["credit-monthly"] !== undefined && parsed["credit-fixed"] !== undefined) {
+      error("Pass --credit-monthly or --credit-fixed, not both.");
+      process.exit(1);
+    }
+    const body = { email: String(parsed.email), workspaces };
+    if (typeof parsed["organization-role"] === "string") {
+      body.organizationRole = parsed["organization-role"];
+    }
+    if (parsed["credit-monthly"] !== undefined) {
+      body.creditAllowance = { mode: "MONTHLY", monthlyAmount: Number(parsed["credit-monthly"]) };
+    }
+    if (parsed["credit-fixed"] !== undefined) {
+      body.creditAllowance = { mode: "FIXED", balance: Number(parsed["credit-fixed"]) };
+    }
+    output(await request("POST", "/api/v1/invitations", body));
+  },
+
+  "invitations:revoke": async (args) => {
+    const id = requireId(args, "invitations:revoke");
+    output(await request("DELETE", `/api/v1/invitations/${encodeURIComponent(id)}`));
   },
 
   "instagram:audio": async (args) => {
@@ -1111,6 +1217,8 @@ function analyticsQuery(parsed, extra = {}) {
 }
 
 const INBOX_STATUSES = ["UNREAD", "READ", "DONE"];
+
+const WORKSPACE_ROLES = ["admin", "editor", "contributor", "viewer"];
 
 function inboxPath(collection, id, suffix = "") {
   return `/api/v1/inbox/${collection}/${encodeURIComponent(id)}${suffix}`;

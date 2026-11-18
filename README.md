@@ -1,6 +1,6 @@
 # AdaptlyPost agent
 
-Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 80 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, analytics, and an inbox for answering comments, mentions, direct messages and Google reviews.
+Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 88 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, analytics, an inbox for answering comments, mentions, direct messages and Google reviews, and setting up workspaces, members and invitations.
 
 ## Connect in 30 seconds
 
@@ -162,13 +162,14 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 - "Turn this announcement into a post on our WordPress blog and save it as a WordPress draft so I can finish it there."
 - "What were my five best posts last month by engagement, and on which platforms?"
 - "Create a connect link my client can use to add their Instagram and Facebook accounts."
+- "Set up a workspace for our new client Acme and invite sam@acme.com to it as an editor."
 - "What's new in my inbox? Show unread comments and messages from today."
 - "Draft friendly replies to the unanswered Instagram comments on yesterday's post, and send them once I approve."
 - "Reply to every 5-star Google review from this week that has no reply yet."
 
 ## Tools
 
-80 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
+88 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
 
 ### Workspaces and accounts
 
@@ -181,6 +182,19 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | `remove_account` | Disconnect an account from the workspace; it comes off pending and recurring posts | Yes |
 | `create_connect_link` | Create a link a client opens to connect their accounts, optionally private, limited to some platforms, capped or never expiring | Yes |
 | `revoke_connect_link` | Revoke a connect link | Yes |
+
+### Team
+
+| Tool | What it does | Changes data |
+| --- | --- | --- |
+| `create_workspace` | Create a workspace in the organization; organization owners and admins become its admins | Yes |
+| `delete_workspace` | Delete a workspace with its posts, feeds, inbox items, API keys and connect links | Yes |
+| `list_members` | List the members of a workspace with their workspace role and organization roles | No |
+| `remove_member` | Remove a member from a workspace; they stay in the organization | Yes |
+| `remove_organization_member` | Remove a member from the organization and every workspace in it | Yes |
+| `list_invitations` | List the invitations that include a workspace, newest first | No |
+| `send_invitation` | Email an invitation to the organization and one or more workspaces, each with a role | Yes |
+| `revoke_invitation` | Revoke a pending invitation | Yes |
 
 ### Posts
 
@@ -310,6 +324,7 @@ The inbox holds comments on the account's posts (Facebook, Instagram, Threads, Y
 - An action outside the role answers 403 with `code: permission_denied`. The tool tells the agent to save a draft and ask a workspace member to publish, not to retry or look for another key.
 - Read-only tools carry `readOnlyHint`, so clients that ask before a write (Claude, ChatGPT, Hermes) ask before creating, scheduling, publishing or deleting anything.
 - `generate_caption`, `refine_caption` and `generate_image` spend AdaptlyPost AI credits on every call: 2 credits per caption, 2 or 4 per image.
+- Creating and deleting workspaces, removing members and managing invitations need Admin, and creating or deleting a workspace or removing someone from the organization also needs an organization owner or admin. The agent confirms before it deletes a workspace, removes a member or revokes an invitation, and shows what will go.
 - Every role can read the inbox. Replying, messaging, hiding, liking, deleting and marking inbox items need Admin or Editor. Replies and messages reach real people, so the agent shows the text and what it answers before it sends.
 - Without an API-capable plan every call answers 403 with `code: subscription_required`. A 429 carries `Retry-After`.
 
@@ -352,6 +367,7 @@ An operation outside the role answers 403 with `code: permission_denied`. The sk
 - Look up a LinkedIn company page from its URL and mention it in a LinkedIn post
 - Read and answer comments, mentions, direct messages and Google reviews from the inbox, and hide, like or delete comments
 - Manage webhooks, including which events each one receives, and client connect links
+- Create and delete workspaces, list and remove members, and send, list and revoke invitations
 - Write captions and generate images with AdaptlyPost AI, paid from your AI credits
 
 ```

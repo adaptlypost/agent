@@ -15,6 +15,9 @@ export interface ApiErrorBody {
   requiredPermission?: string;
   role?: string;
   tokenType?: string;
+  limitKey?: string;
+  limit?: number;
+  currentUsage?: number;
   message?: string | string[];
 }
 
@@ -73,6 +76,13 @@ function describe(
   }
 
   if (body.code === SUBSCRIPTION_REQUIRED) {
+    if (body.limitKey) {
+      const usage =
+        body.limit !== undefined && body.currentUsage !== undefined
+          ? ` The plan allows ${body.limit} (${body.limitKey}) and ${body.currentUsage} are in use.`
+          : ` The plan has reached its ${body.limitKey} limit.`;
+      return `Plan limit reached (${status}, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)}${usage} Ask the user to upgrade the plan. ${FINAL}`;
+    }
     return `Subscription required (${status}, ${SUBSCRIPTION_REQUIRED}): ${sentence(apiMessage)} Ask the user to renew the workspace's plan. ${FINAL}`;
   }
 

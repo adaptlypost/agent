@@ -253,6 +253,31 @@ const WebhookEvent = z.enum([
 
 const InboxStatus = z.enum(['UNREAD', 'READ', 'DONE']);
 
+const WorkspaceRole = z.enum(['admin', 'editor', 'contributor', 'viewer']);
+
+const InvitationOrganizationRole = z.enum(['org-member', 'org-admin']);
+
+const InvitationCreditAllowance = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('MONTHLY'),
+    monthlyAmount: z
+      .number()
+      .int()
+      .min(1)
+      .max(100000)
+      .describe('AI credits the member may spend each month; the balance resets when the plan credits refill'),
+  }),
+  z.object({
+    mode: z.literal('FIXED'),
+    balance: z
+      .number()
+      .int()
+      .min(0)
+      .max(100000)
+      .describe('AI credits the member may spend in total; it moves only when topped up or spent'),
+  }),
+]);
+
 const AnalyticsSortMetric = z.enum([
   'VIEWS',
   'LIKES',
@@ -1345,7 +1370,7 @@ function requireInlineBudget(files: { data: string; fileName: string }[]): void 
 // ---------------------------------------------------------------------------
 
 const SERVER_DESCRIPTION =
-  'Schedule, publish and manage social media posts on Facebook, Instagram, Threads, X, LinkedIn, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Tumblr, Telegram, WordPress and Google Business Profile from the user\'s connected accounts. Upload media, draft, validate, schedule and bulk-schedule posts, run recurring posts and RSS feeds, read and answer comments, mentions, direct messages and Google reviews, read post and account analytics, write captions and images with AI, and manage webhooks.';
+  'Schedule, publish and manage social media posts on Facebook, Instagram, Threads, X, LinkedIn, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Tumblr, Telegram, WordPress and Google Business Profile from the user\'s connected accounts. Upload media, draft, validate, schedule and bulk-schedule posts, run recurring posts and RSS feeds, read and answer comments, mentions, direct messages and Google reviews, read post and account analytics, write captions and images with AI, manage webhooks, and set up workspaces, members and invitations.';
 
 const SETUP_PAGE: SetupPageConfig = {
   key: 'adaptlypost',
@@ -1364,8 +1389,9 @@ const SERVER_INSTRUCTIONS = [
   'A sign-in can reach several workspaces, each with its own accounts, posts and role. Call list_workspaces when the user names a workspace, brand, client or organization, or when expected accounts or posts are missing, then pass that id as workspaceId on every call about it. Without workspaceId, tools act in the workspace list_workspaces marks current.',
   '403 permission_denied: the role forbids this action. Tell the user; do not retry. For a schedule or publish, offer to save the post as a draft for an Admin or Editor to approve, only if the user agrees; keep their scheduledAt, which saveAsDraft stores as the planned date publish_draft uses.',
   '403 workspace_access_denied: this sign-in cannot reach that workspaceId; pick one from list_workspaces. 403 subscription_required: the plan does not include this; tell the user and stop. 401 token_issuer_lost_access: tell the user to reconnect AdaptlyPost or have a member create a new API key. 401 oauth_account_not_found: relay the message and ask the user to reconnect with their AdaptlyPost email. 429: wait for Retry-After; do not loop.',
-  'A Contributor can create and edit its own drafts, date them with scheduledAt, upload media, use AI and read posts and analytics, but cannot schedule, publish, retry, bulk schedule, delete non-drafts, sync analytics, manage webhooks or touch others\' posts. Only an Admin removes accounts or creates connect links. A Viewer only reads. get_me says what this connection may do.',
+  'A Contributor can create and edit its own drafts, date them with scheduledAt, upload media, use AI and read posts and analytics, but cannot schedule, publish, retry, bulk schedule, delete non-drafts, sync analytics, manage webhooks or touch others\' posts. Only an Admin removes accounts, creates connect links or manages workspaces, members and invitations. A Viewer only reads. get_me says what this connection may do.',
   'Inbox: every role reads; replying, messaging, hiding, liking, deleting and marking need Admin or Editor. Show the user the exact text and the item it answers, and get their yes, before any reply or message; confirm hides and deletes the same way. 403 inbox_reconnect_required: tell the user to reconnect that account; do not retry.',
+  'Team: confirm with the user before deleting a workspace, removing a member or revoking an invitation, and show what will be removed.',
   'generate_caption, refine_caption and generate_image spend AI credits per call; generate only what the user asked for.',
 ].join('\n');
 
@@ -1832,6 +1858,281 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     async ({ token }, client) => {
       try {
         const data = await client.delete(`/connect-links/${encodeURIComponent(token)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // ── Team ───────────────────────────────────────────────────────────────
+
+  const ORG_ADMIN_RULE =
+    'The member who created the key, or the signed-in member, must also be an organization owner or admin (org-owner or org-admin); otherwise it fails with 403 permission_denied.';
+
+  const INVITATION_RECORD =
+    'The invitation: id, email, organizationId, organizationRole, status (pending, accepted, expired or revoked), workspaces [{ workspaceId, workspaceName, role }], expiresAt and createdAt.';
+
+  tool(
+    'create_workspace',
+    {
+      title: 'Create Workspace',
+      description: `Create a workspace in the organization of the workspace the call acts in (the current one unless workspaceId names another). Every organization owner and admin becomes its admin. Returns the workspace with id, name, description, organizationId, isDefault, connectionLimit and createdAt; pass id as workspaceId to act in it, for example to send_invitation or create_connect_link there. Needs the workspace.manage permission, which Admin holds. ${ORG_ADMIN_RULE} Fails with 403 subscription_required when the plan has no room for another workspace (the error names the limit and current usage): tell the user to upgrade and do not retry. Fails with 400 when a workspace with this name already exists in the organization.`,
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(100)
+          .describe('Workspace name, unique within the organization. No < or >'),
+        description: z.string().max(500).optional().describe('Optional description, up to 500 characters. No < or >'),
+        connectionLimit: z
+          .number()
+          .int()
+          .min(0)
+          .max(10000)
+          .optional()
+          .describe('Most social accounts the workspace may connect. Leave out for no limit'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.createWorkspace,
+        'The workspace: id, name, description (null when none), organizationId, isDefault, connectionLimit (null for no limit) and createdAt.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/workspaces', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'delete_workspace',
+    {
+      title: 'Delete Workspace',
+      description: `Delete a workspace of the organization with everything it holds: posts, RSS feeds, inbox items, API keys and connect links. This cannot be undone. The default workspace, the organization's last workspace and a workspace that still has connected social accounts cannot be deleted (400); disconnect its accounts with remove_account first. Confirm with the user first, naming the workspace and saying what it holds. Needs the workspace.manage permission, which Admin holds. ${ORG_ADMIN_RULE} Fails with 404 when the workspace is not in this organization. Returns { success: true }.`,
+      inputSchema: {
+        id: z
+          .string()
+          .describe(
+            'Id of the workspace to delete, from list_workspaces. This is the target; workspaceId only picks the workspace the call acts in',
+          ),
+      },
+      outputSchema: resultSchema(
+        apiResponses.deleteWorkspace,
+        'An object with success: true once the workspace is deleted.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.delete(`/workspaces/${encodeURIComponent(id)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_members',
+    {
+      title: 'List Members',
+      description:
+        'List the members of the workspace (the current one unless workspaceId names another). Returns { members } with userId, email, firstName, lastName, role (admin, editor, contributor or viewer in this workspace), organizationRoles (such as org-owner, org-admin or org-member) and joinedAt. Pass userId to remove_member or remove_organization_member. Needs the members.read permission, which every role holds. Takes only the optional workspaceId.',
+      inputSchema: {},
+      outputSchema: resultSchema(
+        apiResponses.listMembers,
+        'An object with members: one { userId, email, firstName, lastName, role, organizationRoles, joinedAt } per member of the workspace.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (_args, client) => {
+      try {
+        const data = await client.get('/members');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'remove_member',
+    {
+      title: 'Remove Member',
+      description:
+        "Remove a member from the workspace (the current one unless workspaceId names another) and revoke their API keys and connect links there. They stay in the organization and keep their other workspaces. You cannot remove yourself, and a member's last workspace cannot be removed (400): use remove_organization_member instead. Confirm with the user first, naming the member and the workspace. Needs the members.manage permission, which Admin holds. Fails with 404 when the user is not a member of this workspace. Returns { success: true }.",
+      inputSchema: {
+        userId: z.string().describe('The member\'s userId from list_members'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.removeMember,
+        'An object with success: true once the member is removed from the workspace.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ userId }, client) => {
+      try {
+        const data = await client.delete(`/members/${encodeURIComponent(userId)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'remove_organization_member',
+    {
+      title: 'Remove Organization Member',
+      description: `Remove a member from the organization of the workspace the call acts in: they leave every workspace in it, and their API keys and connect links are revoked. The organization owner cannot be removed, only the owner can remove an organization admin, and you cannot remove yourself. Confirm with the user first, naming the member and the workspaces they will lose. Needs the members.manage permission, which Admin holds. ${ORG_ADMIN_RULE} Returns { success: true }.`,
+      inputSchema: {
+        userId: z.string().describe('The member\'s userId from list_members'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.removeOrganizationMember,
+        'An object with success: true once the member is removed from the organization.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ userId }, client) => {
+      try {
+        const data = await client.delete(`/organization/members/${encodeURIComponent(userId)}`);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_invitations',
+    {
+      title: 'List Invitations',
+      description:
+        'List the invitations that include the workspace (the current one unless workspaceId names another), newest first, whatever their status. Returns { invitations, total, hasMore }. Page with offset while hasMore is true. Needs the members.manage permission, which Admin holds.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Invitations per page'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .default(0)
+          .describe('Invitations to skip; increase by limit while hasMore is true'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.listInvitations,
+        `An object with invitations, total (count of all invitations) and hasMore. Each item is one invitation. ${INVITATION_RECORD}`,
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.get('/invitations', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'send_invitation',
+    {
+      title: 'Send Invitation',
+      description:
+        'Invite someone by email to the organization and to one or more of its workspaces, each with a role. AdaptlyPost emails the invitation, which lasts 7 days; on accepting, the person joins with organizationRole and each listed workspace with its role. Confirm the email, workspaces and roles with the user first. Needs the members.manage permission, which Admin holds. A member who is not an organization owner or admin may only invite org-member, only to workspaces where they hold members.manage, and only with a role no higher than their own there; only the owner may invite an org-admin, and only an organization owner or admin may set creditAllowance. Otherwise it fails with 403 permission_denied. Fails with 403 subscription_required when the plan has no team seat left: tell the user to upgrade and do not retry. Fails with 400 when the person is already a member or already invited.',
+      inputSchema: {
+        email: z.string().email().describe('Email address to invite'),
+        organizationRole: InvitationOrganizationRole.optional().describe(
+          'Role in the organization: org-member (the default) or org-admin. Only the organization owner may invite an org-admin',
+        ),
+        workspaces: z
+          .array(
+            z.object({
+              workspaceId: z.string().describe('Workspace id from list_workspaces'),
+              role: WorkspaceRole.describe('Role in that workspace: admin, editor, contributor or viewer'),
+            }),
+          )
+          .min(1)
+          .describe('Workspaces the person joins on accepting, at least one, each with its role'),
+        creditAllowance: InvitationCreditAllowance.optional().describe(
+          'AI credits the member may spend from the owner\'s pool: { mode: "MONTHLY", monthlyAmount } or { mode: "FIXED", balance }. Leave out for none. Only an organization owner or admin may set it',
+        ),
+      },
+      outputSchema: resultSchema(apiResponses.sendInvitation, INVITATION_RECORD),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    async (input, client) => {
+      try {
+        const data = await client.post('/invitations', input);
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'revoke_invitation',
+    {
+      title: 'Revoke Invitation',
+      description:
+        'Revoke a pending invitation that includes the workspace (the current one unless workspaceId names another), so its link stops working. Confirm with the user first, naming the email it was sent to. Only the owner may revoke an invitation for an organization admin. Needs the members.manage permission, which Admin holds. Fails with 404 when no such invitation includes this workspace, and with 400 when it is no longer pending. Returns the invitation with status revoked.',
+      inputSchema: {
+        id: z.string().describe('Invitation id from list_invitations or send_invitation'),
+      },
+      outputSchema: resultSchema(apiResponses.revokeInvitation, INVITATION_RECORD),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ id }, client) => {
+      try {
+        const data = await client.delete(`/invitations/${encodeURIComponent(id)}`);
         return toolResult(data);
       } catch (error) {
         return toolError(error);

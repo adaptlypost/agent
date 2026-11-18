@@ -1,8 +1,8 @@
 {
   "identifier": "adaptlypost-agent",
   "name": "AdaptlyPost",
-  "version": "1.22.0",
-  "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, and an inbox to answer comments, mentions, direct messages and Google reviews. Sign in with OAuth or an API key.",
+  "version": "1.23.0",
+  "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, an inbox to answer comments, mentions, direct messages and Google reviews, and workspace and team setup. Sign in with OAuth or an API key.",
   "author": "AdaptlyPost",
   "authorUrl": "https://adaptlypost.com",
   "homepage": "https://adaptlypost.com/features/agents",
@@ -441,6 +441,414 @@
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_workspace",
+      "title": "Create Workspace",
+      "description": "Create a workspace in the organization of the workspace the call acts in (the current one unless workspaceId names another). Every organization owner and admin becomes its admin. Returns the workspace with id, name, description, organizationId, isDefault, connectionLimit and createdAt; pass id as workspaceId to act in it, for example to send_invitation or create_connect_link there. Needs the workspace.manage permission, which Admin holds. The member who created the key, or the signed-in member, must also be an organization owner or admin (org-owner or org-admin); otherwise it fails with 403 permission_denied. Fails with 403 subscription_required when the plan has no room for another workspace (the error names the limit and current usage): tell the user to upgrade and do not retry. Fails with 400 when a workspace with this name already exists in the organization.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Workspace name, unique within the organization. No < or >"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Optional description, up to 500 characters. No < or >"
+          },
+          "connectionLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Most social accounts the workspace may connect. Leave out for no limit"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The workspace: id, name, description (null when none), organizationId, isDefault, connectionLimit (null for no limit) and createdAt."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_workspace",
+      "title": "Delete Workspace",
+      "description": "Delete a workspace of the organization with everything it holds: posts, RSS feeds, inbox items, API keys and connect links. This cannot be undone. The default workspace, the organization's last workspace and a workspace that still has connected social accounts cannot be deleted (400); disconnect its accounts with remove_account first. Confirm with the user first, naming the workspace and saying what it holds. Needs the workspace.manage permission, which Admin holds. The member who created the key, or the signed-in member, must also be an organization owner or admin (org-owner or org-admin); otherwise it fails with 403 permission_denied. Fails with 404 when the workspace is not in this organization. Returns { success: true }.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id of the workspace to delete, from list_workspaces. This is the target; workspaceId only picks the workspace the call acts in"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with success: true once the workspace is deleted."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_members",
+      "title": "List Members",
+      "description": "List the members of the workspace (the current one unless workspaceId names another). Returns { members } with userId, email, firstName, lastName, role (admin, editor, contributor or viewer in this workspace), organizationRoles (such as org-owner, org-admin or org-member) and joinedAt. Pass userId to remove_member or remove_organization_member. Needs the members.read permission, which every role holds. Takes only the optional workspaceId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with members: one { userId, email, firstName, lastName, role, organizationRoles, joinedAt } per member of the workspace."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "remove_member",
+      "title": "Remove Member",
+      "description": "Remove a member from the workspace (the current one unless workspaceId names another) and revoke their API keys and connect links there. They stay in the organization and keep their other workspaces. You cannot remove yourself, and a member's last workspace cannot be removed (400): use remove_organization_member instead. Confirm with the user first, naming the member and the workspace. Needs the members.manage permission, which Admin holds. Fails with 404 when the user is not a member of this workspace. Returns { success: true }.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The member's userId from list_members"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with success: true once the member is removed from the workspace."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "remove_organization_member",
+      "title": "Remove Organization Member",
+      "description": "Remove a member from the organization of the workspace the call acts in: they leave every workspace in it, and their API keys and connect links are revoked. The organization owner cannot be removed, only the owner can remove an organization admin, and you cannot remove yourself. Confirm with the user first, naming the member and the workspaces they will lose. Needs the members.manage permission, which Admin holds. The member who created the key, or the signed-in member, must also be an organization owner or admin (org-owner or org-admin); otherwise it fails with 403 permission_denied. Returns { success: true }.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The member's userId from list_members"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with success: true once the member is removed from the organization."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_invitations",
+      "title": "List Invitations",
+      "description": "List the invitations that include the workspace (the current one unless workspaceId names another), newest first, whatever their status. Returns { invitations, total, hasMore }. Page with offset while hasMore is true. Needs the members.manage permission, which Admin holds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Invitations per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Invitations to skip; increase by limit while hasMore is true"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with invitations, total (count of all invitations) and hasMore. Each item is one invitation. The invitation: id, email, organizationId, organizationRole, status (pending, accepted, expired or revoked), workspaces [{ workspaceId, workspaceName, role }], expiresAt and createdAt."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "send_invitation",
+      "title": "Send Invitation",
+      "description": "Invite someone by email to the organization and to one or more of its workspaces, each with a role. AdaptlyPost emails the invitation, which lasts 7 days; on accepting, the person joins with organizationRole and each listed workspace with its role. Confirm the email, workspaces and roles with the user first. Needs the members.manage permission, which Admin holds. A member who is not an organization owner or admin may only invite org-member, only to workspaces where they hold members.manage, and only with a role no higher than their own there; only the owner may invite an org-admin, and only an organization owner or admin may set creditAllowance. Otherwise it fails with 403 permission_denied. Fails with 403 subscription_required when the plan has no team seat left: tell the user to upgrade and do not retry. Fails with 400 when the person is already a member or already invited.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address to invite"
+          },
+          "organizationRole": {
+            "type": "string",
+            "enum": [
+              "org-member",
+              "org-admin"
+            ],
+            "description": "Role in the organization: org-member (the default) or org-admin. Only the organization owner may invite an org-admin"
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "workspaceId": {
+                  "type": "string",
+                  "description": "Workspace id from list_workspaces"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "admin",
+                    "editor",
+                    "contributor",
+                    "viewer"
+                  ],
+                  "description": "Role in that workspace: admin, editor, contributor or viewer"
+                }
+              },
+              "required": [
+                "workspaceId",
+                "role"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "Workspaces the person joins on accepting, at least one, each with its role"
+          },
+          "creditAllowance": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "MONTHLY"
+                  },
+                  "monthlyAmount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000,
+                    "description": "AI credits the member may spend each month; the balance resets when the plan credits refill"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "monthlyAmount"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "FIXED"
+                  },
+                  "balance": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000,
+                    "description": "AI credits the member may spend in total; it moves only when topped up or spent"
+                  }
+                },
+                "required": [
+                  "mode",
+                  "balance"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "AI credits the member may spend from the owner's pool: { mode: \"MONTHLY\", monthlyAmount } or { mode: \"FIXED\", balance }. Leave out for none. Only an organization owner or admin may set it"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "email",
+          "workspaces"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The invitation: id, email, organizationId, organizationRole, status (pending, accepted, expired or revoked), workspaces [{ workspaceId, workspaceName, role }], expiresAt and createdAt."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "revoke_invitation",
+      "title": "Revoke Invitation",
+      "description": "Revoke a pending invitation that includes the workspace (the current one unless workspaceId names another), so its link stops working. Confirm with the user first, naming the email it was sent to. Only the owner may revoke an invitation for an organization admin. Needs the members.manage permission, which Admin holds. Fails with 404 when no such invitation includes this workspace, and with 400 when it is no longer pending. Returns the invitation with status revoked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Invitation id from list_invitations or send_invitation"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The invitation: id, email, organizationId, organizationRole, status (pending, accepted, expired or revoked), workspaces [{ workspaceId, workspaceName, role }], expiresAt and createdAt."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
         "openWorldHint": false
       },
       "execution": {

@@ -1,0 +1,37 @@
+README.md
+  s_b9fc587de00f9c::t_21c6937e5500d1 24
+kiro-power/LICENSE
+  s_b9fc587de00f9c::t_400491c7f53522 1-21
+kiro-power/README.md
+  s_b9fc587de00f9c::t_6964fc2fc61027 1-21
+kiro-power/mcp.json
+  s_b9fc587de00f9c::t_45f18e4181db08 1-9
+kiro-power/plugin.json
+  s_b9fc587de00f9c::t_3dea1082c22d5d 1-24
+kiro-power/skills/adaptlypost/SKILL.md
+  s_b9fc587de00f9c::t_8b1c8ff661678b 1-452
+kiro-power/skills/adaptlypost/references/analytics.md
+  s_b9fc587de00f9c::t_8cbae1ff88e5d9 1-58
+kiro-power/skills/adaptlypost/references/inbox.md
+  s_b9fc587de00f9c::t_5b0265f2b48b21 1-87
+kiro-power/skills/adaptlypost/references/media.md
+  s_b9fc587de00f9c::t_a5e352cbd2084e 1-107
+kiro-power/skills/adaptlypost/references/recurring.md
+  s_b9fc587de00f9c::t_a4ce29a2ed8b86 1-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4afa3ed7dc53365a6628060788035aa6066e60ab",
+  "prompts": {},
+  "sessions": {
+    "s_b9fc587de00f9c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "55cd77a6-6412-4381-89e0-a1f8d89ed092",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

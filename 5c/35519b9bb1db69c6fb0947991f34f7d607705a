@@ -1,0 +1,35 @@
+gemini-extension.json
+  s_ff2c56a1e5d2cb::t_e6c28b8e18234e 3
+kiro-power/plugin.json
+  s_ff2c56a1e5d2cb::t_6a5f0a6ae7b44c 4
+lhm.plugin.json
+  s_ff2c56a1e5d2cb::t_fd6c0d010abd1b 4
+mcp-server/package.json
+  s_503a074ff52fa7::t_1a67baf514a6f8 3
+package.json
+  s_ff2c56a1e5d2cb::t_0b8dfc5d2c2a27 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c35519b9bb1db69c6fb0947991f34f7d607705a",
+  "prompts": {},
+  "sessions": {
+    "s_503a074ff52fa7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ccc558f7-ac40-497a-a316-9abb6e2d85f8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    },
+    "s_ff2c56a1e5d2cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04089bb5-5ff0-4b40-b08e-f15f6da08ae4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

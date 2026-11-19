@@ -1650,7 +1650,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Look Up LinkedIn Company Page',
       description:
-        "Look up a LinkedIn company page so a LinkedIn post can mention (tag) it. Takes the page URL (https://www.linkedin.com/company/acme/), its vanity name (acme, the part after linkedin.com/company/) or @acme. LinkedIn only matches the exact vanity name, so this is not a search: 'acm' or a company name with spaces finds nothing, and you should ask the user for the page URL when you do not know the vanity name. Returns { organization } with id, name, vanityName, urn and mention. Paste mention as it is into the LinkedIn text of create_post, update_post or bulk_schedule_posts; when the post also goes to other platforms, put it in platformTexts for LINKEDIN, because other platforms show the mention syntax as raw text. Fails with linkedin_organization_not_found (404) when no page has that vanity name, linkedin_organization_query_invalid (400) when the query is neither a page URL nor a vanity name, and linkedin_organization_lookup_unavailable (400) when no LinkedIn account of the workspace could run the lookup: tell the user to connect or reconnect a LinkedIn account in AdaptlyPost, ideally a company page they administer. Nothing is posted.",
+        "Look up a LinkedIn company page so a LinkedIn post can mention (tag) it. Takes the page URL (https://www.linkedin.com/company/acme/), its vanity name (acme, the part after linkedin.com/company/) or @acme. LinkedIn only matches the exact vanity name, so this is not a search: 'acm' or a company name with spaces finds nothing, and you should ask the user for the page URL when you do not know the vanity name. Returns { organization } with id, name, vanityName, urn and mention, or organization null when no page has that vanity name. Paste mention as it is into the LinkedIn text of create_post, update_post or bulk_schedule_posts; when the post also goes to other platforms, put it in platformTexts for LINKEDIN, because other platforms show the mention syntax as raw text. Fails with linkedin_organization_query_invalid (400) when the query is neither a page URL nor a vanity name, and linkedin_organization_lookup_unavailable (400) when no LinkedIn account of the workspace could run the lookup: tell the user to connect or reconnect a LinkedIn account in AdaptlyPost, ideally a company page they administer. Nothing is posted.",
       inputSchema: {
         query: z
           .string()
@@ -1660,7 +1660,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       },
       outputSchema: resultSchema(
         apiResponses.lookupLinkedInOrganization,
-        'An object with organization: { id, name, vanityName, urn, mention }. Paste mention into the LinkedIn post text.',
+        'An object with organization: { id, name, vanityName, urn, mention }, or null when no page has that vanity name. Paste mention into the LinkedIn post text.',
       ),
       annotations: {
         readOnlyHint: true,

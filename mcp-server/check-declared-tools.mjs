@@ -14,9 +14,8 @@ if (added.length || removed.length) {
   console.error('The tools this server exposes no longer match declared-tools.txt.');
   if (added.length) console.error(`  added:   ${added.join(', ')}`);
   if (removed.length) console.error(`  removed: ${removed.join(', ')}`);
-  console.error('\nThe hosted server is reviewed against this exact list. Changing it means');
-  console.error('resubmitting the app. Register the tool on the stdio transport only, or');
-  console.error('update declared-tools.txt once the new list has been approved.');
+  console.error('\nAdd or remove the names in declared-tools.txt, or register the tool on the');
+  console.error('stdio transport only.');
   process.exit(1);
 }
 

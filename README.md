@@ -1,6 +1,6 @@
 # AdaptlyPost agent
 
-Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 88 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, analytics, an inbox for answering comments, mentions, direct messages and Google reviews, and setting up workspaces, members and invitations.
+Let your AI agent draft, schedule and publish posts on Instagram, TikTok, YouTube, X (Twitter), LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, all 14 platforms AdaptlyPost supports, and read how those posts performed. 89 MCP tools cover posting, scheduling, bulk and recurring posts, media uploads, RSS feeds, webhooks, AI captions and images, analytics, an inbox for answering comments, mentions, direct messages and Google reviews, and setting up workspaces, members and invitations.
 
 ## Connect in 30 seconds
 
@@ -170,7 +170,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 
 ## Tools
 
-88 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
+89 tools. Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports location impressions only, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics. Connecting an account imports its posts from the last 180 days. The upload box also calls `get_upload_ticket` once per file; that tool is hidden from the model.
 
 ### Workspaces and accounts
 
@@ -228,6 +228,7 @@ Create an API token on [Settings > API Tokens](https://adaptlypost.com/api-token
 | --- | --- | --- |
 | `search_instagram_audio` | Search Instagram music and original sounds to add to a Reel | No |
 | `list_pinterest_boards` | List the boards of a Pinterest account; pass a board `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) | No |
+| `list_youtube_playlists` | List the playlists of a YouTube channel, private and unlisted ones included; pass a playlist `id` as `youtubeConfigs[].playlistId` | No |
 | `list_wordpress_categories` | List the categories of a WordPress site; pass their `id`s as `wordpressConfigs[].categoryIds` | No |
 | `resolve_linkedin_organization` | Look up a LinkedIn company page by its URL or vanity name and get the `mention` to paste into a LinkedIn post. Only on a server you run yourself for now, see [Run the server yourself](#run-the-server-yourself) | No |
 

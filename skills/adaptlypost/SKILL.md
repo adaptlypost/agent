@@ -101,6 +101,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js accounts` | List connected accounts with their ids and `status`. Run first: every post command takes these ids, never usernames. Skip accounts whose `status` is `unauthorized` and tell the user to reconnect them |
 | `./scripts/adaptlypost.js instagram:audio --id <instagram_account_id> [--type music\|original_sound] [--search "keywords"]` | Search Instagram music (the default) or original sounds to add to a Reel. Leave out `--search` for trending audio. Only for accounts with `supportsInstagramAudio: true`. Pass the `audioId` to `post --instagram-audio` |
 | `./scripts/adaptlypost.js pinterest:boards --id <pinterest_account_id>` | List the boards a Pinterest account can pin to, secret boards included, with `id`, `name` and `privacy`. A board belongs to one Pinterest account, so run it for each Pinterest account you post to. Ask the user which board to use and pass its `id` to `post --pinterest-board`, or its name to `--pinterest-board-name` |
+| `./scripts/adaptlypost.js youtube:playlists --id <youtube_account_id>` | List the playlists of a YouTube channel, private and unlisted ones included, with `id`, `title`, `privacyStatus` and `itemCount`. A playlist belongs to one channel, so run it for each YouTube account you post to. Ask the user which playlist to use and pass its `id` to `post --youtube-playlist` |
 | `./scripts/adaptlypost.js wordpress:categories --id <wordpress_account_id>` | List the categories of a WordPress site with `id`, `name` and `parentId`, sorted by name. Categories belong to one site, so run it for each WordPress site you post to. Pass the ids of the categories the user named to `post --wordpress-category` |
 | `./scripts/adaptlypost.js linkedin:organization --query <url\|vanity>` | Look up a LinkedIn company page by its URL or vanity name (the part after `linkedin.com/company/`) and get the `mention` to paste into a LinkedIn post. LinkedIn matches the exact vanity name only, so ask the user for the page URL when you don't know it |
 | `./scripts/adaptlypost.js accounts:check --id <id>` | Ask the platform now whether an account's token still works and return its fresh `status`. Facebook pages only. Run it after the user says they reconnected a page |
@@ -178,12 +179,12 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--facebook-type FEED\|REEL\|STORY`, `--facebook-story`, `--facebook-background <presetId>`, `--facebook-ai-generated` | `facebookConfigs[].postType`, `shareToStory`, `textFormatPresetId`, `aiGenerated` |
 | `--facebook-layout GRID\|CAROUSEL`, `--facebook-card <url or JSON>` (repeatable, one per image in order) | `facebookConfigs[].imageLayout`, `carouselCards`. A card is a link URL or `{"link":"...","title":"...","description":"..."}`. Cards without `--facebook-layout` set `CAROUSEL` |
 | `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
-| `--youtube-ai-generated`, `--youtube-audio-language <tag>`, `--youtube-schedule-on-youtube` | `youtubeConfigs[].aiGenerated`, `defaultAudioLanguage` (a BCP-47 tag such as `en`, `pt-BR` or `es-419`), `scheduleOnYouTube` (see `youtubeConfigs` below) |
+| `--youtube-ai-generated`, `--youtube-audio-language <tag>`, `--youtube-schedule-on-youtube`, `--youtube-playlist <playlistId>` | `youtubeConfigs[].aiGenerated`, `defaultAudioLanguage` (a BCP-47 tag such as `en`, `pt-BR` or `es-419`), `scheduleOnYouTube` (see `youtubeConfigs` below), `playlistId` (find the id with `youtube:playlists`) |
 | `--tumblr-tag <tag>` (repeatable, up to 30, no commas), `--tumblr-title <title>`, `--tumblr-source-url <url>` | `tumblrConfigs[].tags`, `title`, `sourceUrl` |
 | `--wordpress-title <title>`, `--wordpress-excerpt <text>`, `--wordpress-category <id>` (repeatable), `--wordpress-tag <tag>` (repeatable), `--wordpress-status PUBLISH\|DRAFT\|PENDING` | `wordpressConfigs[].title`, `excerpt`, `categoryIds`, `tags`, `status`. Find category ids with `wordpress:categories` |
 | `--google-topic STANDARD\|EVENT\|OFFER`, `--google-cta <type>`, `--google-cta-url`, `--google-event-title`, `--google-event-start`, `--google-event-end`, `--google-offer-code`, `--google-offer-url`, `--google-offer-terms` | `googleBusinessConfigs[]`. The topic defaults to `STANDARD` |
 
-Pinterest titles and links, YouTube settings other than `aiGenerated`, the audio language and `scheduleOnYouTube`, trial reels and TikTok options other than privacy still need a raw API body.
+Pinterest titles and links, YouTube settings other than `aiGenerated`, the audio language, `scheduleOnYouTube` and the playlist, trial reels and TikTok options other than privacy still need a raw API body.
 
 ## API Reference
 
@@ -258,7 +259,7 @@ Per-platform configs, each an array with one entry per connection:
 | `instagramConfigs` | `connectionId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `collaborators` (up to 3 usernames), `userTags` (up to 20 of `username` required, `x` and `y` 0 to 1), `aiGenerated`, `audio` (`audioId` required, `title`, `artist`, `audioVolume` and `videoVolume` 1 to 100, default 100), `trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) |
 | `facebookConfigs` | `pageId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `videoTitle` (max 255), `textFormatPresetId` (digits), `imageLayout` (`GRID` or `CAROUSEL`), `carouselCards` (up to 5 of `link` required, http or https, max 2048; `title` max 100; `description` max 200), `aiGenerated` |
 | `googleBusinessConfigs` | `connectionId`, `topicType` (required: `STANDARD`, `EVENT` or `OFFER`), `callToActionType` (`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`), `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
-| `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `scheduleOnYouTube` (see below), `defaultAudioLanguage` (the language spoken in the original audio as a BCP-47 tag such as `en`, `pt-BR` or `es-419`, max 35; `null` clears a saved value; it does not turn off YouTube's automatic dubbing), `categoryId`, `playlistId` |
+| `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `scheduleOnYouTube` (see below), `defaultAudioLanguage` (the language spoken in the original audio as a BCP-47 tag such as `en`, `pt-BR` or `es-419`, max 35; `null` clears a saved value; it does not turn off YouTube's automatic dubbing), `categoryId`, `playlistId` (an `id` from [YouTube playlists](#youtube-playlists); the uploaded video is added to that playlist) |
 | `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards)), `boardName` (optional, max 180, the board's name instead of `boardId`, never both; 400 when no board or several boards have it), `title` (max 100), `link` (a URL) |
 | `linkedinConfigs` | `connectionId`, `documentTitle` (max 100, `DOCUMENT` posts only) |
 | `tumblrConfigs` | `connectionId`, `tags` (up to 30, each up to 140 characters, no commas), `title` (max 4096), `sourceUrl` (max 2048) |
@@ -574,6 +575,14 @@ GET /api/v1/social-accounts/<id>/pinterest-boards
 
 `pinterestConfigs[].boardName` takes the board's name instead of its id; sending both in one config is a 400. The name is matched against this same list when the request is handled: names are trimmed, a single exact match wins, then a single case-insensitive match. A name no board has, or one several boards share, fails with 400 (for a shared name the message lists the matching ids); it never falls back to another board. In Bulk Schedule only that item fails. The resolved id is stored, and `boardName` is not returned.
 
+### YouTube playlists
+
+```
+GET /api/v1/social-accounts/<id>/youtube-playlists
+```
+
+`<id>` is a YouTube account id from Social Accounts. Returns `{ playlists: [{ id, title, privacyStatus, itemCount }] }` with every playlist of the channel, private and unlisted ones included. `privacyStatus` is `public`, `unlisted` or `private`; `privacyStatus` and `itemCount` can be missing. Needs `posts.draft`. Returns 404 when the account is not found or is not a YouTube account in this workspace, and 400 when YouTube refuses the request, usually because the account must be reconnected. A playlist belongs to one channel, so list the playlists of each channel you post to. Ask the user which playlist to use, or take the one they named, and pass its `id` as `youtubeConfigs[].playlistId` on Create Post, Update Post or Bulk Schedule; the uploaded video is added to that playlist.
+
 ### WordPress categories
 
 ```
@@ -840,7 +849,7 @@ AdaptlyPost has a native MCP server at `https://mcp.adaptlypost.com/mcp`. OAuth-
 }
 ```
 
-**MCP Tools available** (88 tools):
+**MCP Tools available** (89 tools):
 
 | Tool | Description |
 |------|-------------|
@@ -849,6 +858,7 @@ AdaptlyPost has a native MCP server at `https://mcp.adaptlypost.com/mcp`. OAuth-
 | `list_accounts` | List connected accounts with ids, platforms and `status` (`active` or `unauthorized`). Call first; posts take these ids, never usernames |
 | `search_instagram_audio` | Search Instagram music or original sounds for a Reel; pass the `audioId` in `instagramConfigs[].audio` |
 | `list_pinterest_boards` | List the boards a Pinterest account can pin to; pass the chosen `id` as `pinterestConfigs[].boardId`, or its name as `boardName` (not both) |
+| `list_youtube_playlists` | List the playlists of a YouTube channel, private and unlisted ones included; pass the chosen `id` as `youtubeConfigs[].playlistId` |
 | `list_wordpress_categories` | List the categories of a WordPress site; pass the chosen ids as `wordpressConfigs[].categoryIds` |
 | `check_account` | Re-check a Facebook page with Facebook and get its fresh `status` |
 | `remove_account` | Disconnect an account from the workspace; it comes off pending and recurring posts |
@@ -994,8 +1004,9 @@ Use these exact names (uppercase) for platforms:
 - When the post media does not fit one platform (a video too long for TikTok, a carousel with more images than X takes), give that platform its own media with `--platform-media` instead of leaving it out of the post
 - To mention a company in a LinkedIn post, run `linkedin:organization` with the page URL the user gave and paste the returned `mention` into the LinkedIn text
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
+- For a YouTube video the user wants in a playlist, run `youtube:playlists` for that channel, ask the user which playlist to use unless they named it, and pass its `id` with `--youtube-playlist`
 - For a WordPress post, run `wordpress:categories` for that site when the user names categories and pass their ids with `--wordpress-category`. When the user wants to finish the post in WordPress, pass `--wordpress-status DRAFT`, or `PENDING` to submit it for review
-- The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`, `--youtube-audio-language` and `--youtube-schedule-on-youtube`; use the API body directly for those
+- The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`, `--youtube-audio-language`, `--youtube-schedule-on-youtube` and `--youtube-playlist`; use the API body directly for those
 - The MCP server covers the whole REST API: posts (Telegram, Tumblr and WordPress included), dry runs, recurring posts, RSS feeds, connect links, account checks and removal, workspaces, members and invitations, webhooks, analytics, the inbox, and AI captions and images
 - For "what's new" questions run `inbox`, then the list command for the channel with `--status UNREAD`. Read a comment with `inbox:comment` before answering it
 - Use `platformTexts` for per-platform caption overrides (e.g. shorter text for X)

@@ -119,6 +119,8 @@ const Workspace = z.object({ "id": z.string().nullish().describe("Send it in the
 
 const WorkspaceList = z.object({ "workspaces": z.array(Workspace).nullish() }).passthrough();
 
+const YouTubePlaylist = z.object({ "id": z.string().nullish().describe("Pass as `youtubeConfigs[].playlistId`"), "title": z.string().nullish(), "privacyStatus": z.string().nullish().describe("`public`, `unlisted` or `private`, as YouTube reports it"), "itemCount": z.number().nullish().describe("Number of videos in the playlist") }).passthrough();
+
 export const apiResponses = {
   getMe: Me,
   listWorkspaces: WorkspaceList,
@@ -162,6 +164,7 @@ export const apiResponses = {
   removeSocialAccount: SocialAccountRemovalResult,
   searchInstagramAudio: z.object({ "audio": z.array(InstagramAudio).nullish() }).passthrough(),
   getPinterestBoards: z.object({ "boards": z.array(PinterestBoard).nullish() }).passthrough(),
+  getYouTubePlaylists: z.object({ "playlists": z.array(YouTubePlaylist).nullish() }).passthrough(),
   getWordPressCategories: z.object({ "categories": z.array(WordPressCategory).nullish() }).passthrough(),
   lookupLinkedInOrganization: z.object({ "organization": LinkedInOrganization.nullish() }).passthrough(),
   getUploadUrls: z.object({ "urls": z.array(z.object({ "fileName": z.string().nullish(), "uploadUrl": z.string().nullish().describe("PUT the file bytes to this URL"), "publicUrl": z.string().nullish().describe("Public URL to reference in mediaUrls after upload. Reusable across posts; the file stays until the last post referencing it has published"), "key": z.string().nullish(), "expiresAt": z.string().nullish() }).passthrough()).nullish() }).passthrough(),

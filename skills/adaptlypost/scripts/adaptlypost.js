@@ -421,10 +421,15 @@ function buildYouTubeConfig(parsed) {
     error("--youtube-audio-language needs a language tag such as en or pt-BR");
     process.exit(1);
   }
+  if (parsed["youtube-playlist"] === true) {
+    error("--youtube-playlist needs a playlist id from youtube:playlists");
+    process.exit(1);
+  }
   return withoutEmpty({
     aiGenerated: parsed["youtube-ai-generated"] ? true : undefined,
     defaultAudioLanguage: parsed["youtube-audio-language"] && String(parsed["youtube-audio-language"]),
     scheduleOnYouTube: parsed["youtube-schedule-on-youtube"] ? true : undefined,
+    playlistId: parsed["youtube-playlist"] && String(parsed["youtube-playlist"]),
   });
 }
 
@@ -686,6 +691,19 @@ const COMMANDS = {
     const data = await request(
       "GET",
       `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/pinterest-boards`,
+    );
+    output(data);
+  },
+
+  "youtube:playlists": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js youtube:playlists --id <youtube_account_id>");
+      process.exit(1);
+    }
+    const data = await request(
+      "GET",
+      `/api/v1/social-accounts/${encodeURIComponent(parsed.id)}/youtube-playlists`,
     );
     output(data);
   },

@@ -81,7 +81,7 @@
     {
       "name": "list_accounts",
       "title": "List Connected Accounts",
-      "description": "List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform's message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.",
+      "description": "List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a YouTube channel, list_youtube_playlists returns its playlists; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform's message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -189,6 +189,45 @@
         "properties": {
           "result": {
             "description": "An object with boards: one { id, name, description, privacy, pinCount } per board. Pass id as pinterestConfigs[].boardId, or name as boardName."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_youtube_playlists",
+      "title": "List YouTube Playlists",
+      "description": "List the playlists of a connected YouTube channel, private and unlisted ones included. Returns { playlists } with id, title, privacyStatus (public, unlisted or private) and itemCount. When the user wants the video in a playlist, ask which one unless they already named it, and pass that playlist's id as youtubeConfigs[].playlistId in create_post, update_post or bulk_schedule_posts; the uploaded video is added to it. A playlist belongs to one channel, so call it once per YouTube account you post to. Fails with 404 when accountId is not a YouTube account in the workspace, and with 400 when YouTube refuses the request, which usually means the user must reconnect the account in AdaptlyPost. Nothing is posted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "The YouTube account id from list_accounts"
+          },
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "required": [
+          "accountId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "An object with playlists: one { id, title, privacyStatus, itemCount } per playlist. Pass id as youtubeConfigs[].playlistId."
           }
         },
         "additionalProperties": false
@@ -1724,7 +1763,7 @@
                 },
                 "playlistId": {
                   "type": "string",
-                  "description": "Add video to this playlist"
+                  "description": "Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists"
                 },
                 "defaultAudioLanguage": {
                   "anyOf": [
@@ -2820,7 +2859,7 @@
                 },
                 "playlistId": {
                   "type": "string",
-                  "description": "Add video to this playlist"
+                  "description": "Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists"
                 },
                 "defaultAudioLanguage": {
                   "anyOf": [
@@ -3995,7 +4034,7 @@
                 },
                 "playlistId": {
                   "type": "string",
-                  "description": "Add video to this playlist"
+                  "description": "Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists"
                 },
                 "defaultAudioLanguage": {
                   "anyOf": [
@@ -5143,7 +5182,7 @@
                       },
                       "playlistId": {
                         "type": "string",
-                        "description": "Add video to this playlist"
+                        "description": "Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists"
                       },
                       "defaultAudioLanguage": {
                         "anyOf": [
@@ -6192,7 +6231,7 @@
                       },
                       "playlistId": {
                         "type": "string",
-                        "description": "Add video to this playlist"
+                        "description": "Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists"
                       },
                       "defaultAudioLanguage": {
                         "anyOf": [

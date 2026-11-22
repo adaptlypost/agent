@@ -3,6 +3,7 @@ get_me
 list_accounts
 search_instagram_audio
 list_pinterest_boards
+list_youtube_playlists
 list_wordpress_categories
 check_account
 remove_account

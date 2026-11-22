@@ -32,6 +32,7 @@ that **Check for updates** in Kiro's Powers panel refreshes it.
 | Manage accounts | `check_account` (Facebook pages), `remove_account`, `create_connect_link`, `revoke_connect_link` |
 | Reel music | `search_instagram_audio` |
 | Pinterest boards | `list_pinterest_boards`, or `boardName` when the user named the board |
+| YouTube playlists | `list_youtube_playlists` |
 | WordPress categories | `list_wordpress_categories` |
 | Media | `upload_media`, `get_upload_urls`, `open_upload_widget` |
 | Check before posting | `validate_post`, `validate_bulk_posts` |
@@ -183,6 +184,11 @@ If the user already approved a new post word for word, you can call `create_post
   named "AdaptlyPost", created on the account the first time it is needed; leave both out only when the
   user is happy with that board. A 400 from `list_pinterest_boards` usually means the user has to
   reconnect the Pinterest account in the app.
+- **YouTube playlists**: to add the uploaded video to a playlist, call `list_youtube_playlists` with the
+  YouTube account's id; it returns every playlist of the channel, private and unlisted ones included. Ask
+  the user which playlist to use unless they named it, and pass its `id` as `youtubeConfigs.playlistId`. A
+  playlist belongs to one channel, so list the playlists of each channel you post to. A 400 from
+  `list_youtube_playlists` usually means the user has to reconnect the YouTube account in the app.
 - **Instagram, TikTok and YouTube** need media. Instagram and Facebook take `postType` `FEED`, `REEL` or
   `STORY` in `instagramConfigs` and `facebookConfigs`; `REEL` needs a video and `STORY` an image, video or
   carousel (each item becomes its own story). `shareToStory: true` on a `FEED` or `REEL` post also posts

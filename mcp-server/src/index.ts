@@ -377,7 +377,7 @@ const YouTubeConfigSchema = z.object({
   playlistId: z
     .string()
     .optional()
-    .describe('Id of a playlist on this YouTube channel; the uploaded video is added to it'),
+    .describe('Id of a playlist on this channel; the uploaded video is added to it. List the ids with list_youtube_playlists'),
   defaultAudioLanguage: z
     .string()
     .max(35)
@@ -764,7 +764,7 @@ const platformConfigFields = {
     .array(YouTubeConfigSchema)
     .optional()
     .describe(
-      'YouTube per-connection config: videoTitle, tags, privacyStatus, playlistId, notifySubscribers, categoryId, madeForKids, license, allowEmbedding, aiGenerated, defaultAudioLanguage, postType (VIDEO or SHORTS) and scheduleOnYouTube (upload now as a private video that YouTube publishes at scheduledAt). The video description is the post text, or the YOUTUBE entry of platformTexts',
+      'YouTube per-connection config: videoTitle, tags, privacyStatus, playlistId, notifySubscribers, categoryId, madeForKids, license, allowEmbedding, aiGenerated, defaultAudioLanguage, postType (VIDEO or SHORTS) and scheduleOnYouTube (upload now as a private video that YouTube publishes at scheduledAt). Get playlistId from list_youtube_playlists for that connectionId; a playlist belongs to one channel. The video description is the post text, or the YOUTUBE entry of platformTexts',
     ),
   instagramConfigs: z
     .array(InstagramConfigSchema)
@@ -1545,7 +1545,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'List Connected Accounts',
       description:
-        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
+        'List the social accounts connected to the workspace (the current one unless workspaceId names another) across all fourteen platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram (true when the account can add audio to Reels, see search_instagram_audio). For a Pinterest account, list_pinterest_boards returns the boards it can pin to; for a YouTube channel, list_youtube_playlists returns its playlists; for a WordPress site, list_wordpress_categories returns its categories. For a Google Business Profile location displayName is the location title and username is empty; its id goes in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account (unauthorizedReason carries the platform\'s message) is refused with 400 by create_post until the user reconnects it in AdaptlyPost, so leave it out and tell the user. Call this before create_post, update_post, or bulk_schedule_posts: they take these ids, never usernames. Pass the ids as accountIds, or put each id in the array for its platform (linkedinConnectionIds, tumblrConnectionIds, telegramConnectionIds, wordpressConnectionIds, and so on); Facebook page accounts go in pageIds. check_account re-checks a Facebook page with Facebook, and remove_account disconnects an account. Not for post history or publishing status: use list_posts or list_post_results for those. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         apiResponses.listSocialAccounts,
@@ -1637,6 +1637,40 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       try {
         const data = await client.get(
           `/social-accounts/${encodeURIComponent(accountId)}/pinterest-boards`,
+        );
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
+    'list_youtube_playlists',
+    {
+      title: 'List YouTube Playlists',
+      description:
+        "List the playlists of a connected YouTube channel, private and unlisted ones included. Returns { playlists } with id, title, privacyStatus (public, unlisted or private) and itemCount. When the user wants the video in a playlist, ask which one unless they already named it, and pass that playlist's id as youtubeConfigs[].playlistId in create_post, update_post or bulk_schedule_posts; the uploaded video is added to it. A playlist belongs to one channel, so call it once per YouTube account you post to. Fails with 404 when accountId is not a YouTube account in the workspace, and with 400 when YouTube refuses the request, which usually means the user must reconnect the account in AdaptlyPost. Nothing is posted.",
+      inputSchema: {
+        accountId: z
+          .string()
+          .describe('The YouTube account id from list_accounts'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.getYouTubePlaylists,
+        'An object with playlists: one { id, title, privacyStatus, itemCount } per playlist. Pass id as youtubeConfigs[].playlistId.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ accountId }, client) => {
+      try {
+        const data = await client.get(
+          `/social-accounts/${encodeURIComponent(accountId)}/youtube-playlists`,
         );
         return toolResult(data);
       } catch (error) {

@@ -1,0 +1,19 @@
+mcp-server/check-declared-tools.mjs
+  s_337947f7f8702a::t_7937839e814b4e 17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e7f480927f36105ff1f75fc58ef98142a598ced6",
+  "prompts": {},
+  "sessions": {
+    "s_337947f7f8702a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9589e5b8-7870-4314-8c74-bff4b2ffa2c0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

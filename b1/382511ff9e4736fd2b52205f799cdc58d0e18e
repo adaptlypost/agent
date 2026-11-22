@@ -1,0 +1,41 @@
+README.md
+  s_337947f7f8702a::t_c61178ed64012b 3,173,231
+kiro-power/skills/adaptlypost/SKILL.md
+  s_090e595bff8e94::t_0a082c4fa7afc0 35,187-191
+lhm.plugin.json
+  s_337947f7f8702a::t_e3f1b714868e7c 84,205-243,1766,2862,4037,5185,6234
+mcp-server/declared-tools.txt
+  s_337947f7f8702a::t_84ba9fc40f49fe 6
+mcp-server/src/api-schemas.ts
+  s_337947f7f8702a::t_f058005fcc6d21 122-123,167
+mcp-server/src/index.ts
+  s_337947f7f8702a::t_f9dd7829acf8f1 380,767,1548,1648-1681
+skills/adaptlypost/SKILL.md
+  s_337947f7f8702a::t_42bb829c9740d2 104,182,187,262,578-585,852,861,1007,1009
+skills/adaptlypost/scripts/adaptlypost.js
+  s_337947f7f8702a::t_75a5b7623f964a 424-427,432,698-710
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1382511ff9e4736fd2b52205f799cdc58d0e18e",
+  "prompts": {},
+  "sessions": {
+    "s_090e595bff8e94": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "054a1bee-e925-48f1-aabb-c88c834a8d54",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    },
+    "s_337947f7f8702a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9589e5b8-7870-4314-8c74-bff4b2ffa2c0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

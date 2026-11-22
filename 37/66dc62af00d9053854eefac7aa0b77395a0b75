@@ -1,0 +1,27 @@
+gemini-extension.json
+  s_337947f7f8702a::t_9ae8317e6b1b56 3
+kiro-power/plugin.json
+  s_337947f7f8702a::t_4a6f38ac8d6869 4
+lhm.plugin.json
+  s_337947f7f8702a::t_b03912fae07599 4
+mcp-server/package.json
+  s_337947f7f8702a::t_2dae5e90505bec 3
+package.json
+  s_337947f7f8702a::t_6b30483ab5ec92 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3766dc62af00d9053854eefac7aa0b77395a0b75",
+  "prompts": {},
+  "sessions": {
+    "s_337947f7f8702a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9589e5b8-7870-4314-8c74-bff4b2ffa2c0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

@@ -52,7 +52,7 @@ import {
   uploadLinkUrl,
   type ParkedFile,
 } from './upload-links.js';
-import { withoutSchemaDialect } from './schema-dialect.js';
+import { withPortableToolSchemas } from './portable-tool-schemas.js';
 import { isSetupPageRequest, sendSetupPage, type SetupPageConfig } from './setup-page.js';
 import {
   parkWebhookSecret,
@@ -5234,7 +5234,7 @@ async function main() {
           enableJsonResponse: !wantsSse,
         });
         const reqServer = createMcpServer('http', reqApi);
-        await reqServer.connect(withoutSchemaDialect(transport));
+        await reqServer.connect(withPortableToolSchemas(transport));
         try {
           let parsedBody: unknown;
           if (req.method === 'POST') {
@@ -5279,7 +5279,7 @@ async function main() {
   } else {
     const server = createMcpServer('stdio');
     const transport = new StdioServerTransport();
-    await server.connect(withoutSchemaDialect(transport));
+    await server.connect(withPortableToolSchemas(transport));
   }
 }
 

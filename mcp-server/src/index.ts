@@ -1117,6 +1117,10 @@ const bulkPostsShape = {
           .array(WordPressConfigSchema)
           .optional()
           .describe('WordPress config for this item only, such as its own title or categories; replaces the batch-level wordpressConfigs'),
+        twitterConfigs: z
+          .array(TwitterConfigSchema)
+          .optional()
+          .describe('X config for this item only, such as its own quoteOf or AI label; replaces the batch-level twitterConfigs'),
       }),
     )
     .min(1)
@@ -1124,6 +1128,7 @@ const bulkPostsShape = {
     .describe('The posts to schedule; each is created independently'),
   ...connectionIdFields,
   ...platformConfigFields,
+  ...twitterConfigsField,
 };
 
 // ---------------------------------------------------------------------------
@@ -2885,7 +2890,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule a batch of posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, threadsConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule a batch of posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, threadsConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs, wordpressConfigs or twitterConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
         BULK_SCHEDULE_RESULT,

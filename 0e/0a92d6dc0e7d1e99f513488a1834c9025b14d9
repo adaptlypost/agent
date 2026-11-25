@@ -1,0 +1,33 @@
+gemini-extension.json
+  s_be37a3ed22325d::t_d435eb5bbe1a6c 3
+kiro-power/plugin.json
+  s_be37a3ed22325d::t_77e5a16807d206 4
+kiro-power/skills/adaptlypost/SKILL.md
+  s_be37a3ed22325d::t_fa3e35745dd826 237-238,354
+lhm.plugin.json
+  s_be37a3ed22325d::t_20e0576ce4b246 4,4762,5613-5638,5808-5814,6695-6720,6890-6896
+mcp-server/package.json
+  s_be37a3ed22325d::t_2bf0f98e4d6474 3
+mcp-server/src/index.ts
+  s_be37a3ed22325d::t_4bd31eee0f3fdd 1120-1123,1131,2893
+package.json
+  s_be37a3ed22325d::t_3a5e7c669fc5fc 3
+skills/adaptlypost/SKILL.md
+  s_be37a3ed22325d::t_9ce63acb2a0d86 551
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e0a92d6dc0e7d1e99f513488a1834c9025b14d9",
+  "prompts": {},
+  "sessions": {
+    "s_be37a3ed22325d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "742b46c7-804d-4925-8d13-8274cbc033fa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}

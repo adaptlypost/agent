@@ -217,8 +217,12 @@ If the user already approved a new post word for word, you can call `create_post
   `youtubeConfigs.aiGenerated` shows YouTube's "Altered or synthetic content" label;
   `tiktokConfigs.aiGenerated` labels TikTok videos; `facebookConfigs.aiGenerated` shows Facebook's "AI info"
   label on every `VIDEO` post, whatever its `postType` (Facebook publishes every video as a reel, and a video
-  story carries the label too), and photos, carousels and text posts are refused with 400. Set them when the
-  user made the media with AI.
+  story carries the label too), and photos, carousels and text posts are refused with 400;
+  `twitterConfigs.aiGenerated` sets `made_with_ai` on the X post, and X labels it;
+  `threadsConfigs.aiGenerated` shows Threads' "AI info" label on text, image, video and carousel posts
+  (thread replies do not carry it); `pinterestConfigs.aiGenerated` sends Pinterest the `AI_MODIFIED`
+  disclosure, which shows an "AI modified" label on image, video and carousel Pins. `threadsConfigs`
+  entries take a `connectionId` from `threadsConnectionIds`. Set them when the user made the media with AI.
 - **Instagram trial reels**: `instagramConfigs.trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) works only for
   a single video posted as a reel or feed video, on an account Instagram has enabled for trial reels.
 - **LinkedIn documents** (PDF, PPT, PPTX, DOC, DOCX): `contentType: DOCUMENT`, exactly one file in
@@ -346,7 +350,7 @@ Platform names are uppercase: `INSTAGRAM`, `TIKTOK`, `YOUTUBE`, `TWITTER` (X), `
   (have the user reconnect the channel first if it was disconnected).
 - **Bulk**: `bulk_schedule_posts` takes up to 100 posts that share the same platforms, accounts and
   configs; an item can carry its own `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`,
-  `youtubeConfigs`, `pinterestConfigs`, `googleBusinessConfigs`, `tumblrConfigs` or `wordpressConfigs` to replace the shared
+  `threadsConfigs`, `youtubeConfigs`, `pinterestConfigs`, `googleBusinessConfigs`, `tumblrConfigs` or `wordpressConfigs` to replace the shared
   ones, plus its own `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia` and
   `platformAspectRatios`.
   Run `validate_bulk_posts` with the same input first and fix every item it flags. It has no draft mode,

@@ -413,6 +413,19 @@ function buildPinterestConfig(parsed) {
   return withoutEmpty({
     boardId: parsed["pinterest-board"] && String(parsed["pinterest-board"]),
     boardName: parsed["pinterest-board-name"] && String(parsed["pinterest-board-name"]),
+    aiGenerated: parsed["pinterest-ai-generated"] ? true : undefined,
+  });
+}
+
+function buildTwitterConfig(parsed) {
+  return withoutEmpty({
+    aiGenerated: parsed["twitter-ai-generated"] ? true : undefined,
+  });
+}
+
+function buildThreadsConfig(parsed) {
+  return withoutEmpty({
+    aiGenerated: parsed["threads-ai-generated"] ? true : undefined,
   });
 }
 
@@ -826,6 +839,8 @@ const COMMANDS = {
     attachConfigs(body, "instagramConnectionIds", "instagramConfigs", "connectionId", buildInstagramConfig(args, parsed));
     attachConfigs(body, "pageIds", "facebookConfigs", "pageId", buildFacebookConfig(args, parsed));
     attachConfigs(body, "pinterestConnectionIds", "pinterestConfigs", "connectionId", buildPinterestConfig(parsed));
+    attachConfigs(body, "twitterConnectionIds", "twitterConfigs", "connectionId", buildTwitterConfig(parsed));
+    attachConfigs(body, "threadsConnectionIds", "threadsConfigs", "connectionId", buildThreadsConfig(parsed));
     attachConfigs(body, "youtubeConnectionIds", "youtubeConfigs", "connectionId", buildYouTubeConfig(parsed));
     attachConfigs(body, "googleBusinessConnectionIds", "googleBusinessConfigs", "connectionId", buildGoogleBusinessConfig(parsed));
     attachConfigs(body, "tumblrConnectionIds", "tumblrConfigs", "connectionId", buildTumblrConfig(args, parsed));

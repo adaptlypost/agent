@@ -575,6 +575,22 @@ const TwitterConfigSchema = z.object({
     .describe(
       "Quote one of this account's own X posts, with the post text as the commentary. Takes a post link such as https://x.com/<handle>/status/<id> or the post's numeric id, such as the platformPostId from list_post_results. X only lets an account quote posts it wrote or posts that mention it: a link naming another handle is refused with 400, and any other post fails when it publishes. Needs text, and media on the post is not attached on this account. Costs the same as any X post",
     ),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the post contains AI-generated media. Sets made_with_ai on the X post, and X labels it. Omit it or send false for no label',
+    ),
+});
+
+const ThreadsConfigSchema = z.object({
+  connectionId: z.string().describe('Threads connection ID from list_accounts'),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the post contains AI-generated content. Threads shows its "AI info" label on the post. Works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it. Omit it or send false for no label',
+    ),
 });
 
 const TumblrConfigSchema = z.object({
@@ -640,6 +656,12 @@ const PinterestConfigSchema = z.object({
     ),
   title: z.string().max(100).optional().describe('Title shown on the pin'),
   link: z.string().optional().describe('Destination URL for the pin'),
+  aiGenerated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the Pin was made or modified with AI. Sends Pinterest the AI_MODIFIED disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send false for no label',
+    ),
 });
 
 const GoogleBusinessEventDate = z
@@ -778,11 +800,17 @@ const platformConfigFields = {
     .describe(
       'Facebook per-page config: post type, shareToStory, video title, text background, a grid or link carousel for several images, and the AI info label. pageId must match an entry in pageIds',
     ),
+  threadsConfigs: z
+    .array(ThreadsConfigSchema)
+    .optional()
+    .describe(
+      'Threads per-account options: aiGenerated adds the AI info label. connectionId must match an entry in threadsConnectionIds',
+    ),
   pinterestConfigs: z
     .array(PinterestConfigSchema)
     .optional()
     .describe(
-      'Pinterest per-connection config: the board to pin to, a pin title and a destination link. Get boardId from list_pinterest_boards for that connectionId, or pass the board name as boardName instead (not both); a board belongs to one Pinterest account. A boardName that matches no board or several fails with 400. Without either the pin goes to a board named AdaptlyPost',
+      'Pinterest per-connection config: the board to pin to, a pin title, a destination link and the AI modified label. Get boardId from list_pinterest_boards for that connectionId, or pass the board name as boardName instead (not both); a board belongs to one Pinterest account. A boardName that matches no board or several fails with 400. Without either the pin goes to a board named AdaptlyPost',
     ),
   googleBusinessConfigs: z
     .array(GoogleBusinessConfigSchema)
@@ -946,7 +974,7 @@ const twitterConfigsField = {
     .array(TwitterConfigSchema)
     .optional()
     .describe(
-      "X per-connection config: quoteOf quotes one of the account's own posts with the text as commentary. connectionId must match an entry in twitterConnectionIds",
+      "X per-connection config: quoteOf quotes one of the account's own posts with the text as commentary, aiGenerated adds the made-with-AI label. connectionId must match an entry in twitterConnectionIds",
     ),
 };
 
@@ -1069,6 +1097,10 @@ const bulkPostsShape = {
           .array(FacebookConfigSchema)
           .optional()
           .describe('Facebook config for this item only; replaces the batch-level facebookConfigs'),
+        threadsConfigs: z
+          .array(ThreadsConfigSchema)
+          .optional()
+          .describe('Threads config for this item only, such as its own AI info label; replaces the batch-level threadsConfigs'),
         pinterestConfigs: z
           .array(PinterestConfigSchema)
           .optional()
@@ -2513,7 +2545,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
       },
       outputSchema: resultSchema(
         apiResponses.getPost,
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError, firstCommentPublishedAt, firstCommentDelayMinutes (absent when the comment posts right away) and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time); threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform\'s own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated, youtubeDefaultAudioLanguage, youtubeScheduleOnYouTube and youtubeScheduledVideoId (the YouTube video id once a scheduleOnYouTube video is uploaded early); linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks and twitterQuoteOf; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError, firstCommentPublishedAt, firstCommentDelayMinutes (absent when the comment posts right away) and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time); threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform\'s own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated, youtubeDefaultAudioLanguage, youtubeScheduleOnYouTube and youtubeScheduledVideoId (the YouTube video id once a scheduleOnYouTube video is uploaded early); linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks, twitterQuoteOf and twitterAiGenerated; threadsAiGenerated; pinterestAiGenerated; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2853,7 +2885,7 @@ function createMcpServer(transport: ServerTransport, apiClient?: RestClient): Mc
     {
       title: 'Bulk Schedule Posts',
       description:
-        'Schedule a batch of posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
+        'Schedule a batch of posts in one call to the same platforms and accounts. Each item supplies its own text, contentType, scheduledAt, and optional media; platforms, connection-id arrays, timezone, and platform configs are shared by every item, though an item may carry its own tiktokConfigs, youtubeConfigs, instagramConfigs, facebookConfigs, threadsConfigs, pinterestConfigs, googleBusinessConfigs, tumblrConfigs or wordpressConfigs to replace the shared ones, plus its own firstComments, threadReplies, platformThumbnails, platformMedia and platformAspectRatios. twitterKeepLinks, twitterConfigs and linkedinConfigs are not available in bulk. Call validate_bulk_posts with the same input first to see the problems of every item without creating anything. Items are processed independently: each is validated and created like create_post, so one bad item fails alone while the rest are scheduled. Returns { totalScheduled, totalFailed, results[] } with a postId or errorMessage per item, in input order; read every row. An item with a past scheduledAt publishes immediately rather than being rejected. Call list_accounts first; TikTok needs tiktokConfigs with privacyLevel, and Pinterest takes pinterestConfigs with a boardId from list_pinterest_boards or a boardName, not both; an item whose boardName matches no board or several fails alone. Use create_post for a single post or a draft; this tool has no draft mode. These posts publish publicly to the user\'s social accounts: show the user every item\'s text, media and time plus the accounts, and get their confirmation before calling. Each call creates new posts, so calling again after an error or timeout can publish duplicates; check list_posts first.',
       inputSchema: bulkPostsShape,
       outputSchema: resultSchema(
         BULK_SCHEDULE_RESULT,

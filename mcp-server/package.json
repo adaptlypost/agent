@@ -26,6 +26,8 @@
     "start": "bun run src/index.ts",
     "check-types": "tsc --noEmit",
     "generate:api-schemas": "node scripts/generate-api-schemas.mjs",
+    "generate:lhm": "bun scripts/generate-lhm-manifest.mjs",
+    "check:lhm": "bun scripts/generate-lhm-manifest.mjs --check",
     "lint": "eslint src/"
   },
   "dependencies": {

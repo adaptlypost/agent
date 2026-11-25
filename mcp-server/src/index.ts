@@ -81,14 +81,6 @@ const API_BASE_URL =
   process.env.ADAPTLYPOST_API_URL ?? 'https://post.adaptlypost.com/post/api/v1';
 const API_TOKEN = process.env.ADAPTLYPOST_API_TOKEN ?? '';
 
-if (!API_TOKEN && !isHttpMode) {
-  console.error(
-    'Error: ADAPTLYPOST_API_TOKEN environment variable is required.\n' +
-      'Create one at https://app.adaptlypost.com/api-tokens',
-  );
-  process.exit(1);
-}
-
 const api = new RestClient(API_BASE_URL, API_TOKEN);
 
 const PUBLIC_ORIGIN = process.env.MCP_PUBLIC_ORIGIN ?? 'https://mcp.adaptlypost.com';
@@ -1468,7 +1460,7 @@ function callerOf(headers: Record<string, string | string[] | undefined> | undef
 
 type ServerTransport = 'stdio' | 'http';
 
-function createMcpServer(transport: ServerTransport, apiClient?: RestClient): McpServer {
+export function createMcpServer(transport: ServerTransport, apiClient?: RestClient): McpServer {
   const baseClient = apiClient ?? api;
   const server = new McpServer(
     {
@@ -5314,13 +5306,22 @@ async function main() {
       console.error(`Connect with: https://your-domain/mcp`);
     });
   } else {
+    if (!API_TOKEN) {
+      console.error(
+        'Error: ADAPTLYPOST_API_TOKEN environment variable is required.\n' +
+          'Create one at https://app.adaptlypost.com/api-tokens',
+      );
+      process.exit(1);
+    }
     const server = createMcpServer('stdio');
     const transport = new StdioServerTransport();
     await server.connect(withPortableToolSchemas(transport));
   }
 }
 
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

@@ -308,7 +308,25 @@ function buildAspectRatios(args) {
   });
 }
 
+function buildLabelIds(args, parsed) {
+  if (parsed.label === true) {
+    error("--label needs a label id from labels");
+    process.exit(1);
+  }
+  const labelIds = parseRepeatedRaw(args, "label").flatMap(splitList);
+  if (parsed["clear-labels"]) {
+    if (labelIds.length > 0) {
+      error("--clear-labels cannot be combined with --label");
+      process.exit(1);
+    }
+    return [];
+  }
+  return labelIds.length > 0 ? labelIds : undefined;
+}
+
 function applyPostExtras(args, parsed, body, { aspectRatios = true } = {}) {
+  const labelIds = buildLabelIds(args, parsed);
+  if (labelIds) body.labelIds = labelIds;
   const firstComments = buildFirstComments(args);
   if (firstComments.length > 0) body.firstComments = firstComments;
   const threadReplies = buildThreadReplies(args);
@@ -721,6 +739,11 @@ const COMMANDS = {
     output(data);
   },
 
+  labels: async () => {
+    const data = await request("GET", "/api/v1/labels");
+    output(data);
+  },
+
   "wordpress:categories": async (args) => {
     const parsed = parseArgs(args);
     if (!parsed.id) {
@@ -865,6 +888,7 @@ const COMMANDS = {
       parsed.status.split(",").forEach((s) => params.append("statuses", s));
     if (parsed.platform)
       parsed.platform.split(",").forEach((p) => params.append("platforms", p));
+    splitList(parsed.label).forEach((id) => params.append("labelIds", id));
     if (parsed.sort) params.set("sortOrder", String(parsed.sort).toUpperCase());
     if (parsed.from) params.set("startDate", parsed.from);
     if (parsed.to) params.set("endDate", parsed.to);

@@ -1,7 +1,7 @@
 {
   "identifier": "adaptlypost-agent",
   "name": "AdaptlyPost",
-  "version": "1.25.1",
+  "version": "1.26.0",
   "description": "Draft, schedule, publish and measure social media posts on Instagram, TikTok, YouTube, X, LinkedIn, Facebook, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Tumblr, Telegram and WordPress, with bulk and recurring posts, RSS feeds, webhooks, AI captions and images, post analytics, an inbox to answer comments, mentions, direct messages and Google reviews, and workspace and team setup. Sign in with OAuth or an API key.",
   "author": "AdaptlyPost",
   "authorUrl": "https://adaptlypost.com",
@@ -984,7 +984,7 @@
     {
       "name": "create_post",
       "title": "Create Post",
-      "description": "Create one post on the user's own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft's planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.",
+      "description": "Create one post on the user's own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft's planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. labelIds puts workspace labels from list_labels on the post. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1115,6 +1115,14 @@
               "maxLength": 1000
             },
             "description": "Alt text per image, in the same order as mediaUrls (use \"\" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it"
+          },
+          "labelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "description": "Label IDs from list_labels to put on the post, for example one label per brand. Max 10. An ID that is not a label of the workspace returns 400. Labels organise posts inside AdaptlyPost and are never sent to a platform"
           },
           "thumbnailUrl": {
             "type": "string",
@@ -2272,6 +2280,14 @@
             },
             "description": "Alt text per image, in the same order as mediaUrls (use \"\" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it"
           },
+          "labelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "description": "Label IDs from list_labels to put on the post, for example one label per brand. Max 10. An ID that is not a label of the workspace returns 400. Labels organise posts inside AdaptlyPost and are never sent to a platform"
+          },
           "thumbnailUrl": {
             "type": "string",
             "description": "Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless platformThumbnails overrides it"
@@ -3327,7 +3343,7 @@
     {
       "name": "list_posts",
       "title": "List Posts",
-      "description": "List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. Page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post's full record and list_post_results for one post's per-platform outcomes and retry ids.",
+      "description": "List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), labelIds (posts carrying any of these labels from list_labels), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. Page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post's full record and list_post_results for one post's per-platform outcomes and retry ids.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3369,6 +3385,14 @@
               ]
             },
             "description": "Filter to posts targeting any of these platforms"
+          },
+          "labelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "description": "Only posts carrying any of these labels. Label IDs come from list_labels"
           },
           "startDate": {
             "type": "string",
@@ -3417,9 +3441,33 @@
       }
     },
     {
+      "name": "list_labels",
+      "title": "List Labels",
+      "description": "List the labels of the workspace (the current one unless workspaceId names another), sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Labels organise posts inside AdaptlyPost, for example one label per brand, and are never sent to a social platform. Labels are created in the AdaptlyPost app; no tool creates one. Pass label ids as labelIds in create_post, validate_post or update_post (bulk_schedule_posts takes none), or as the labelIds filter of list_posts. Needs the posts.read permission. Takes only the optional workspaceId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "description": "Workspace to act in: an id from list_workspaces. Omit to act in the workspace list_workspaces marks current. Use the same workspaceId for every call about the same workspace, since ids from one workspace (accounts, posts, uploads) do not exist in another"
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
       "name": "update_post",
       "title": "Update Post",
-      "description": "Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with \"Cannot edit post in current state\", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments, platformThumbnails and platformMedia you omit keep their values; sending firstComments, platformThumbnails or platformMedia replaces every stored entry, and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post's target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post's YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia takes effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft's status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.",
+      "description": "Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with \"Cannot edit post in current state\", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, labelIds, firstComments, platformThumbnails and platformMedia you omit keep their values; sending labelIds, firstComments, platformThumbnails or platformMedia replaces every stored entry, labelIds [] removes every label and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post's target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post's YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia and labelIds take effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft's status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3490,6 +3538,14 @@
               "maxLength": 1000
             },
             "description": "Alt text per image, in the same order as mediaUrls (use \"\" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it. Applied only when platforms is also sent"
+          },
+          "labelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "description": "Label IDs from list_labels to put on the post, for example one label per brand. Max 10. An ID that is not a label of the workspace returns 400. Labels organise posts inside AdaptlyPost and are never sent to a platform. Sending the list replaces every label of the post, an empty list removes them all, and leaving it out keeps the stored ones. It takes effect without platforms"
           },
           "thumbnailUrl": {
             "type": "string",

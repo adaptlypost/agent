@@ -25,6 +25,7 @@ create_post
 validate_post
 get_post
 list_posts
+list_labels
 update_post
 delete_post
 unschedule_post

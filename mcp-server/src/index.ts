@@ -200,6 +200,9 @@ const LINKEDIN_MENTION_RULE =
 const ALT_TEXT_RULE =
   'Alt text per image, in the same order as mediaUrls (use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
 
+const LABEL_IDS_RULE =
+  'Label IDs from list_labels to put on the post, for example one label per brand. Max 10. An ID that is not a label of the workspace returns 400. Labels organise posts inside AdaptlyPost and are never sent to a platform';
+
 const PostStatus = z.enum([
   'COMPLETED',
   'DRAFT',
@@ -1032,6 +1035,7 @@ const createPostShape = {
     .array(z.string().max(1000))
     .optional()
     .describe(ALT_TEXT_RULE),
+  labelIds: z.array(z.string()).max(10).optional().describe(LABEL_IDS_RULE),
   ...postThumbnailFields,
   platformTexts: platformTextsField.describe('Per-platform caption overrides'),
   ...postExtrasFields,
@@ -2478,7 +2482,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
     {
       title: 'Create Post',
       description:
-        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
+        'Create one post on the user\'s own connected social accounts. saveAsDraft saves a DRAFT and publishes nothing; a scheduledAt sent with it becomes the draft\'s planned date, which publish_draft later schedules. Without saveAsDraft, a future scheduledAt schedules the post; otherwise it publishes now. Before publishing or scheduling, show the user the final text, media, accounts and time (or repeat schedule) and get their confirmation; a draft needs no confirmation. Account ids come from list_accounts (pass them as accountIds, or as platforms plus the per-platform arrays) and mediaUrls from upload_media. Platform-specific options (TikTok privacy, Pinterest board, LinkedIn document or reshare, Google Business event or offer, Tumblr tags, WordPress title, excerpt, categories, tags and whether the site gets a live post, a draft or a post pending review, YouTube audio language and scheduling on YouTube, Instagram user tags, Facebook link carousel, first comments, threads of replies, different media for one platform, recurrence) are described on each field. labelIds puts workspace labels from list_labels on the post. To find every problem before creating anything, call validate_post with the same input first. Publishing runs per platform in the background, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; check list_post_results. Each call creates a separate post, so after an error or timeout check list_posts before trying again. Use update_post or publish_draft for an existing post and bulk_schedule_posts for many posts.',
       inputSchema: createPostShape,
       outputSchema: resultSchema(
         apiResponses.createPost,
@@ -2542,7 +2546,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
       },
       outputSchema: resultSchema(
         apiResponses.getPost,
-        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError, firstCommentPublishedAt, firstCommentDelayMinutes (absent when the comment posts right away) and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time); threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform\'s own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated, youtubeDefaultAudioLanguage, youtubeScheduleOnYouTube and youtubeScheduledVideoId (the YouTube video id once a scheduleOnYouTube video is uploaded early); linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks, twitterQuoteOf and twitterAiGenerated; threadsAiGenerated; pinterestAiGenerated; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
+        'The full post record: id, status, contentType, text, scheduledAt, timezone, mediaUrls, createdAt, updatedAt, recurringPostId and occurrenceAt (set when the post is an occurrence of a recurring post; occurrenceAt is its slot in the series and stays the same when the post is rescheduled), labels (each { id, name, color }, sorted by name), and platforms (one entry per target with id, platform, connectionId or pageId, status, errorMessage, platformPostId, postUrl once published, mediaUrls, previewUrls, and the per-platform settings: firstComment with firstCommentStatus PENDING, PUBLISHED or FAILED, firstCommentId, firstCommentError, firstCommentPublishedAt, firstCommentDelayMinutes (absent when the comment posts right away) and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time); threadReplies with threadReplyMediaUrls (the image URLs of each reply), threadStatus, threadReplyIds, threadError and threadPublishedAt; thumbnailUrl and thumbnailTimestampMs overrides; mediaOverrideUrls and mediaOverrideAltTexts (the platform\'s own media from platformMedia, empty when it uses the post media; mediaUrls is what that platform publishes); mediaAspectRatio and mediaAspectRatioFit; instagramCollaborators, instagramUserTags, instagramUntaggedUsernames (tags Instagram refused), instagramAiGenerated, instagramUsername and instagramAudioId, instagramAudioTitle, instagramAudioArtist, instagramAudioVolume, instagramVideoVolume; facebookTextFormatPresetId, facebookImageLayout, facebookCarouselCards and facebookAiGenerated; youtubeAiGenerated, youtubeDefaultAudioLanguage, youtubeScheduleOnYouTube and youtubeScheduledVideoId (the YouTube video id once a scheduleOnYouTube video is uploaded early); linkedinDocumentTitle and linkedinReshareOf; twitterKeepLinks, twitterQuoteOf and twitterAiGenerated; threadsAiGenerated; pinterestAiGenerated; tumblrTags, tumblrTitle and tumblrSourceUrl; wordpressTitle, wordpressExcerpt, wordpressCategoryIds and wordpressTags; googleBusinessTopicType, googleBusinessCallToActionType, googleBusinessCallToActionUrl, googleBusinessEventTitle, googleBusinessEventStart, googleBusinessEventEnd and googleBusinessOffer fields). postUrl links to the published post on every platform; Instagram and Facebook stories expire after 24 hours, so for them it links to the profile or page. A shareToStory story is its own entry with postType STORY. previewUrls holds one permanent preview image per media item, a still frame for videos; after publishing, mediaUrls may become platform CDN links that expire within days, so show previewUrls instead.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2566,7 +2570,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
     {
       title: 'List Posts',
       description:
-        'List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. Page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
+        'List posts in the workspace (the current one unless workspaceId names another), any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), labelIds (posts carrying any of these labels from list_labels), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. Page with offset while hasMore is true. Use this to find post ids or check what is already queued. Use get_post for one post\'s full record and list_post_results for one post\'s per-platform outcomes and retry ids.',
       inputSchema: {
         statuses: z
           .array(PostStatus)
@@ -2578,6 +2582,11 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
           .describe(
             'Filter to posts targeting any of these platforms',
           ),
+        labelIds: z
+          .array(z.string())
+          .max(100)
+          .optional()
+          .describe('Only posts carrying any of these labels. Label IDs come from list_labels'),
         startDate: z
           .string()
           .optional()
@@ -2602,7 +2611,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
       },
       outputSchema: resultSchema(
         apiResponses.listPosts,
-        'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, recurringPostId and occurrenceAt for occurrences of a recurring post, and platforms with per-platform status), total (count of all matches), and hasMore.',
+        'An object with posts (each with id, status, contentType, text, scheduledAt, timezone, recurringPostId and occurrenceAt for occurrences of a recurring post, labels, and platforms with per-platform status), total (count of all matches), and hasMore.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2622,11 +2631,39 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
   );
 
   tool(
+    'list_labels',
+    {
+      title: 'List Labels',
+      description:
+        'List the labels of the workspace (the current one unless workspaceId names another), sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Labels organise posts inside AdaptlyPost, for example one label per brand, and are never sent to a social platform. Labels are created in the AdaptlyPost app; no tool creates one. Pass label ids as labelIds in create_post, validate_post or update_post (bulk_schedule_posts takes none), or as the labelIds filter of list_posts. Needs the posts.read permission. Takes only the optional workspaceId.',
+      inputSchema: {},
+      outputSchema: resultSchema(
+        apiResponses.listLabels,
+        'An object with labels: one { id, name, color } per label, sorted by name. Pass id in labelIds of create_post, update_post or list_posts.',
+      ),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (_args, client) => {
+      try {
+        const data = await client.get('/labels');
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
     'update_post',
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, firstComments, platformThumbnails and platformMedia you omit keep their values; sending firstComments, platformThumbnails or platformMedia replaces every stored entry, and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post\'s YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia takes effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, labelIds, firstComments, platformThumbnails and platformMedia you omit keep their values; sending labelIds, firstComments, platformThumbnails or platformMedia replaces every stored entry, labelIds [] removes every label and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post\'s YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia and labelIds take effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (DRAFT, SCHEDULED, or FAILED on every platform)'),
         text: z
@@ -2663,6 +2700,13 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
           .array(z.string().max(1000))
           .optional()
           .describe(`${ALT_TEXT_RULE}. Applied only when platforms is also sent`),
+        labelIds: z
+          .array(z.string())
+          .max(10)
+          .optional()
+          .describe(
+            `${LABEL_IDS_RULE}. Sending the list replaces every label of the post, an empty list removes them all, and leaving it out keeps the stored ones. It takes effect without platforms`,
+          ),
         ...postThumbnailFields,
         platformTexts: platformTextsField.describe(
           'Per-platform caption overrides; applied to the targets sent in platforms',
@@ -2676,7 +2720,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
       },
       outputSchema: resultSchema(
         apiResponses.updatePost,
-        'The updated post record: id, status (DRAFT or SCHEDULED; a FAILED post comes back as DRAFT), text, contentType, scheduledAt, timezone, and platforms with per-target details.',
+        'The updated post record: id, status (DRAFT or SCHEDULED; a FAILED post comes back as DRAFT), text, contentType, scheduledAt, timezone, labels, and platforms with per-target details.',
       ),
       annotations: {
         readOnlyHint: false,

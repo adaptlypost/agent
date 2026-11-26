@@ -12,7 +12,7 @@ description: >
   invite or remove a teammate. Trigger it for short asks too: "post this", "schedule it for Tuesday 9am",
   "reply to that review", "invite sam".
 metadata:
-  last-updated: "2026-11-18"
+  last-updated: "2026-11-27"
 ---
 
 # AdaptlyPost
@@ -34,6 +34,7 @@ that **Check for updates** in Kiro's Powers panel refreshes it.
 | Pinterest boards | `list_pinterest_boards`, or `boardName` when the user named the board |
 | YouTube playlists | `list_youtube_playlists` |
 | WordPress categories | `list_wordpress_categories` |
+| Labels | `list_labels` |
 | Media | `upload_media`, `get_upload_urls`, `open_upload_widget` |
 | Check before posting | `validate_post`, `validate_bulk_posts` |
 | Write | `create_post`, `update_post`, `bulk_schedule_posts` |
@@ -335,7 +336,13 @@ Platform names are uppercase: `INSTAGRAM`, `TIKTOK`, `YOUTUBE`, `TWITTER` (X), `
   too and becomes a draft again, ready for `publish_draft`; a post that published anywhere cannot be edited. Omitted fields
   keep their values. Sending `platforms` replaces every target, so resend every connection array and
   config you want to keep. `mediaUrls` and `mediaAltTexts` only take effect together with `platforms`;
-  `platformMedia` takes effect without it.
+  `platformMedia` and `labelIds` take effect without it.
+- **Labels** organise posts inside AdaptlyPost, for example one label per brand or client, and never reach
+  a network. Call `list_labels` and pass the ids of the labels the user named as `labelIds` (up to 10) on
+  `create_post`, `validate_post` or `update_post`. On `update_post` the list replaces every label, `[]`
+  removes them all and leaving it out keeps them. `bulk_schedule_posts` takes none, so add labels to those
+  posts afterwards with `update_post`. Labels are created in the AdaptlyPost app; an id that is not a label
+  of the workspace fails with 400.
 - **Move** a scheduled post with `update_post` and a new `scheduledAt`. Moving it more than a minute into
   the past fails; use `publish_draft` with `publishNow: true` to publish now. On a draft, a new
   `scheduledAt` only changes its planned date; the post stays a draft until `publish_draft`.
@@ -357,7 +364,7 @@ Platform names are uppercase: `INSTAGRAM`, `TIKTOK`, `YOUTUBE`, `TWITTER` (X), `
   Run `validate_bulk_posts` with the same input first and fix every item it flags. It has no draft mode,
   so show the whole batch as a table (time, network, text, media) and get one explicit "yes" first. Read
   every result row; one bad item fails alone.
-- **Find posts** with `list_posts` (filter by `statuses`, `platforms`, `startDate`, `endDate`; page with
+- **Find posts** with `list_posts` (filter by `statuses`, `platforms`, `labelIds`, `startDate`, `endDate`; page with
   `offset` while `hasMore` is true). Use `get_post` for one full record.
 
 ## Recurring posts

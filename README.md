@@ -12,7 +12,7 @@ Any other MCP client needs only the URL, `https://mcp.adaptlypost.com/mcp`. The 
 
 ## What this repo is
 
-This repo holds every AdaptlyPost agent integration except the Claude Code and Hermes Agent plugin:
+This repo holds every AdaptlyPost agent integration except the Claude Code and Hermes Agent plugins:
 
 | Path | What it is |
 | --- | --- |
@@ -23,7 +23,7 @@ This repo holds every AdaptlyPost agent integration except the Claude Code and H
 | `lhm.plugin.json` | The LobeHub marketplace listing for the hosted MCP server. |
 | [`kiro-power/`](./kiro-power) | The Kiro power. It connects to the hosted MCP server and signs in with OAuth. |
 
-The Claude Code and Hermes Agent plugin lives in [adaptlypost/claude-plugin](https://github.com/adaptlypost/claude-plugin). It signs in with OAuth and never asks for an API key, which the Claude plugin directory and the Hermes catalog both require, so it ships its own MCP-only skill instead of the script skill here.
+The Claude Code plugin lives in [adaptlypost/claude-plugin](https://github.com/adaptlypost/claude-plugin) and the Hermes Agent plugin in [adaptlypost/hermes-plugin](https://github.com/adaptlypost/hermes-plugin). Both sign in with OAuth and never ask for an API key, which the Claude plugin directory and the Hermes catalog both require, so each ships its own MCP-only skill instead of the script skill here.
 
 ## Pick your install
 
@@ -133,6 +133,20 @@ gemini extensions install https://github.com/adaptlypost/agent
 hermes plugins install adaptlypost
 hermes plugins enable adaptlypost
 ```
+
+The plugin's source is [adaptlypost/hermes-plugin](https://github.com/adaptlypost/hermes-plugin). It needs Hermes Agent 0.21.6 or newer and Node.js 20.18.1 or newer, and signs in through your browser the first time it starts. If you installed it from `adaptlypost/claude-plugin` before, reinstall once with `hermes plugins install adaptlypost --force`: that repo is now Claude Code only.
+
+On a server or another machine without a browser, skip the plugin and add the server to `~/.hermes/config.yaml` with an API key from [adaptlypost.com/api-tokens](https://adaptlypost.com/api-tokens):
+
+```yaml
+mcp_servers:
+  adaptlypost:
+    url: "https://mcp.adaptlypost.com/mcp"
+    headers:
+      Authorization: "Bearer ${ADAPTLYPOST_API_KEY}"
+```
+
+Put `ADAPTLYPOST_API_KEY=...` in `~/.hermes/.env`. The key works like a password for your AdaptlyPost account, so don't paste it into a chat.
 
 ### Headless agents and clients without OAuth
 
@@ -432,15 +446,16 @@ Yes. Create the labels in the AdaptlyPost app, then `list_labels` returns their 
 **What if my video is too long for TikTok, or X takes only 4 images?**
 Give that platform its own media with `platformMedia`, such as a shorter cut for TikTok or four of the images for X. The other platforms keep the post's media. AdaptlyPost checks each override against its own platform's limits only.
 
-**What's the difference between this repo and adaptlypost/claude-plugin?**
-The plugin is the Claude Code and Hermes package: OAuth only, with a skill that drives these MCP tools. This repo has the server's source, the API-key skill for `npx skills add` and the Gemini extension.
+**What's the difference between this repo and adaptlypost/claude-plugin or adaptlypost/hermes-plugin?**
+Those are the Claude Code and Hermes Agent plugins: OAuth only, each with a skill that drives these MCP tools. This repo has the server's source, the API-key skill for `npx skills add` and the Gemini extension.
 
 ## Links
 
 - [AdaptlyPost](https://adaptlypost.com)
 - [AI agents](https://adaptlypost.com/features/agents)
 - [API tokens](https://adaptlypost.com/api-tokens)
-- [Claude Code and Hermes plugin](https://github.com/adaptlypost/claude-plugin)
+- [Claude Code plugin](https://github.com/adaptlypost/claude-plugin)
+- [Hermes Agent plugin](https://github.com/adaptlypost/hermes-plugin)
 - Privacy policy: [adaptlypost.com/privacy](https://adaptlypost.com/privacy)
 
 ## License

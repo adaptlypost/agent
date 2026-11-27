@@ -1485,7 +1485,25 @@ function callerOf(headers: Record<string, string | string[] | undefined> | undef
 
 type ServerTransport = 'stdio' | 'http';
 
-export function createMcpServer(transport: ServerTransport, apiClient?: RestClient): McpServer {
+type ToolProfile = 'full' | 'claude-plugin';
+
+const MCP_PATH = '/mcp';
+const CLAUDE_PLUGIN_MCP_PATH = '/mcp/claude-plugin';
+
+// The Claude plugin directory refuses tools that return AI-generated media as a file or link of their own.
+const TOOLS_OUTSIDE_CLAUDE_PLUGIN = new Set(['generate_image', 'get_image_job']);
+
+const toolProfileOf = (path: string): ToolProfile | null => {
+  if (path === MCP_PATH) return 'full';
+  if (path === CLAUDE_PLUGIN_MCP_PATH) return 'claude-plugin';
+  return null;
+};
+
+export function createMcpServer(
+  transport: ServerTransport,
+  apiClient?: RestClient,
+  profile: ToolProfile = 'full',
+): McpServer {
   const baseClient = apiClient ?? api;
   const server = new McpServer(
     {
@@ -1521,6 +1539,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
       caller: Caller,
     ) => Promise<CallToolResult>,
   ) => {
+    if (profile === 'claude-plugin' && TOOLS_OUTSIDE_CLAUDE_PLUGIN.has(name)) return undefined;
     const inputSchema: ZodRawShape = { ...config.inputSchema, ...workspaceIdField };
     return server.registerTool(name, { ...config, inputSchema }, async (args, extra) => {
       const { workspaceId, ...rest } = args as { workspaceId?: string };
@@ -5319,7 +5338,8 @@ async function main() {
         return;
       }
 
-      if (req.url === '/mcp') {
+      const toolProfile = toolProfileOf((req.url ?? '').split('?')[0]);
+      if (toolProfile) {
         if (isSetupPageRequest(req)) {
           sendSetupPage(SETUP_PAGE, req, res);
           return;
@@ -5361,7 +5381,7 @@ async function main() {
           sessionIdGenerator: undefined,
           enableJsonResponse: !wantsSse,
         });
-        const reqServer = createMcpServer('http', reqApi);
+        const reqServer = createMcpServer('http', reqApi, toolProfile);
         await reqServer.connect(withPortableToolSchemas(transport));
         try {
           let parsedBody: unknown;

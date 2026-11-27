@@ -198,7 +198,7 @@ const LINKEDIN_MENTION_RULE =
   'On LinkedIn, mention a company page with @[Page Name](urn:li:organization:<id>), using the page name exactly as LinkedIn shows it';
 
 const ALT_TEXT_RULE =
-  'Alt text per image, in the same order as mediaUrls (use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500). TikTok, YouTube, Google Business Profile and videos ignore it';
+  'Alt text per image, in the same order as mediaUrls (use "" to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one on image, carousel and video Pins (cut to 500). TikTok, YouTube and Google Business Profile ignore it, and so do videos on the other platforms';
 
 const LABEL_IDS_RULE =
   'Label IDs from list_labels to put on the post, for example one label per brand. Max 10. An ID that is not a label of the workspace returns 400. Labels organise posts inside AdaptlyPost and are never sent to a platform';
@@ -392,7 +392,7 @@ const YouTubeConfigSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      'Upload the video as soon as the post is scheduled, as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. To turn it on for a post that is already scheduled, call update_post with only id and youtubeConfigs [{ connectionId, scheduleOnYouTube: true }]. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); the user edits it in YouTube Studio, or deletes the post and schedules it again. Deleting it before scheduledAt also deletes the video from YouTube',
+      'Upload the video 48 hours before scheduledAt (at once when scheduledAt is closer), as a private video that YouTube publishes itself at scheduledAt, so the user can set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before it goes public. privacyStatus must be public or omitted (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a recurring post is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With a scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. To turn it on for a post that is already scheduled, call update_post with only id and youtubeConfigs [{ connectionId, scheduleOnYouTube: true }]. Once the video is on YouTube (youtubeScheduledVideoId is set on the platform), the post cannot be updated, unscheduled or published early (409 SCHEDULED_ON_YOUTUBE); the user edits it in YouTube Studio, or deletes the post and schedules it again. Deleting it before scheduledAt also deletes the video from YouTube',
     ),
 });
 
@@ -649,6 +649,21 @@ const PinterestConfigSchema = z.object({
     .describe(
       "The board's name, instead of boardId; never send both. Matched against this account's boards, exact first, then case-insensitive. A name no board has, or one several boards share, fails with 400 and never falls back to another board",
     ),
+  boardSectionId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'A section id of the chosen board, to pin into that section. Needs boardId or boardName. Leave out boardSectionId and boardSectionName to pin to the board itself',
+    ),
+  boardSectionName: z
+    .string()
+    .min(1)
+    .max(180)
+    .optional()
+    .describe(
+      "The name of one of the chosen board's sections, instead of boardSectionId; never send both. Matched exact first, then case-insensitive. Fails with 400 when no section has the name, when several do (the message lists their ids), or when no board is given. No tool lists sections, so ask the user for the name",
+    ),
   title: z.string().max(100).optional().describe('Title shown on the pin'),
   link: z.string().optional().describe('Destination URL for the pin'),
   aiGenerated: z
@@ -656,6 +671,12 @@ const PinterestConfigSchema = z.object({
     .optional()
     .describe(
       'Disclose that the Pin was made or modified with AI. Sends Pinterest the AI_MODIFIED disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send false for no label',
+    ),
+  aiGeneratedPerson: z
+    .boolean()
+    .optional()
+    .describe(
+      'Disclose that the Pin shows a person generated with AI. Sends Pinterest the SYNTHETIC_PERFORMER disclosure, next to AI_MODIFIED when aiGenerated is also set. Works on image, video and carousel Pins. Omit it or send false for no disclosure',
     ),
 });
 
@@ -805,7 +826,7 @@ const platformConfigFields = {
     .array(PinterestConfigSchema)
     .optional()
     .describe(
-      'Pinterest per-connection config: the board to pin to, a pin title, a destination link and the AI modified label. Get boardId from list_pinterest_boards for that connectionId, or pass the board name as boardName instead (not both); a board belongs to one Pinterest account. A boardName that matches no board or several fails with 400. Without either the pin goes to a board named AdaptlyPost',
+      'Pinterest per-connection config: the board and board section to pin to, a pin title, a destination link, the AI modified label and the AI-generated person disclosure. Get boardId from list_pinterest_boards for that connectionId, or pass the board name as boardName instead (not both); a board belongs to one Pinterest account. A boardName that matches no board or several fails with 400. Without either the pin goes to a board named AdaptlyPost',
     ),
   googleBusinessConfigs: z
     .array(GoogleBusinessConfigSchema)
@@ -2635,11 +2656,11 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
     {
       title: 'List Labels',
       description:
-        'List the labels of the workspace (the current one unless workspaceId names another), sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Labels organise posts inside AdaptlyPost, for example one label per brand, and are never sent to a social platform. Labels are created in the AdaptlyPost app; no tool creates one. Pass label ids as labelIds in create_post, validate_post or update_post (bulk_schedule_posts takes none), or as the labelIds filter of list_posts. Needs the posts.read permission. Takes only the optional workspaceId.',
+        'List the labels of the workspace (the current one unless workspaceId names another), sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Labels organise posts inside AdaptlyPost, for example one label per brand, and are never sent to a social platform. Labels are created in the AdaptlyPost app; no tool creates one. Pass label ids as labelIds in create_post, validate_post or update_post (bulk_schedule_posts takes none), to set_post_labels to change the labels of a post in any status, or as the labelIds filter of list_posts. Needs the posts.read permission. Takes only the optional workspaceId.',
       inputSchema: {},
       outputSchema: resultSchema(
         apiResponses.listLabels,
-        'An object with labels: one { id, name, color } per label, sorted by name. Pass id in labelIds of create_post, update_post or list_posts.',
+        'An object with labels: one { id, name, color } per label, sorted by name. Pass id in labelIds of create_post, update_post, set_post_labels or list_posts.',
       ),
       annotations: {
         readOnlyHint: true,
@@ -2659,11 +2680,45 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
   );
 
   tool(
+    'set_post_labels',
+    {
+      title: 'Set Post Labels',
+      description:
+        'Replace every label of one post with labelIds, in any status, published posts included. [] removes them all. Labels organise posts inside AdaptlyPost and are never sent to a platform, so changing them on a published post changes nothing on the network. Use it to label or relabel a post that update_post cannot edit; for a DRAFT or SCHEDULED post you are already updating, labelIds on update_post does the same. Fails with 400 when an id is not a label of the workspace or more than 10 are sent, and 404 for a post outside the workspace (the current one unless workspaceId names another). Needs the posts.draft permission. Safe to repeat. Returns the post record with its new labels.',
+      inputSchema: {
+        id: z.string().describe('Post ID from list_posts or create_post, any status'),
+        labelIds: z
+          .array(z.string())
+          .max(10)
+          .describe('Label IDs from list_labels. They replace every label of the post; [] removes them all'),
+      },
+      outputSchema: resultSchema(
+        apiResponses.setPostLabels,
+        'The post record with its new labels: id, status, text, scheduledAt, labels ({ id, name, color }, sorted by name) and platforms with per-target details.',
+      ),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async ({ id, labelIds }, client) => {
+      try {
+        const data = await client.put(`/social-posts/${id}/labels`, { labelIds });
+        return toolResult(data);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  tool(
     'update_post',
     {
       title: 'Update Post',
       description:
-        'Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with "Cannot edit post in current state", so published posts cannot be changed. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, labelIds, firstComments, platformThumbnails and platformMedia you omit keep their values; sending labelIds, firstComments, platformThumbnails or platformMedia replaces every stored entry, labelIds [] removes every label and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post\'s YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia and labelIds take effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
+        'Update a DRAFT, SCHEDULED or FAILED post in place. A post that failed on every platform becomes a DRAFT again with its platforms back to pending; publish or schedule it afterwards with publish_draft. Any other status, including a post that published on some platforms and failed on others, fails with "Cannot edit post in current state", so published posts cannot be changed; use set_post_labels to change the labels of a post in any status. Updates are partial: text, contentType, scheduledAt, timezone, thumbnail fields, labelIds, firstComments, platformThumbnails and platformMedia you omit keep their values; sending labelIds, firstComments, platformThumbnails or platformMedia replaces every stored entry, labelIds [] removes every label and platformMedia [] clears every media override. The exception is platforms: sending it rebuilds the post\'s target set from this request alone, so include every connection-id array and platform config you want to keep (TikTok with privacyLevel, Pinterest with its boardId or boardName); omitting platforms leaves accounts, configs, and media untouched. youtubeConfigs is the one platform config that works without platforms: sent alone, it changes only the fields it names on the post\'s YouTube account (scheduleOnYouTube, playlistId, videoTitle, notifySubscribers and the rest) and keeps everything else; a connectionId the post does not publish to fails with 400 YOUTUBE_CONFIG_NOT_ON_POST. Every other platform config takes effect only together with platforms. mediaUrls only take effect together with platforms, while platformMedia and labelIds take effect without it; use publicUrl values from upload_media. On SCHEDULED posts new media is verified in storage. A post with a YouTube video already waiting on YouTube (youtubeScheduledVideoId set and not yet published) fails with 409 SCHEDULED_ON_YOUTUBE; delete it and schedule it again to change it. Returns the updated post record. Use publish_draft to change a draft\'s status, unschedule_post to take a scheduled post off the calendar, delete_post to cancel, and create_post for a new post.',
       inputSchema: {
         id: z.string().describe('Post ID to update (DRAFT, SCHEDULED, or FAILED on every platform)'),
         text: z
@@ -4351,7 +4406,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
   const webhookIdField = { id: z.string().describe('Webhook id from list_webhooks or create_webhook') };
 
   const WEBHOOK_RECORD =
-    'The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 20 failed deliveries in a row).';
+    'The webhook: id, url, active, events (empty means the default post, account and image events), createdAt, updatedAt, lastSuccessAt, lastFailureAt and disabledAt (set when it was turned off after 3 days of failed deliveries, or at once on a 410 Gone).';
 
   const CREATE_WEBHOOK_RESULT = apiResponses.createWebhook
     .omit({ secret: true })
@@ -4435,7 +4490,7 @@ export function createMcpServer(transport: ServerTransport, apiClient?: RestClie
     {
       title: 'Create Webhook',
       description:
-        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint is turned off after 20 failed deliveries in a row. Returns the new webhook (id, url, active, events, createdAt, updatedAt, lastSuccessAt, lastFailureAt, disabledAt). The signing secret never comes back to you: the result carries secretRevealUrl, a link the user opens in their browser to see the secret once within 30 minutes (on a local install, secretFile, a file only the user can read). Give the user that link or path and do not open, fetch or read it yourself. If the user loses the secret, delete the webhook and create it again. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
+        "Register a URL that receives workspace events as HTTP POSTs. Without events it gets the default set: post.published, post.partially_failed, post.failed, post.scheduled, account.unauthorized, image.completed and image.failed. To also get inbox events (comment.created, comment.replied, mention.created, message.received, review.created), list every event wanted in events, since a non-empty list means only those. Each delivery carries the x-adaptly-signature, x-adaptly-timestamp, x-adaptly-event and x-adaptly-webhook-id headers; the signature is sha256=HMAC_SHA256(secret, \"{timestamp}.{rawBody}\"). Failed deliveries are retried up to 5 times with exponential backoff, and an endpoint whose deliveries have all failed for 3 days, with no successful delivery in that time, is turned off (at once when it answers 410 Gone). Its creator gets an email warning after 3 hours of failures and another when it is turned off. Returns the new webhook (id, url, active, events, createdAt, updatedAt, lastSuccessAt, lastFailureAt, disabledAt). The signing secret never comes back to you: the result carries secretRevealUrl, a link the user opens in their browser to see the secret once within 30 minutes (on a local install, secretFile, a file only the user can read). Give the user that link or path and do not open, fetch or read it yourself. If the user loses the secret, delete the webhook and create it again. Fails with 400 for an invalid URL or the webhook limit, and 409 when the URL is already registered. Needs the webhooks.manage permission, which Admin and Editor hold.",
       inputSchema: {
         url: z.string().url().describe('Publicly reachable http(s) endpoint that receives the events'),
         events: webhookEventsField,

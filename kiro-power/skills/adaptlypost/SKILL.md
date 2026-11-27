@@ -34,7 +34,7 @@ that **Check for updates** in Kiro's Powers panel refreshes it.
 | Pinterest boards | `list_pinterest_boards`, or `boardName` when the user named the board |
 | YouTube playlists | `list_youtube_playlists` |
 | WordPress categories | `list_wordpress_categories` |
-| Labels | `list_labels` |
+| Labels | `list_labels`, `set_post_labels` |
 | Media | `upload_media`, `get_upload_urls`, `open_upload_widget` |
 | Check before posting | `validate_post`, `validate_bulk_posts` |
 | Write | `create_post`, `update_post`, `bulk_schedule_posts` |
@@ -185,6 +185,10 @@ If the user already approved a new post word for word, you can call `create_post
   named "AdaptlyPost", created on the account the first time it is needed; leave both out only when the
   user is happy with that board. A 400 from `list_pinterest_boards` usually means the user has to
   reconnect the Pinterest account in the app.
+- **Pinterest board sections**: to pin into a section of the chosen board, pass its name as
+  `boardSectionName` (matched exact first, then case-insensitive) or its id as `boardSectionId`, never both.
+  Both need `boardId` or `boardName`. No tool lists sections, so ask the user for the name. A name that
+  matches no section, or several, fails with 400. Leave both out to pin to the board itself.
 - **YouTube playlists**: to add the uploaded video to a playlist, call `list_youtube_playlists` with the
   YouTube account's id; it returns every playlist of the channel, private and unlisted ones included. Ask
   the user which playlist to use unless they named it, and pass its `id` as `youtubeConfigs.playlistId`. A
@@ -198,8 +202,8 @@ If the user already approved a new post word for word, you can call `create_post
   `youtubeConfigs`. When the video is not in English, set `youtubeConfigs.defaultAudioLanguage` to the
   spoken language as a tag such as `pt-BR` or `es-419`, so YouTube does not treat it as English; `null`
   clears a saved value. It does not turn off YouTube's automatic dubbing.
-- **YouTube scheduled on YouTube**: `youtubeConfigs.scheduleOnYouTube: true` uploads the video as soon as
-  the post is scheduled, as a private video that YouTube itself makes public at `scheduledAt`. Offer it when
+- **YouTube scheduled on YouTube**: `youtubeConfigs.scheduleOnYouTube: true` uploads the video 48 hours
+  before `scheduledAt` (at once when `scheduledAt` is closer), as a private video that YouTube itself makes public at `scheduledAt`. Offer it when
   the user wants to run a Test & Compare (thumbnail or title A/B test) in YouTube Studio before launch.
   `privacyStatus` has to be `public` or left out (else 400 `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`), and a
   recurring post cannot use it (400 `YOUTUBE_SCHEDULE_NOT_RECURRING`). When `scheduledAt` is under 15
@@ -222,7 +226,9 @@ If the user already approved a new post word for word, you can call `create_post
   `twitterConfigs.aiGenerated` sets `made_with_ai` on the X post, and X labels it;
   `threadsConfigs.aiGenerated` shows Threads' "AI info" label on text, image, video and carousel posts
   (thread replies do not carry it); `pinterestConfigs.aiGenerated` sends Pinterest the `AI_MODIFIED`
-  disclosure, which shows an "AI modified" label on image, video and carousel Pins. `threadsConfigs`
+  disclosure, which shows an "AI modified" label on image, video and carousel Pins, and
+  `pinterestConfigs.aiGeneratedPerson` adds the `SYNTHETIC_PERFORMER` disclosure for a Pin that shows a
+  person generated with AI. `threadsConfigs`
   entries take a `connectionId` from `threadsConnectionIds`. Set them when the user made the media with AI.
 - **Instagram trial reels**: `instagramConfigs.trialGraduation` (`MANUAL` or `SS_PERFORMANCE`) works only for
   a single video posted as a reel or feed video, on an account Instagram has enabled for trial reels.
@@ -341,8 +347,10 @@ Platform names are uppercase: `INSTAGRAM`, `TIKTOK`, `YOUTUBE`, `TWITTER` (X), `
   a network. Call `list_labels` and pass the ids of the labels the user named as `labelIds` (up to 10) on
   `create_post`, `validate_post` or `update_post`. On `update_post` the list replaces every label, `[]`
   removes them all and leaving it out keeps them. `bulk_schedule_posts` takes none, so add labels to those
-  posts afterwards with `update_post`. Labels are created in the AdaptlyPost app; an id that is not a label
-  of the workspace fails with 400.
+  posts afterwards with `update_post`. To change the labels of a post `update_post` refuses, a published
+  one for example, call `set_post_labels` with the post id and the full list of label ids; it works in any
+  status and changes nothing on the network. Labels are created in the AdaptlyPost app; an id that is not a
+  label of the workspace fails with 400.
 - **Move** a scheduled post with `update_post` and a new `scheduledAt`. Moving it more than a minute into
   the past fails; use `publish_draft` with `publishNow: true` to publish now. On a draft, a new
   `scheduledAt` only changes its planned date; the post stays a draft until `publish_draft`.
@@ -393,7 +401,8 @@ events `comment.created`, `comment.replied`, `mention.created`, `message.receive
 reach only a webhook that lists them, and a non-empty list means only those events, so list the post
 events too when the user still wants them. `update_webhook` changes `events`; `[]` goes back to the
 default set. Inbox events arrive within about 10 minutes. `test_webhook` sends a signed test event. An endpoint is turned off
-after 20 failed deliveries in a row; `update_webhook` with `active: true` turns it back on.
+after 3 days of failed deliveries with no success (at once on a 410 Gone), and its creator gets an email
+warning after 3 hours of failures; `update_webhook` with `active: true` turns it back on.
 
 ## Team
 

@@ -428,10 +428,21 @@ function buildPinterestConfig(parsed) {
     error("--pinterest-board-name needs a board name");
     process.exit(1);
   }
+  if (parsed["pinterest-section"] && parsed["pinterest-section-name"]) {
+    error("Pass --pinterest-section or --pinterest-section-name, not both");
+    process.exit(1);
+  }
+  if (parsed["pinterest-section"] === true || parsed["pinterest-section-name"] === true) {
+    error("--pinterest-section needs a section id and --pinterest-section-name a section name");
+    process.exit(1);
+  }
   return withoutEmpty({
     boardId: parsed["pinterest-board"] && String(parsed["pinterest-board"]),
     boardName: parsed["pinterest-board-name"] && String(parsed["pinterest-board-name"]),
+    boardSectionId: parsed["pinterest-section"] && String(parsed["pinterest-section"]),
+    boardSectionName: parsed["pinterest-section-name"] && String(parsed["pinterest-section-name"]),
     aiGenerated: parsed["pinterest-ai-generated"] ? true : undefined,
+    aiGeneratedPerson: parsed["pinterest-ai-generated-person"] ? true : undefined,
   });
 }
 
@@ -952,6 +963,25 @@ const COMMANDS = {
     const data = await request(
       "POST",
       `/api/v1/social-posts/${parsed.id}/unschedule`,
+    );
+    output(data);
+  },
+
+  "posts:labels": async (args) => {
+    const parsed = parseArgs(args);
+    if (!parsed.id) {
+      error("Usage: ./scripts/adaptlypost.js posts:labels --id <post_id> (--label <labelId> ... | --clear-labels)");
+      process.exit(1);
+    }
+    const labelIds = buildLabelIds(args, parsed);
+    if (!labelIds) {
+      error("Pass --label <labelId> (repeatable) or --clear-labels");
+      process.exit(1);
+    }
+    const data = await request(
+      "PUT",
+      `/api/v1/social-posts/${parsed.id}/labels`,
+      { labelIds },
     );
     output(data);
   },

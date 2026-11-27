@@ -116,6 +116,7 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `./scripts/adaptlypost.js posts:get --id <id>` | One post's full record with per-platform status and errors. Ids outside the workspace return 404 |
 | `./scripts/adaptlypost.js posts:update --id <id> --caption "new text" [--schedule ...] [--timezone ...] [--first-comment PLATFORM=text] [--first-comment-delay PLATFORM=minutes] [--thread-reply PLATFORM=text] [--thread-media PLATFORM:N=url] [--clear-threads] [--platform-thumbnail PLATFORM=url\|ms] [--platform-media PLATFORM=url] [--platform-alt-text PLATFORM=text] [--clear-platform-media] [--label <labelId>] [--clear-labels] [--twitter-keep-links true\|false]` | Partial update of a DRAFT or SCHEDULED post, or of a post that FAILED on every platform, which becomes a DRAFT again; omitted fields keep their values. Sending `--label`, `--first-comment`, `--thread-reply`, `--platform-thumbnail` or `--platform-media` replaces every stored entry of that kind, `--clear-labels` removes every label, `--clear-threads` removes every thread and `--clear-platform-media` removes every media override. Any other status fails, including a post that published on some platforms |
 | `./scripts/adaptlypost.js posts:delete --id <id>` | Remove the record; cancels a DRAFT or SCHEDULED post. Never unpublishes content already live. A post in PUBLISHING returns 409 |
+| `./scripts/adaptlypost.js posts:labels --id <id> (--label <labelId> ... \| --clear-labels)` | Replace every label of a post in any status, published posts included. Labels never reach the platform, so this changes nothing on a published post |
 | `./scripts/adaptlypost.js posts:unschedule --id <id>` | Take a DRAFT or SCHEDULED post off the calendar: it becomes an undated DRAFT and nothing publishes. Schedule it again later with `posts:publish --schedule` |
 | `./scripts/adaptlypost.js posts:publish --id <id> [--schedule ... \| --now] [--timezone ...]` | Schedule a DRAFT (or reschedule a SCHEDULED post), or push it live now. Without `--schedule`, a draft whose planned date is still in the future is scheduled for that date and any other post publishes now. `--now` publishes now even when the draft has a planned date; it cannot be combined with `--schedule`. Irreversible once queued |
 | `./scripts/adaptlypost.js results --id <id>` | Per-platform outcomes for one post and the source of `platformId` for retry. Poll while rows are PENDING or PUBLISHING |
@@ -173,8 +174,8 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--platform-media PLATFORM=url` (repeatable, also on `posts:update`) | `platformMedia`. Each flag adds the next item to that platform's own media, in order, e.g. `TIKTOK=https://.../short.mp4`. The platform publishes these instead of `--media-urls`. Upload local files through [Upload URLs](#upload-urls) first |
 | `--platform-alt-text PLATFORM=text` (repeatable, also on `posts:update`) | `platformMedia[].mediaAltTexts`. Each flag adds the alt text of the next item of that platform's `--platform-media`, in order; `PLATFORM=` with nothing after it skips one |
 | `--clear-platform-media` (`posts:update` only) | `platformMedia: []`, which removes every media override |
-| `--label <labelId>` (repeatable, also on `posts:update`) | `labelIds`, up to 10 ids from `labels`. On `posts:update` it replaces every label of the post |
-| `--clear-labels` (`posts:update` only) | `labelIds: []`, which removes every label |
+| `--label <labelId>` (repeatable, also on `posts:update` and `posts:labels`) | `labelIds`, up to 10 ids from `labels`. On `posts:update` and `posts:labels` it replaces every label of the post |
+| `--clear-labels` (`posts:update` and `posts:labels`) | `labelIds: []`, which removes every label |
 | `--aspect-ratio PLATFORM=RATIO[:PAD]` (repeatable) | `platformAspectRatios`, e.g. `INSTAGRAM=PORTRAIT` or `TIKTOK=VERTICAL:PAD`. IMAGE and CAROUSEL posts only |
 | `--twitter-keep-links` (also `posts:update --twitter-keep-links false`) | `twitterKeepLinks` |
 | `--instagram-type FEED\|REEL\|STORY`, `--instagram-story`, `--instagram-collaborator <username>` (repeatable, up to 3), `--instagram-user-tag <username or JSON>` (repeatable, up to 20), `--instagram-ai-generated` | `instagramConfigs[].postType`, `shareToStory`, `collaborators`, `userTags`, `aiGenerated`. A tag is a username or `{"username":"...","x":0.5,"y":0.3}` |
@@ -182,7 +183,8 @@ Call `GET /api/v1/me` to read the key's role, its exact `permissions` and `can {
 | `--facebook-type FEED\|REEL\|STORY`, `--facebook-story`, `--facebook-background <presetId>`, `--facebook-ai-generated` | `facebookConfigs[].postType`, `shareToStory`, `textFormatPresetId`, `aiGenerated` |
 | `--facebook-layout GRID\|CAROUSEL`, `--facebook-card <url or JSON>` (repeatable, one per image in order) | `facebookConfigs[].imageLayout`, `carouselCards`. A card is a link URL or `{"link":"...","title":"...","description":"..."}`. Cards without `--facebook-layout` set `CAROUSEL` |
 | `--pinterest-board <boardId>` or `--pinterest-board-name <name>` | `pinterestConfigs[].boardId` or `boardName`. Find the id with `pinterest:boards`. The script refuses both together. Without either the pin goes to a public board named "AdaptlyPost" |
-| `--pinterest-ai-generated`, `--twitter-ai-generated`, `--threads-ai-generated` | `pinterestConfigs[].aiGenerated`, `twitterConfigs[].aiGenerated`, `threadsConfigs[].aiGenerated` |
+| `--pinterest-section <sectionId>` or `--pinterest-section-name <name>` | `pinterestConfigs[].boardSectionId` or `boardSectionName`, a section of the chosen board. Needs a board flag. The script refuses both together. No command lists sections, so ask the user for the name |
+| `--pinterest-ai-generated`, `--pinterest-ai-generated-person`, `--twitter-ai-generated`, `--threads-ai-generated` | `pinterestConfigs[].aiGenerated`, `aiGeneratedPerson`, `twitterConfigs[].aiGenerated`, `threadsConfigs[].aiGenerated` |
 | `--youtube-ai-generated`, `--youtube-audio-language <tag>`, `--youtube-schedule-on-youtube`, `--youtube-playlist <playlistId>` | `youtubeConfigs[].aiGenerated`, `defaultAudioLanguage` (a BCP-47 tag such as `en`, `pt-BR` or `es-419`), `scheduleOnYouTube` (see `youtubeConfigs` below), `playlistId` (find the id with `youtube:playlists`) |
 | `--tumblr-tag <tag>` (repeatable, up to 30, no commas), `--tumblr-title <title>`, `--tumblr-source-url <url>` | `tumblrConfigs[].tags`, `title`, `sourceUrl` |
 | `--wordpress-title <title>`, `--wordpress-excerpt <text>`, `--wordpress-category <id>` (repeatable), `--wordpress-tag <tag>` (repeatable), `--wordpress-status PUBLISH\|DRAFT\|PENDING` | `wordpressConfigs[].title`, `excerpt`, `categoryIds`, `tags`, `status`. Find category ids with `wordpress:categories` |
@@ -256,7 +258,7 @@ A post refused for its content (text too long, a disconnected account, media the
 
 `labelIds` puts up to 10 labels from [Labels](#labels) on the post, for example one label per brand. Labels organise posts inside AdaptlyPost and are never sent to a platform, so every platform and content type takes them. An id that is not a label of the workspace returns 400 "One or more label IDs are not labels of this workspace. Call GET /labels for the IDs you can put on a post". Validate takes `labelIds` too; Bulk Schedule items do not.
 
-`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, cut to 500. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
+`mediaAltTexts` holds one alt text per image in `mediaUrls` order, up to 1000 characters each, `""` to skip one. X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one on image, carousel and video Pins, cut to 500. TikTok, YouTube, Google Business Profile, Telegram and videos on the other platforms ignore it.
 
 Per-platform configs, each an array with one entry per connection:
 
@@ -267,7 +269,7 @@ Per-platform configs, each an array with one entry per connection:
 | `facebookConfigs` | `pageId`, `postType` (`FEED`, `REEL` or `STORY`), `shareToStory`, `videoTitle` (max 255), `textFormatPresetId` (digits), `imageLayout` (`GRID` or `CAROUSEL`), `carouselCards` (up to 5 of `link` required, http or https, max 2048; `title` max 100; `description` max 200), `aiGenerated` |
 | `googleBusinessConfigs` | `connectionId`, `topicType` (required: `STANDARD`, `EVENT` or `OFFER`), `callToActionType` (`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`), `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
 | `youtubeConfigs` | `connectionId`, `postType` (`VIDEO` or `SHORTS`), `videoTitle` (max 100), `tags` (max 20), `privacyStatus` (`public`, `private`, `unlisted`), `license` (`youtube`, `creativeCommon`), `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `scheduleOnYouTube` (see below), `defaultAudioLanguage` (the language spoken in the original audio as a BCP-47 tag such as `en`, `pt-BR` or `es-419`, max 35; `null` clears a saved value; it does not turn off YouTube's automatic dubbing), `categoryId`, `playlistId` (an `id` from [YouTube playlists](#youtube-playlists); the uploaded video is added to that playlist) |
-| `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards)), `boardName` (optional, max 180, the board's name instead of `boardId`, never both; 400 when no board or several boards have it), `title` (max 100), `link` (a URL), `aiGenerated` |
+| `pinterestConfigs` | `connectionId`, `boardId` (optional, an `id` from [Pinterest boards](#pinterest-boards)), `boardName` (optional, max 180, the board's name instead of `boardId`, never both; 400 when no board or several boards have it), `boardSectionId` (optional, a section of the chosen board; needs a board), `boardSectionName` (optional, max 180, the section's name instead of `boardSectionId`, never both; 400 when no section or several sections have it, or no board is given), `title` (max 100), `link` (a URL), `aiGenerated`, `aiGeneratedPerson` |
 | `twitterConfigs` | `connectionId`, `quoteOf` (an X post link or numeric id of this account's own post to quote), `aiGenerated` |
 | `threadsConfigs` | `connectionId`, `aiGenerated` |
 | `linkedinConfigs` | `connectionId`, `documentTitle` (max 100, `DOCUMENT` posts only) |
@@ -286,7 +288,7 @@ Instagram `aiGenerated: true` discloses that the post was made or edited with AI
 
 YouTube `aiGenerated: true` discloses altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. It works on videos and Shorts. Omit it or send `false` for no label. The post reads it back as `youtubeAiGenerated`.
 
-YouTube `scheduleOnYouTube: true` uploads the video as soon as the post is scheduled, as a private video that YouTube publishes itself at `scheduledAt`. That leaves time to set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before the video goes public. `privacyStatus` must be `public` or left out, or the API returns 400 with the issue code `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`, and a recurring post returns 400 `YOUTUBE_SCHEDULE_NOT_RECURRING`. With a `scheduledAt` less than 15 minutes ahead, the video uploads at `scheduledAt` as usual. The platform entry reads back `youtubeScheduleOnYouTube` and, once the early upload is done, `youtubeScheduledVideoId`. From then until the video is published, Update Post, Unschedule Post and Publish Draft return 409 (GraphQL `extensions.code` `SCHEDULED_ON_YOUTUBE`). To change the post, delete it and schedule it again. Deleting it before `scheduledAt` also deletes the video from YouTube; when YouTube refuses, the delete returns 502 `SCHEDULED_VIDEO_DELETE_FAILED` and the post stays, so try again, after reconnecting the channel if it was disconnected.
+YouTube `scheduleOnYouTube: true` uploads the video 48 hours before `scheduledAt` (at once when `scheduledAt` is closer), as a private video that YouTube publishes itself at `scheduledAt`. That leaves time to set up a Test & Compare (thumbnail and title A/B test) in YouTube Studio before the video goes public. `privacyStatus` must be `public` or left out, or the API returns 400 with the issue code `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`, and a recurring post returns 400 `YOUTUBE_SCHEDULE_NOT_RECURRING`. With a `scheduledAt` less than 15 minutes ahead, the video uploads at `scheduledAt` as usual. The platform entry reads back `youtubeScheduleOnYouTube` and, once the early upload is done, `youtubeScheduledVideoId`. From then until the video is published, Update Post, Unschedule Post and Publish Draft return 409 (GraphQL `extensions.code` `SCHEDULED_ON_YOUTUBE`). To change the post, delete it and schedule it again. Deleting it before `scheduledAt` also deletes the video from YouTube; when YouTube refuses, the delete returns 502 `SCHEDULED_VIDEO_DELETE_FAILED` and the post stays, so try again, after reconnecting the channel if it was disconnected.
 
 Facebook `aiGenerated: true` discloses that the post was made or edited with AI. Facebook shows its "AI info" label on the post. It works on every `contentType: VIDEO` post, whatever its `postType`: Facebook publishes every video as a reel, and a video story carries the label too. Photos, carousels and text posts return 400 with the issue code `FACEBOOK_AI_LABEL_VIDEO_ONLY`. Omit it or send `false` for no label. The post reads it back as `facebookAiGenerated`.
 
@@ -295,6 +297,8 @@ X `aiGenerated: true` discloses that the post contains AI-generated media. It se
 Threads `aiGenerated: true` discloses AI-generated content. Threads shows its "AI info" label on the post. It works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it. Omit it or send `false` for no label. The post reads it back as `threadsAiGenerated`.
 
 Pinterest `aiGenerated: true` discloses that the Pin was made or modified with AI. It sends Pinterest the `AI_MODIFIED` disclosure, which shows an "AI modified" label on the Pin. It works on image, video and carousel Pins. Omit it or send `false` for no label. The post reads it back as `pinterestAiGenerated`.
+
+Pinterest `aiGeneratedPerson: true` discloses that the Pin shows a person generated with AI. It sends Pinterest the `SYNTHETIC_PERFORMER` disclosure, next to `AI_MODIFIED` when `aiGenerated` is also set, on image, video and carousel Pins. The post reads it back as `pinterestAiGeneratedPerson`, and a section as `pinterestBoardSectionId`.
 
 Instagram `audio` adds music or an original sound to a Reel. It needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account with `supportsInstagramAudio: true`. Find the `audioId` with [Instagram audio search](#instagram-audio-search).
 
@@ -504,6 +508,15 @@ DELETE /api/v1/social-posts/<id>
 
 Removes the record; a deleted SCHEDULED post will not publish. It never removes content already on a network, so deleting a COMPLETED post only drops AdaptlyPost's record. A post in PUBLISHING returns 409. A post deleted before `scheduledAt` also loses the video `scheduleOnYouTube` uploaded, and a 502 `SCHEDULED_VIDEO_DELETE_FAILED` means YouTube refused and the post stays. Deleting a draft needs `posts.draft`; any other status needs `posts.delete`, which Contributors lack. Prefer Update Post over delete-and-recreate. Returns `{ deleted: true }`.
 
+### Set Post Labels
+
+```
+PUT /api/v1/social-posts/<id>/labels
+Body: { "labelIds": ["label_id"] }
+```
+
+Replaces every label of the post with `labelIds` (up to 10 ids from [Labels](#labels)), in any status, published posts included. `[]` removes them all. Labels stay inside AdaptlyPost, so changing them on a published post changes nothing on the platform. Use it for posts Update Post cannot edit. An id that is not a label of the workspace, or more than 10, returns 400, and a post outside the workspace returns 404. Needs `posts.draft`. Returns the post with its new `labels`.
+
 ### Unschedule Post
 
 ```
@@ -612,7 +625,7 @@ GET /api/v1/social-accounts/<id>/wordpress-categories
 GET /api/v1/labels
 ```
 
-Returns `{ labels: [{ id, name, color }] }` with every label of the workspace, sorted by name. `color` is a hex such as `#3B82F6`. Needs `posts.read`. Labels are created in the AdaptlyPost app; the API cannot create, rename or delete one. Pass the ids as `labelIds` on Create Post, Check a Post Before Creating It or Update Post, or as the `labelIds` filter of List Posts. Every post carries `labels`, webhook payloads included.
+Returns `{ labels: [{ id, name, color }] }` with every label of the workspace, sorted by name. `color` is a hex such as `#3B82F6`. Needs `posts.read`. Labels are created in the AdaptlyPost app; the API cannot create, rename or delete one. Pass the ids as `labelIds` on Create Post, Check a Post Before Creating It, Update Post or Set Post Labels, or as the `labelIds` filter of List Posts. Every post carries `labels`, webhook payloads included.
 
 ### LinkedIn company pages
 
@@ -902,6 +915,7 @@ AdaptlyPost has a native MCP server at `https://mcp.adaptlypost.com/mcp`. OAuth-
 | `validate_post` | Dry-run `create_post` with the same input: every problem, per account, without creating anything |
 | `list_posts` | List posts in the workspace with filters and pagination; find ids and see what is queued |
 | `list_labels` | List the workspace's labels; pass the chosen ids as `labelIds` on a post or as the `list_posts` filter |
+| `set_post_labels` | Replace every label of one post in any status, published posts included |
 | `get_post` | One post's full record with per-platform status; 404 outside the workspace |
 | `update_post` | Partial update of a DRAFT or SCHEDULED post, or of a post that FAILED everywhere, which becomes a draft; sending `platforms` rebuilds all targets |
 | `delete_post` | Remove a post record; cancels a DRAFT or SCHEDULED post, never unpublishes live content |
@@ -1029,7 +1043,7 @@ Use these exact names (uppercase) for platforms:
 - To mention a company in a LinkedIn post, run `linkedin:organization` with the page URL the user gave and paste the returned `mention` into the LinkedIn text
 - For a Pinterest post, run `pinterest:boards` for that account, ask the user which board to use and pass its `id` with `--pinterest-board`, or its name with `--pinterest-board-name` (not both). Leave both flags out only when the user is happy with the default "AdaptlyPost" board
 - For a YouTube video the user wants in a playlist, run `youtube:playlists` for that channel, ask the user which playlist to use unless they named it, and pass its `id` with `--youtube-playlist`
-- When the user names a label (a brand, a client, a campaign), run `labels`, match the name to its `id` and pass it with `--label`; `posts --label` lists the posts carrying it. Labels stay inside AdaptlyPost
+- When the user names a label (a brand, a client, a campaign), run `labels`, match the name to its `id` and pass it with `--label`; `posts --label` lists the posts carrying it. To relabel a published post, or any post `posts:update` refuses, use `posts:labels`. Labels stay inside AdaptlyPost
 - For a WordPress post, run `wordpress:categories` for that site when the user names categories and pass their ids with `--wordpress-category`. When the user wants to finish the post in WordPress, pass `--wordpress-status DRAFT`, or `PENDING` to submit it for review
 - The CLI does not set Pinterest titles and links, trial reels or YouTube settings other than `--youtube-ai-generated`, `--youtube-audio-language`, `--youtube-schedule-on-youtube` and `--youtube-playlist`; use the API body directly for those
 - The MCP server covers the whole REST API: posts (Telegram, Tumblr and WordPress included), dry runs, recurring posts, RSS feeds, connect links, account checks and removal, workspaces, members and invitations, webhooks, analytics, the inbox, and AI captions and images

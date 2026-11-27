@@ -95,8 +95,8 @@ network's limits only. See SKILL.md for the update rules.
 ## Alt text
 
 Pass `mediaAltTexts` in the same order as `mediaUrls`, one per image, up to 1,000 characters, `""` to skip
-one. X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one.
-TikTok, YouTube, Google Business Profile and videos ignore it.
+one. X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads use it; Pinterest takes the first one, on image,
+carousel and video Pins. TikTok, YouTube, Google Business Profile and videos on the other platforms ignore it.
 
 ## Video thumbnails
 
